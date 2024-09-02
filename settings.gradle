@@ -1,0 +1,3 @@
+rootProject.name = 'bio-sources'
+include ':bio-source-who'
+project(':bio-source-who').projectDir = new File(settingsDir, './who')
