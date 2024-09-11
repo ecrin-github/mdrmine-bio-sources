@@ -18,7 +18,7 @@ ext {
 
 subprojects {
     group = 'org.intermine'
-    version = '5.0.0'
+    version = '1.0.0'
 
     apply plugin: 'java'
     apply plugin: 'maven'
@@ -62,7 +62,7 @@ subprojects {
 // Must be in the subprojects {} section of the build.gradle file
 // 
    bioSourceDBModelConfig {
-     # file should be in the root of your mine-bio-sources directory
+    // file should be in the root of your mine-bio-sources directory
     globalAdditionsFile = "mdrmine_additions.xml"
    }
 
