@@ -44,7 +44,7 @@ public class WhoConverter extends BioFileConverter
      * {@inheritDoc}
      */
     public void process(Reader reader) throws Exception {
-        /* Open BufferedReader is passed as argument (from FileConverterTask.execute()) */
+        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
         
         String line;
         String[] values;
@@ -54,14 +54,29 @@ public class WhoConverter extends BioFileConverter
 
         if (fieldsToInd != null) {
             while ((line = br.readLine()) != null) {
-                study = createItem("Study");
                 values = line.split(",");
 
-                sb.append(line);
+                Item study = createItem("Study");
+                study.setAttribute("displayTitle", values[fieldsToInd['public_title']]);
+
+                Item studyIdentifier = createItem("StudyIdentifier");
+                studyIdentifier.setAttribute("identifierValue", values[fieldsToInd['TrialID']]);
+                studyIdentifier.setAttribute("source", values[fieldsToInd['source_example_value']]);
+                studyIdentifier.setReference("study5", study);
+                store(studyIdentifier);
+
+                Item studyTitle = createItem("StudyTitle");
+                studyTitle.setAttribute("titleText", values[fieldsToInd['Scientific_title']]);
+                studyTitle.setReference("study11", study);
+                store(studyTitle);
+
+                // Study collections
+                study.addToCollection("studyIdentifiers", studyIdentifier);
+                study.addToCollection("studyTitles", studyTitle);
                 store(study);
             }
         } else {
-            throw new Exception("");
+            throw new Exception("Failed to parse header file");
         }
 
         /* BufferedReader is closed in FileConverterTask.execute() */
