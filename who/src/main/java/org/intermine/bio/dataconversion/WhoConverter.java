@@ -10,8 +10,16 @@ package org.intermine.bio.dataconversion;
  *
  */
 
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.io.Reader;
+import java.io.BufferedReader;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
@@ -28,6 +36,7 @@ public class WhoConverter extends BioFileConverter
     //
     private static final String DATASET_TITLE = "ICTRPWeek22July2024";
     private static final String DATA_SOURCE_NAME = "WHO";
+    private static final String HEADERS_FILE_PATH = "/home/ubuntu/data/who/ICTRP_headers.csv";
 
     /**
      * Constructor
@@ -50,25 +59,39 @@ public class WhoConverter extends BioFileConverter
         String[] values;
         Item study;
 
+        System.out.println("WhoConverter - in process");
+
         Map<String, Integer> fieldsToInd = this.getHeaders(HEADERS_FILE_PATH);
 
         if (fieldsToInd != null) {
+            System.out.println("WhoConverter - in process, fields to Ind not null");
+            BufferedReader br = new BufferedReader(reader);
             while ((line = br.readLine()) != null) {
+                System.out.println("WhoConverter - in process, after readline");
                 values = line.split(",");
+                System.out.println("WhoConverter - in process, number of values in line: " + values.length);
 
-                Item study = createItem("Study");
-                study.setAttribute("displayTitle", values[fieldsToInd['public_title']]);
+                study = createItem("Study");
+                study.setAttribute("displayTitle", values[fieldsToInd.get("public_title")]);
+                System.out.println("WhoConverter - in process, before studyidentifier");
 
                 Item studyIdentifier = createItem("StudyIdentifier");
-                studyIdentifier.setAttribute("identifierValue", values[fieldsToInd['TrialID']]);
-                studyIdentifier.setAttribute("source", values[fieldsToInd['source_example_value']]);
+                System.out.println("WhoConverter - in process, after studyidentifier createItem");
+                System.out.println("WhoConverter - in process, fieldsToInd: " + fieldsToInd);
+                studyIdentifier.setAttribute("identifierValue", values[fieldsToInd.get("TrialID")]);
+                System.out.println("WhoConverter - in process, after studyidentifier 1st create attribute");
+                studyIdentifier.setAttribute("source", values[fieldsToInd.get("source_example_value")]);
+                System.out.println("WhoConverter - in process, after studyidentifier 2nd create attribute");
                 studyIdentifier.setReference("study5", study);
+                System.out.println("WhoConverter - in process, after studyidentifier 3rd create attribute");
                 store(studyIdentifier);
+                System.out.println("WhoConverter - in process, before studytitle");
 
                 Item studyTitle = createItem("StudyTitle");
-                studyTitle.setAttribute("titleText", values[fieldsToInd['Scientific_title']]);
+                studyTitle.setAttribute("titleText", values[fieldsToInd.get("Scientific_title")]);
                 studyTitle.setReference("study11", study);
                 store(studyTitle);
+                System.out.println("WhoConverter - in process, before study collections");
 
                 // Study collections
                 study.addToCollection("studyIdentifiers", studyIdentifier);
@@ -84,15 +107,20 @@ public class WhoConverter extends BioFileConverter
 
     public Map<String, Integer> getHeaders(String headersFilePath) throws Exception {
         // TODO: to some config file somewhere?
-        String[] fileContent = Files.readAllLines(headersFilePath);
+        System.out.println("WhoConverter - in getHeaders");
+        List<String> fileContent = Files.readAllLines(Paths.get(headersFilePath), StandardCharsets.UTF_8);
+        System.out.println("WhoConverter - in getHeaders after read all lines");
         Map<String, Integer> fieldsToInd = null;
 
-        if (content.length > 0) {
+        if (fileContent.size() > 0) {
+            System.out.println("WhoConverter - in getHeaders fileContent > 0");
             String headersLine = String.join("", fileContent).strip();
+            System.out.println("WhoConverter - string join: " + String.join("", fileContent));
+            System.out.println("WhoConverter - headersLine: " + headersLine);
             String[] fields = headersLine.split(",");
             fieldsToInd = new HashMap<String, Integer>();
             
-            for (int ind = 0; i < fields.length; ind++) {
+            for (int ind = 0; ind < fields.length; ind++) {
                 fieldsToInd.put(fields[ind], ind);
             }
         } else {
