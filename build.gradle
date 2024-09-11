@@ -63,7 +63,7 @@ subprojects {
 // 
    bioSourceDBModelConfig {
     // file should be in the root of your mine-bio-sources directory
-    globalAdditionsFile = "mdrmine_additions.xml"
+    // globalAdditionsFile = "mdrmine_additions.xml"
    }
 
     task copyMineProperties() {
