@@ -1,3 +1,5 @@
-rootProject.name = 'bio-sources'
+rootProject.name = 'bio-sources-mdr'
 include ':bio-source-who'
 project(':bio-source-who').projectDir = new File(settingsDir, './who')
+include ':bio-source-ctg'
+project(':bio-source-ctg').projectDir = new File(settingsDir, './ctg')
