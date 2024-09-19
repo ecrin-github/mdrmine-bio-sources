@@ -3,3 +3,5 @@ include ':bio-source-who'
 project(':bio-source-who').projectDir = new File(settingsDir, './who')
 include ':bio-source-ctg'
 project(':bio-source-ctg').projectDir = new File(settingsDir, './ctg')
+include ':bio-source-biolincc'
+project(':bio-source-biolincc').projectDir = new File(settingsDir, './biolincc')
