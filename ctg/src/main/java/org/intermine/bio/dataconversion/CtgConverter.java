@@ -107,6 +107,11 @@ public class CtgConverter extends BioFileConverter
         } else {
             study.setAttribute("displayTitle", "Unknown study title");
         }
+        
+        Item studySource = createItem("StudySource");
+        studySource.setAttribute("sourceName", "CTG");
+        studySource.setReference("study", study);
+        store(studySource);
 
         String briefDescription = CtgConverter.removeQuotes(values[fieldsToInd.get("Brief Summary")].strip());
         if (!briefDescription.isEmpty()) {
@@ -125,6 +130,7 @@ public class CtgConverter extends BioFileConverter
         // TODO: add study gender elig id
 
         // Study collections
+        study.addToCollection("studySources", studySource);
         study.addToCollection("studyIdentifiers", studyIdentifier);
         store(study);
     }

@@ -105,6 +105,11 @@ public class WhoConverter extends BioFileConverter
             study.setAttribute("displayTitle", "Unknown study title");
         }
 
+        Item studySource = createItem("StudySource");
+        studySource.setAttribute("sourceName", "WHO");
+        studySource.setReference("study", study);
+        store(studySource);
+
         Item studyIdentifier = createItem("StudyIdentifier");
         String trialID = WhoConverter.removeQuotes(values[fieldsToInd.get("TrialID")].strip());
         if (!trialID.isEmpty()) {
@@ -157,6 +162,7 @@ public class WhoConverter extends BioFileConverter
 
         // Study collections
         study.addToCollection("studyIdentifiers", studyIdentifier);
+        study.addToCollection("studySources", studySource);
         study.addToCollection("studyTitles", studyTitle);
         store(study);
     }
