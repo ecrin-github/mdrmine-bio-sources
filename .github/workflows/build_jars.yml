@@ -1,0 +1,31 @@
+name: Build sources JARs
+
+concurrency: build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+      # TODO
+      - run: ./gradlew install -s target
+      - run: cp target/*.jar staging
+      # - run: mvn --batch-mode --update-snapshots verify
+      # - run: mkdir staging && cp target/*.jar staging
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Package
+          path: staging
