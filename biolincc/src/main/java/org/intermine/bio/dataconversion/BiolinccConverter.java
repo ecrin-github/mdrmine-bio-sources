@@ -46,6 +46,7 @@ public class BiolinccConverter extends BioFileConverter
     //
     private static final String DATASET_TITLE = "BioLINCC full";
     private static final String DATA_SOURCE_NAME = "BioLINCC";
+    private static final Pattern p = Pattern.compile("\\w+.*");
 
     /**
      * Constructor
@@ -81,10 +82,16 @@ public class BiolinccConverter extends BioFileConverter
         }
 
         for (int ind = 0; ind < fields.length; ind++) {
-            if (ind == 0 && (Integer.toHexString(fields[ind].charAt(0) | 0x10000).substring(1).toLowerCase().equals("feff"))) {
+            if (ind == 0) {
                 /* Opened file is passed to this function, so we can't change the encoding on read
-                    to handle the BOM \uFEFF leading character, we have to remove it ourselves */
-                fieldsToInd.put(fields[ind].substring(1), ind);
+                    to handle the BOM \uFEFF leading character, we have to remove it ourselves.
+                    The character is read differently in Docker, so we match the header field name starting with a letter. */
+                Matcher m = p.matcher(fields[ind]);
+                if (m.find()) {
+                    fieldsToInd.put(m.group(0), ind);
+                } else {
+                    throw new Exception("Couldn't properly parse BioLINCC first header value: '" + fields[ind] + "'");
+                }
             } else {
                 fieldsToInd.put(fields[ind], ind);
             }
@@ -134,6 +141,7 @@ public class BiolinccConverter extends BioFileConverter
         if (!biolinccID.isEmpty()) {
             studyIdentifier.setAttribute("identifierValue", biolinccID);
         }
+        // TODO: java psql null exception on last line
         // Not adding NCT ids just yet because multiple BioLINCC entries have the same NCT link
         /*String ctgURL = BiolinccConverter.removeQuotes(values[fieldsToInd.get("Clinical trial urls")].strip());
         if (!ctgURL.isEmpty()) {
@@ -150,8 +158,8 @@ public class BiolinccConverter extends BioFileConverter
         store(studyIdentifier);
 
         // Study collections
-        study.addToCollection("studySources", studySource);
         study.addToCollection("studyIdentifiers", studyIdentifier);
+        study.addToCollection("studySources", studySource);
         store(study);
     }
 
