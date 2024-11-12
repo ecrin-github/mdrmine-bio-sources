@@ -5,3 +5,5 @@ include ':bio-source-ctg'
 project(':bio-source-ctg').projectDir = new File(settingsDir, './ctg')
 include ':bio-source-biolincc'
 project(':bio-source-biolincc').projectDir = new File(settingsDir, './biolincc')
+include ':bio-source-pubmed'
+project(':bio-source-pubmed').projectDir = new File(settingsDir, './pubmed')
