@@ -26,6 +26,8 @@ import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 
+import org.apache.commons.text.StringEscapeUtils;
+
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
@@ -100,8 +102,6 @@ public class WhoConverter extends BioFileConverter
         Item study = createItem("Study");
 
         // TODO: DOs
-        // TODO: change encoding for better parsing?
-        // e.g. """Efficacy of Fluorescent Lamp vs Compact Light&#45;Emitting Diodes"""
 
         // TODO: skip creating study if ID is missing?
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
@@ -281,7 +281,11 @@ public class WhoConverter extends BioFileConverter
 
     public static String cleanValue(String s) {
         /* Removing extra quotes (see removeQuotes() and stripping the string of empty spaces) */
-        return WhoConverter.removeQuotes(s).strip();
+        return WhoConverter.unescapeHtml(WhoConverter.removeQuotes(s)).strip();
+    }
+
+    public static String unescapeHtml(String s) {
+        return StringEscapeUtils.unescapeHtml4(s);
     }
 
     public static String removeQuotes(String s) {
