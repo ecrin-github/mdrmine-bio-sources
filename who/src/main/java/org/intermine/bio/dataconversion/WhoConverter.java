@@ -40,10 +40,10 @@ import com.opencsv.exceptions.CsvMalformedLineException;
  */
 public class WhoConverter extends BioFileConverter
 {
-    // TODO: to somewhere else? headers file
     private static final String DATASET_TITLE = "ICTRPWeek22July2024";
     private static final String DATA_SOURCE_NAME = "WHO";
     private String headersFilePath = "";
+    private Map<String, Integer> fieldsToInd;
 
     /**
      * Constructor
@@ -62,7 +62,7 @@ public class WhoConverter extends BioFileConverter
     public void process(Reader reader) throws Exception {
         /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
 
-        final Map<String, Integer> fieldsToInd = this.getHeaders();
+        this.fieldsToInd = this.getHeaders();
 
         final CSVParser parser = new CSVParserBuilder()
                                         .withSeparator(',')
@@ -80,7 +80,7 @@ public class WhoConverter extends BioFileConverter
         // TODO: performance tests? compared to iterator
         while (nextLine != null) {
             if (!skipNext) {
-                this.storeValues(fieldsToInd, nextLine);
+                this.storeValues(nextLine);
             } else {
                 skipNext = false;
             }
@@ -95,40 +95,67 @@ public class WhoConverter extends BioFileConverter
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
-    public void storeValues(Map<String, Integer> fieldsToInd, String[] values) throws Exception {
-        /* TODO: something with last_update */
+    public void storeValues(String[] lineValues) throws Exception {
+        // TODO: something with last_update
         Item study = createItem("Study");
-        String displayTitle = WhoConverter.removeQuotes(values[fieldsToInd.get("public_title")].strip());
-        if (!displayTitle.isEmpty()) {
-            study.setAttribute("displayTitle", displayTitle);
+
+        // TODO: DOs
+        // TODO: change encoding for better parsing?
+        // e.g. """Efficacy of Fluorescent Lamp vs Compact Light&#45;Emitting Diodes"""
+
+        // TODO: skip creating study if ID is missing?
+        String trialID = this.getAndCleanValue(lineValues, "TrialID");
+        if (!trialID.isEmpty()) {
+            Item studyIdentifier = createItem("StudyIdentifier");
+            studyIdentifier.setAttribute("identifierValue", trialID);
+            studyIdentifier.setReference("study", study);
+
+            String url = this.getAndCleanValue(lineValues, "url");
+            if (!url.isEmpty()) {
+                studyIdentifier.setAttribute("identifierLink", url);
+            }
+            store(studyIdentifier);
+            study.addToCollection("studyIdentifiers", studyIdentifier);
+            // TODO: identifier type -> ask Sergio
+            // TODO: date?
+        }
+
+        String publicTitle = this.getAndCleanValue(lineValues, "public_title");
+        if (!publicTitle.isEmpty()) {
+            Item studyTitle = createItem("StudyTitle");
+            study.setAttribute("displayTitle", publicTitle);
+
+            studyTitle.setAttribute("titleType", "Public title");
+            studyTitle.setAttribute("titleText", publicTitle);
+            studyTitle.setReference("study", study);
+            store(studyTitle);
+            study.addToCollection("studyTitles", studyTitle);
         } else {
             study.setAttribute("displayTitle", "Unknown study title");
         }
 
+        // TODO: not working as intended
         Item studySource = createItem("StudySource");
         studySource.setAttribute("sourceName", "WHO");
         studySource.setReference("study", study);
         store(studySource);
+        study.addToCollection("studySources", studySource);
 
-        Item studyIdentifier = createItem("StudyIdentifier");
-        String trialID = WhoConverter.removeQuotes(values[fieldsToInd.get("TrialID")].strip());
-        if (!trialID.isEmpty()) {
-            studyIdentifier.setAttribute("identifierValue", trialID);
+        // TODO: secondary IDs -> ask Sergio
+
+        String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
+        if (!scientificTitle.isEmpty()) {
+            Item studyTitle = createItem("StudyTitle");
+            studyTitle.setAttribute("titleType", "Scientific Title");
+            studyTitle.setAttribute("titleText", scientificTitle);
+            studyTitle.setReference("study", study);
+            store(studyTitle);
+            study.addToCollection("studyTitles", studyTitle);
         }
-        studyIdentifier.setReference("study", study);
-        store(studyIdentifier);
 
-        // TODO: secondary IDs
+        // TODO: URL?
 
-        Item studyTitle = createItem("StudyTitle");
-        String titleText = WhoConverter.removeQuotes(values[fieldsToInd.get("Scientific_title")].strip());
-        if (!titleText.isEmpty()) {
-            studyTitle.setAttribute("titleText", titleText);
-        }
-        studyTitle.setReference("study", study);
-        store(studyTitle);
-
-        String minAge = WhoConverter.removeQuotes(values[fieldsToInd.get("Agemin")].strip());
+        String minAge = this.getAndCleanValue(lineValues, "Agemin");
         if (!minAge.isEmpty()) {
             String[] minAgeSplit = minAge.split(" ");
             if (minAgeSplit.length > 0) {
@@ -138,13 +165,16 @@ public class WhoConverter extends BioFileConverter
                 }
 
                 if (minAgeSplit.length > 1) {
+                    // TODO: build a standardized list of values for unit
                     String minAgeUnit = minAgeSplit[1].strip();
-                    // TODO: add minAge id
+                    if (!minAgeUnit.isEmpty()) {
+                        study.setAttribute("minAgeUnit", minAgeUnit);
+                    }
                 }
             }
         }
 
-        String maxAge = WhoConverter.removeQuotes(values[fieldsToInd.get("Agemax")].strip());
+        String maxAge = this.getAndCleanValue(lineValues, "Agemax");
         if (!maxAge.isEmpty()) {
             String[] maxAgeSplit = maxAge.split(" ");
             if (maxAgeSplit.length > 0) {
@@ -155,16 +185,103 @@ public class WhoConverter extends BioFileConverter
 
                 if (maxAgeSplit.length > 1) {
                     String maxAgeUnit = maxAgeSplit[1].strip();
-                    // TODO: add maxAge id
+                    if (!maxAgeUnit.isEmpty()) {
+                        study.setAttribute("maxAgeUnit", maxAgeUnit);
+                    }
                 }
             }
         }
 
-        // Study collections
-        study.addToCollection("studyIdentifiers", studyIdentifier);
-        study.addToCollection("studySources", studySource);
-        study.addToCollection("studyTitles", studyTitle);
+        // TODO: test with null value
+
+        // TODO: index the values from the last one (e.g. 4 total but 2 present)
+        String[] firstNames = {};
+        String[] lastNames = {};
+        String[] affiliations = {};
+        
+        // TODO: this might always be empty, check (currently unused at least)
+        String firstNamesString = this.getAndCleanValue(lineValues, "Public_Contact_Firstname");
+        if (!firstNamesString.isEmpty()) {
+            firstNames = firstNamesString.split(";");
+        }
+
+        String lastNamesString = this.getAndCleanValue(lineValues, "Public_Contact_Lastname");
+        if (!lastNamesString.isEmpty()) {
+            lastNames = lastNamesString.split(";");
+        }
+
+        String affiliationsString = this.getAndCleanValue(lineValues, "Public_Contact_Affiliation");
+        if (!affiliationsString.isEmpty()) {
+            affiliations = affiliationsString.split(";");
+        }
+        /* Address and phone strings present in WHO are unused here since they don't appear in our model */
+        int maxLen = Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length);
+
+        if (maxLen > 0) {
+            for (int i = 0; i < maxLen; i++) {
+                // TODO: Contributor type seems unknown? or is there an order/pre-defined roles in the WHO values?
+                Item sp = createItem("StudyPeople");
+                // TODO: case with semi colons on both ends?
+                if ((lastNames.length == maxLen || (lastNamesString.endsWith(";") && i < lastNames.length)) && !lastNames[i].isBlank()) {
+                    // Case where everyone has names or people missing names are at the end of the list
+                    this.setPublicNameValues(sp, lastNames[i]);
+                } else if (lastNamesString.startsWith(";") && (lastNames.length + i - maxLen >= 0) && !lastNames[lastNames.length + i - maxLen].isBlank()) {
+                    // Case where people missing names are at the beginning of the list
+                    this.setPublicNameValues(sp, lastNames[lastNames.length + i - maxLen]);
+                }
+                // Difference between person affiliation and organisation name?
+                // TODO: not sure how to handle affiliation, there seem to be only one every time?
+                if ((affiliations.length == maxLen || (affiliationsString.endsWith(";") && i < affiliations.length)) && !affiliations[i].isBlank()) {
+                    sp.setAttribute("personAffiliation", affiliations[i]);
+                } else if (affiliationsString.startsWith(";") && (affiliations.length + i - maxLen >= 0) && !affiliations[affiliations.length + i - maxLen].isBlank()) {
+                    sp.setAttribute("personAffiliation", affiliations[affiliations.length + i - maxLen]);
+                }
+
+                sp.setReference("study", study);
+                store(sp);
+                study.addToCollection("studyPeople", sp);
+            }
+        }
+
+        /*<class name="StudyPeople" is-interface="true">
+            <reference name="study" referenced-type="Study" reverse-reference="studyPeople"/>
+            <attribute name="contribType" type="java.lang.Integer"/>
+            <attribute name="personGivenName" type="java.lang.String"/>
+            <attribute name="personFamilyName" type="java.lang.String"/>
+            <attribute name="personFullName" type="java.lang.String"/>
+            <attribute name="orcid" type="java.lang.String"/>
+            <attribute name="personAffiliation" type="java.lang.String"/>
+            <attribute name="organisation" type="java.lang.Integer"/>
+            <attribute name="organisationName" type="java.lang.String"/>
+            <attribute name="organisationRor" type="java.lang.String"/>
+        </class>*/
+
         store(study);
+    }
+
+    public void setPublicNameValues(Item studyPeople, String fullName) {
+        /* Set values for various public name fields of a Study People instance */
+        fullName = fullName.strip();
+        String[] separatedName = fullName.split(" ");
+
+        if (separatedName.length > 1) {
+            studyPeople.setAttribute("personGivenName", separatedName[0]);
+            studyPeople.setAttribute("personFamilyName", separatedName[separatedName.length-1]);
+        } else {
+            studyPeople.setAttribute("personFamilyName", fullName);
+        }
+        studyPeople.setAttribute("personFullName", fullName); 
+    }
+
+    public String getAndCleanValue(String[] lineValues, String field) {
+        /* Get field value from array of values using a field's position-lookup Map, value is also cleaned (see cleanValue()) */
+        // TODO: handle errors
+        return WhoConverter.cleanValue(lineValues[this.fieldsToInd.get(field)].strip());
+    }
+
+    public static String cleanValue(String s) {
+        /* Removing extra quotes (see removeQuotes() and stripping the string of empty spaces) */
+        return WhoConverter.removeQuotes(s).strip();
     }
 
     public static String removeQuotes(String s) {
