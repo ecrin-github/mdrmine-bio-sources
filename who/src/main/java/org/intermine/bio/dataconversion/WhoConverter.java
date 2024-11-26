@@ -305,7 +305,10 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO Set values for various public name fields of a Study People instance
+     * Set values for various person name fields of a Study People instance
+     * 
+     * @param studyPeople the studyPeople instance to set fields of
+     * @param fullName the full name string
      */
     public void setPublicNameValues(Item studyPeople, String fullName) {
         fullName = fullName.strip();
@@ -321,7 +324,13 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO
+     * Parse min/max age value to set age value and unit fields.
+     * 
+     * @param ageStr the age string
+     * @param ageAttr the age attribute name to set (either minAge or maxAge)
+     * @param unitAttr the unit attribute name to set (either minAgeUnit or maxAgeUnit)
+     * @param study the study item containing the attributes to set
+     * @param trialID the trial ID for logging purposes
      */
     public void parseAgeField(String ageStr, String ageAttr, String unitAttr, Item study, String trialID) {
         if (!ageStr.isEmpty()) {
