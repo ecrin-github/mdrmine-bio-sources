@@ -49,8 +49,8 @@ import com.opencsv.exceptions.CsvMalformedLineException;
 
 
 /**
- * 
- * @author
+ * Class to parse values from a WHO data file and store them as MDRMine items
+ * @author ECRIN
  */
 public class WhoConverter extends BioFileConverter
 {
@@ -81,23 +81,28 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * headersFilePath property in project.xml
+     * Set headersFilePath from the corresponding source property in project.xml.
+     * Method called by InterMine.
+     * 
+     * @param fp the path to the headers file
      */
     public void setHeadersFilePath(String fp) {
         this.headersFilePath = fp;
     }
 
     /**
-     * logDir property in project.xml
+     * Set logDir from the corresponding source property in project.xml.
+     * Method called by InterMine.
      * 
-     * @param logDir
+     * @param logDir the path to the directory where the log file will be created
      */
     public void setLogDir(String logDir) {
         this.logDir = logDir;
     }
 
     /**
-     * TODO
+     * Instantiate logger by creating log file and writer.
+     * This sets the logWriter instance attribute.
      */
     public void startLogging() throws Exception {
         if (!this.logDir.equals("")) {
@@ -114,7 +119,7 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO
+     * Close opened log writer.
      */
     public void stopLogging() throws IOException {
         if (this.logWriter != null) {
@@ -123,9 +128,11 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO Opened BufferedReader is passed as argument (from FileConverterTask.execute())
+     * Process WHO data file by iterating on each line of the data file.
+     * Method called by InterMine.
      */
     public void process(Reader reader) throws Exception {
+        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
         this.startLogging();
 
         this.fieldsToInd = this.getHeaders();
@@ -163,7 +170,9 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO
+     * Parse and store values as MDRMine items and attributes, from a list of values of a line of the data file.
+     * 
+     * @param lineValues the list of raw values of a line in the data file
      */
     public void storeValues(String[] lineValues) throws Exception {
         // TODO: something with last_update
@@ -385,7 +394,9 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO
+     * Write to WHO log file with timestamp.
+     * 
+     * @param text the log text
      */
     public void writeLog(String text) {
         try {
@@ -401,7 +412,10 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * Normalise word and add trailing s to unit
+     * Normalise word and add trailing s to unit.
+     * 
+     * @param u the unit to normalise
+     * @return the normalised unit
      * @see #normaliseWord()
      */
     public static String normaliseUnit(String u) {
@@ -409,7 +423,10 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * Uppercase first letter and lowercase the rest
+     * Uppercase first letter and lowercase the rest.
+     * 
+     * @param w the word to normalise
+     * @return the normalised word
      */
     public static String normaliseWord(String w) {
         if (w.length() > 0) {
@@ -419,7 +436,11 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * Get field value from array of values using a field's position-lookup Map, value is also cleaned
+     * Get field value from array of values using a field's position-lookup Map, value is also cleaned.
+     * 
+     * @param lineValues the list of all values for a line in the data file
+     * @param field the name of the field to get the value of
+     * @return the cleaned value of the field
      * @see #cleanValue()
      */
     public String getAndCleanValue(String[] lineValues, String field) {
@@ -428,26 +449,34 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * Remove extra quotes, unescape HTML chars, and strip the string of empty spaces
+     * Remove extra quotes, unescape HTML chars, and strip the string of empty spaces.
+     * 
+     * @param s the value to clean
+     * @return the cleaned value
      * @see #unescapeHtml()
      * @see #removeQuotes()
      */
     public static String cleanValue(String s) {
-        /*  */
         return WhoConverter.unescapeHtml(WhoConverter.removeQuotes(s)).strip();
     }
 
     /**
-     * TODO
+     * Unescape HTML4 characters.
+     * 
+     * @param s the string potentially containing escaped HTML4 characters
+     * @return the unescaped string
      */
     public static String unescapeHtml(String s) {
         return StringEscapeUtils.unescapeHtml4(s);
     }
 
     /**
-     * TODO
-     * Unfortunately opencsv only transforms triple double-quoted values into single double-quotes values,
-           so we have to remove the remaining quotes manually
+     * Remove leading and trailing double quotes from a string.
+     * Unfortunately opencsv only transforms triple double-quoted values into single double-quotes values, 
+     * so we have to remove the remaining quotes manually.
+     * 
+     * @param s the string to remove quotes from
+     * @return the string without leading and trailing double quotes
      */
     public static String removeQuotes(String s) {
         if (s != null && s.length() > 1 && s.charAt(0) == '"' && s.charAt(s.length()-1) == '"') {
@@ -457,7 +486,10 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO
+     * Test if a string is a positive whole number.
+     * 
+     * @param s the string to test
+     * @return true if string is a positive whole number, false otherwise
      */
     public static boolean isPosWholeNumber(String s) {
         if (s.length() == 0) { return false; }
@@ -473,7 +505,10 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * TODO
+     * Get a dictionary (map) of the WHO data file field names linked to their corresponding column index in the data file, using a separate headers file.
+     * The headers file path is defined in the project.xml file (and set as an instance attribute of this class).
+     * 
+     * @return map of data file field names and their corresponding column index
      */
     public Map<String, Integer> getHeaders() throws Exception {
         if (this.headersFilePath.equals("")) {
