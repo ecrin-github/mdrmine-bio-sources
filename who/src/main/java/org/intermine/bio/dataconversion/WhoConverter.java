@@ -1,7 +1,8 @@
 package org.intermine.bio.dataconversion;
 
 /*
- * Copyright (C) 2002-2019 FlyMine
+ * Copyright (C) 2024 MDRMine
+ * Modified from 2002-2019 FlyMine 
  *
  * This code may be freely distributed and modified under the
  * terms of the GNU Lesser General Public Licence.  This should
@@ -12,21 +13,32 @@ package org.intermine.bio.dataconversion;
 
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.io.File;
-import java.io.Reader;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.format.DateTimeFormatter;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 
 import org.apache.commons.text.StringEscapeUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
@@ -42,10 +54,22 @@ import com.opencsv.exceptions.CsvMalformedLineException;
  */
 public class WhoConverter extends BioFileConverter
 {
+    // TODO: add "-" and "NA" as no-limit
+    private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/A|no\\h*limit|no).*", Pattern.CASE_INSENSITIVE);  // N/A / No limit
+    private static final Pattern P_AGE_NOT_STATED = Pattern.compile(".*(none|not\\h*stated).*", Pattern.CASE_INSENSITIVE);  // Not stated
+    // [number][unit] possibly with gt/lt in front (gte/lte is not interesting here)
+    private static final Pattern P_AGE = Pattern.compile("[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*", Pattern.CASE_INSENSITIVE);
+    private static final String STR_AGE_NOT_APPLICABLE = "N/A";
+    private static final String STR_AGE_NOT_STATED = "Not stated";
+    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss.SSS");
+
     private static final String DATASET_TITLE = "ICTRPWeek22July2024";
     private static final String DATA_SOURCE_NAME = "WHO";
+
     private String headersFilePath = "";
+    private String logDir = "";
     private Map<String, Integer> fieldsToInd;
+    private Writer logWriter = null;
 
     /**
      * Constructor
@@ -56,13 +80,53 @@ public class WhoConverter extends BioFileConverter
         super(writer, model, DATA_SOURCE_NAME, DATASET_TITLE);
     }
 
+    /**
+     * headersFilePath property in project.xml
+     */
     public void setHeadersFilePath(String fp) {
-        /* headers.filePath property in project.xml */
         this.headersFilePath = fp;
     }
 
+    /**
+     * logDir property in project.xml
+     * 
+     * @param logDir
+     */
+    public void setLogDir(String logDir) {
+        this.logDir = logDir;
+    }
+
+    /**
+     * TODO
+     */
+    public void startLogging() throws Exception {
+        if (!this.logDir.equals("")) {
+            String current_timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+                
+            Path logDir = Paths.get(this.logDir);
+            if (!Files.exists(logDir)) Files.createDirectories(logDir);
+
+            Path logFile = Paths.get(logDir.toString(), current_timestamp + "_who.log");
+            this.logWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile.toString()), "utf-8"));
+        } else {
+            throw new Exception("Log folder not specified");
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void stopLogging() throws IOException {
+        if (this.logWriter != null) {
+            this.logWriter.close();
+        }
+    }
+
+    /**
+     * TODO Opened BufferedReader is passed as argument (from FileConverterTask.execute())
+     */
     public void process(Reader reader) throws Exception {
-        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
+        this.startLogging();
 
         this.fieldsToInd = this.getHeaders();
 
@@ -94,14 +158,20 @@ public class WhoConverter extends BioFileConverter
             }
         }
 
+        this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
+    /**
+     * TODO
+     */
     public void storeValues(String[] lineValues) throws Exception {
         // TODO: something with last_update
         Item study = createItem("Study");
 
         // TODO: DOs
+        // TODO: properties file for age units thing
+        // TODO: nohup experiment
 
         // TODO: skip creating study if ID is missing?
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
@@ -155,44 +225,10 @@ public class WhoConverter extends BioFileConverter
 
         // TODO: URL?
 
-        String minAge = this.getAndCleanValue(lineValues, "Agemin");
-        if (!minAge.isEmpty()) {
-            String[] minAgeSplit = minAge.split(" ");
-            if (minAgeSplit.length > 0) {
-                String minAgeValue = minAgeSplit[0].strip();
-                if (!minAgeValue.isEmpty() && WhoConverter.isPosWholeNumber(minAgeValue)) {
-                    study.setAttribute("minAge", minAgeValue);
-                }
-
-                if (minAgeSplit.length > 1) {
-                    // TODO: build a standardized list of values for unit
-                    String minAgeUnit = minAgeSplit[1].strip();
-                    if (!minAgeUnit.isEmpty()) {
-                        study.setAttribute("minAgeUnit", minAgeUnit);
-                    }
-                }
-            }
-        }
-
-        String maxAge = this.getAndCleanValue(lineValues, "Agemax");
-        if (!maxAge.isEmpty()) {
-            String[] maxAgeSplit = maxAge.split(" ");
-            if (maxAgeSplit.length > 0) {
-                String maxAgeValue = maxAgeSplit[0].strip();
-                if (!maxAgeValue.isEmpty() && WhoConverter.isPosWholeNumber(maxAgeValue)) {
-                    study.setAttribute("maxAge", maxAgeValue);
-                }
-
-                if (maxAgeSplit.length > 1) {
-                    String maxAgeUnit = maxAgeSplit[1].strip();
-                    if (!maxAgeUnit.isEmpty()) {
-                        study.setAttribute("maxAgeUnit", maxAgeUnit);
-                    }
-                }
-            }
-        }
-
-        // TODO: test with null value
+        /* Min age */
+        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemin"), "minAge", "minAgeUnit", study, trialID);
+        /* Max age */
+        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemax"), "maxAge", "maxAgeUnit", study, trialID);
 
         // TODO: index the values from the last one (e.g. 4 total but 2 present)
         String[] firstNames = {};
@@ -259,8 +295,10 @@ public class WhoConverter extends BioFileConverter
         store(study);
     }
 
+    /**
+     * TODO Set values for various public name fields of a Study People instance
+     */
     public void setPublicNameValues(Item studyPeople, String fullName) {
-        /* Set values for various public name fields of a Study People instance */
         fullName = fullName.strip();
         String[] separatedName = fullName.split(" ");
 
@@ -273,30 +311,154 @@ public class WhoConverter extends BioFileConverter
         studyPeople.setAttribute("personFullName", fullName); 
     }
 
+    /**
+     * TODO
+     */
+    public void parseAgeField(String ageStr, String ageAttr, String unitAttr, Item study, String trialID) {
+        if (!ageStr.isEmpty()) {
+            // Check for N/A or no limit
+            Matcher mAgeNotApplicable = P_AGE_NOT_APPLICABLE.matcher(ageStr);
+            if (mAgeNotApplicable.matches()) {
+                study.setAttribute(ageAttr, STR_AGE_NOT_APPLICABLE);
+            } else {
+                Matcher mAgeNotStated = P_AGE_NOT_STATED.matcher(ageStr);
+                if (mAgeNotStated.matches()) {
+                    study.setAttribute(ageAttr, STR_AGE_NOT_STATED);
+                } else {
+                    Matcher mAge = P_AGE.matcher(ageStr);
+                    boolean successful = false;
+                    if (mAge.matches()) {
+                        String g1 = mAge.group(1);  // GT or LT
+                        String g2 = mAge.group(2);  // age value
+                        String g3 = mAge.group(3);  // age unit
+                        if (!(g2 == null)) {
+                            if (NumberUtils.isParsable(g2)) {
+                                if (NumberUtils.isDigits(g2)) {
+                                    int ageNumber = Integer.parseInt(g2);
+
+                                    if (g1 != null) {    // GT/LT
+                                        if (ageAttr.equalsIgnoreCase("minage")) {
+                                            if (g1.equals(">")) {
+                                                ageNumber++;
+                                            } else {
+                                                this.writeLog(trialID + " Wrong inequality sign for minAgeUnit: "
+                                                                + g1 + " full string: " + ageStr);
+                                            }
+                                        } else if (ageAttr.equalsIgnoreCase("maxage")) {
+                                            if (g1.equals("<")) {
+                                                ageNumber--;
+                                            } else {
+                                                this.writeLog(trialID + " Wrong inequality sign for maxAgeUnit: "
+                                                                + g1 + " full string: " + ageStr);
+                                            }
+                                        }
+                                    }
+
+                                    study.setAttribute(ageAttr, String.valueOf(ageNumber));
+                                } else {    // Case where min age value is float
+                                    study.setAttribute(ageAttr, g2);
+                                }
+
+                                if (!(g3 == null)) {
+                                    study.setAttribute(unitAttr, WhoConverter.normaliseUnit(g3));
+                                } else {    // If no unit, we assume it's years
+                                    study.setAttribute(unitAttr, "Years");
+                                }
+
+                                successful = true;
+                            } else {
+                                this.writeLog(trialID + " Wrong format minAge value: " 
+                                                + g2 + " full string: " + ageStr);
+                            }
+                        }
+                        if (!successful) {
+                            this.writeLog(trialID + " Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
+                                ", parsed groups: -g1: " + g1 + " -g2: " + g2 + " -g3: " + g3);
+                        }
+                    } else {
+                        this.writeLog(trialID + " Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
+                            ", no matches found");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void writeLog(String text) {
+        try {
+            if (this.logWriter != null) {
+                this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + text + "\n");
+                this.logWriter.flush();
+            } else {
+                System.out.println("WHO - Log writer is null (cannot write logs)");
+            }
+        } catch(IOException e) {
+            System.out.println("WHO - Couldn't write to log file");
+        }
+    }
+
+    /**
+     * Normalise word and add trailing s to unit
+     * @see #normaliseWord()
+     */
+    public static String normaliseUnit(String u) {
+        return WhoConverter.normaliseWord(u) + "s";
+    }
+
+    /**
+     * Uppercase first letter and lowercase the rest
+     */
+    public static String normaliseWord(String w) {
+        if (w.length() > 0) {
+            w = w.substring(0,1).toUpperCase() + w.substring(1).toLowerCase();
+        }
+        return w;
+    }
+
+    /**
+     * Get field value from array of values using a field's position-lookup Map, value is also cleaned
+     * @see #cleanValue()
+     */
     public String getAndCleanValue(String[] lineValues, String field) {
-        /* Get field value from array of values using a field's position-lookup Map, value is also cleaned (see cleanValue()) */
         // TODO: handle errors
         return WhoConverter.cleanValue(lineValues[this.fieldsToInd.get(field)].strip());
     }
 
+    /**
+     * Remove extra quotes, unescape HTML chars, and strip the string of empty spaces
+     * @see #unescapeHtml()
+     * @see #removeQuotes()
+     */
     public static String cleanValue(String s) {
-        /* Removing extra quotes (see removeQuotes() and stripping the string of empty spaces) */
+        /*  */
         return WhoConverter.unescapeHtml(WhoConverter.removeQuotes(s)).strip();
     }
 
+    /**
+     * TODO
+     */
     public static String unescapeHtml(String s) {
         return StringEscapeUtils.unescapeHtml4(s);
     }
 
+    /**
+     * TODO
+     * Unfortunately opencsv only transforms triple double-quoted values into single double-quotes values,
+           so we have to remove the remaining quotes manually
+     */
     public static String removeQuotes(String s) {
-        /* Unfortunately opencsv only transforms triple double-quoted values into single double-quotes values,
-           so we have to remove the remaining quotes manually */
         if (s != null && s.length() > 1 && s.charAt(0) == '"' && s.charAt(s.length()-1) == '"') {
             return s.substring(1, s.length()-1);
         }
         return s;
     }
 
+    /**
+     * TODO
+     */
     public static boolean isPosWholeNumber(String s) {
         if (s.length() == 0) { return false; }
         
@@ -310,6 +472,9 @@ public class WhoConverter extends BioFileConverter
         return true;
     }
 
+    /**
+     * TODO
+     */
     public Map<String, Integer> getHeaders() throws Exception {
         if (this.headersFilePath.equals("")) {
             throw new Exception("headersFilePath property not set in mdrmine project.xml");
