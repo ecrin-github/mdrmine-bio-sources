@@ -54,8 +54,8 @@ import com.opencsv.exceptions.CsvMalformedLineException;
  */
 public class WhoConverter extends BioFileConverter
 {
-    // TODO: add "-" and "NA" as no-limit
-    private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/A|no\\h*limit|no).*", Pattern.CASE_INSENSITIVE);  // N/A / No limit
+    // TODO: add "-" as no-limit?
+    private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A|no\\h*limit|no|-2147483648).*", Pattern.CASE_INSENSITIVE);  // N/A / No limit
     private static final Pattern P_AGE_NOT_STATED = Pattern.compile(".*(none|not\\h*stated).*", Pattern.CASE_INSENSITIVE);  // Not stated
     // [number][unit] possibly with gt/lt in front (gte/lte is not interesting here)
     private static final Pattern P_AGE = Pattern.compile("[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*", Pattern.CASE_INSENSITIVE);
