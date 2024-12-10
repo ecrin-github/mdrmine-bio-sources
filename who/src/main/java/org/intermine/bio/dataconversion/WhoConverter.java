@@ -32,6 +32,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Set;
+import java.util.HashSet;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
@@ -54,13 +56,39 @@ import com.opencsv.exceptions.CsvMalformedLineException;
  */
 public class WhoConverter extends BioFileConverter
 {
+    /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
     // TODO: add "-" as no-limit?
     private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A|no\\h*limit|no|-2147483648).*", Pattern.CASE_INSENSITIVE);  // N/A / No limit
     private static final Pattern P_AGE_NOT_STATED = Pattern.compile(".*(none|not\\h*stated).*", Pattern.CASE_INSENSITIVE);  // Not stated
     // [number][unit] possibly with gt/lt in front (gte/lte is not interesting here)
     private static final Pattern P_AGE = Pattern.compile("[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*", Pattern.CASE_INSENSITIVE);
-    private static final String STR_AGE_NOT_APPLICABLE = "N/A";
+    private static final Pattern P_TYPE_DEFAULT = Pattern.compile(".*(intervention|observation).*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_EXPANDED = Pattern.compile(".*expanded\\h*access.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A).*", Pattern.CASE_INSENSITIVE);  // N/A
+    private static final String PHASE_NBS = "0|1|2|3|4|iv|iii|ii|i";  // No subroutines in Java Regex
+    private static final Pattern P_PHASE_NUMBER = Pattern.compile(
+        "^(Phase|Early\\h+phase)?[-|\\h]*(0|1|2|3|4|iv|iii|ii|i)(?>[^1234iv\\n]+\\b(0|1|2|3|4|iv|iii|ii|i))?.*", 
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_PHASE_VERBOSE = Pattern.compile(
+        ".*Phase\\h*i\\):\\h*(no|yes)?.*\\(Phase\\h*ii\\):\\h*(no|yes)?.*\\(Phase\\h*iii\\):\\h*(no|yes)?.*\\(Phase\\h*iv\\):\\h*(no|yes)?.*", 
+        Pattern.CASE_INSENSITIVE);
+    private static final String STR_NOT_APPLICABLE = "N/A";
     private static final String STR_AGE_NOT_STATED = "Not stated";
+    private static final String STR_TYPE_INTERVENTIONAL = "Interventional";
+    private static final String STR_TYPE_OBSERVATIONAL = "Observational";
+    private static final String STR_TYPE_EXPANDED = "Expanded access";
+    private static final String STR_TYPE_OTHER = "Other";
+    static final Map<String, String> PHASE_NUMBER_MAP = Map.of(
+        "1", "1", 
+        "2", "2", 
+        "3", "3", 
+        "4", "4", 
+        "i", "1", 
+        "ii", "2", 
+        "iii", "3", 
+        "iv", "4"
+    );
+
     private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss.SSS");
 
     private static final String DATASET_TITLE = "ICTRPWeek22July2024";
@@ -70,6 +98,7 @@ public class WhoConverter extends BioFileConverter
     private String logDir = "";
     private Map<String, Integer> fieldsToInd;
     private Writer logWriter = null;
+    private String trialID = null;  // Used for logging
 
     /**
      * Constructor
@@ -175,32 +204,45 @@ public class WhoConverter extends BioFileConverter
      * @param lineValues the list of raw values of a line in the data file
      */
     public void storeValues(String[] lineValues) throws Exception {
-        // TODO: something with last_update
         Item study = createItem("Study");
 
         // TODO: DOs
-        // TODO: properties file for age units thing
-        // TODO: nohup experiment
+        // TODO: something with last_update?
 
         // TODO: skip creating study if ID is missing?
+
+        /* ID and ID URL */
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
-        if (!trialID.isEmpty()) {
+        this.trialID = trialID;
+        if (!WhoConverter.isEmptyOrBlankOrNull(trialID)) {
             Item studyIdentifier = createItem("StudyIdentifier");
             studyIdentifier.setAttribute("identifierValue", trialID);
             studyIdentifier.setReference("study", study);
 
+            /* Primary identifier URL */
             String url = this.getAndCleanValue(lineValues, "url");
-            if (!url.isEmpty()) {
+            if (!WhoConverter.isEmptyOrBlankOrNull(url)) {
                 studyIdentifier.setAttribute("identifierLink", url);
+
+                // Logging URLs containing an ID that seemingly does not match the primary ID
+                String[] url_split = url.split("/");
+                if (!url_split[url_split.length-1].equalsIgnoreCase(trialID)) {
+                    this.writeLog("URL ID (url: " + url +  ") does not match trial ID (" + trialID + ")");
+                }
             }
             store(studyIdentifier);
             study.addToCollection("studyIdentifiers", studyIdentifier);
-            // TODO: identifier type -> ask Sergio
+            // TODO: identifier type
             // TODO: date?
         }
 
+        /* Secondary IDs */
+        String secondaryIDs = this.getAndCleanValue(lineValues, "SecondaryIDs");
+        this.parseSecondaryIDs(study, secondaryIDs);
+
+        /* Public title */
         String publicTitle = this.getAndCleanValue(lineValues, "public_title");
-        if (!publicTitle.isEmpty()) {
+        if (!WhoConverter.isEmptyOrBlankOrNull(publicTitle)) {
             Item studyTitle = createItem("StudyTitle");
             study.setAttribute("displayTitle", publicTitle);
 
@@ -213,17 +255,9 @@ public class WhoConverter extends BioFileConverter
             study.setAttribute("displayTitle", "Unknown study title");
         }
 
-        // TODO: not working as intended
-        Item studySource = createItem("StudySource");
-        studySource.setAttribute("sourceName", "WHO");
-        studySource.setReference("study", study);
-        store(studySource);
-        study.addToCollection("studySources", studySource);
-
-        // TODO: secondary IDs -> ask Sergio
-
+        /* Scientific title */
         String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
-        if (!scientificTitle.isEmpty()) {
+        if (!WhoConverter.isEmptyOrBlankOrNull(scientificTitle)) {
             Item studyTitle = createItem("StudyTitle");
             studyTitle.setAttribute("titleType", "Scientific Title");
             studyTitle.setAttribute("titleText", scientificTitle);
@@ -232,61 +266,21 @@ public class WhoConverter extends BioFileConverter
             study.addToCollection("studyTitles", studyTitle);
         }
 
-        // TODO: URL?
+        // TODO: not working as intended
+        Item studySource = createItem("StudySource");
+        studySource.setAttribute("sourceName", "WHO");
+        studySource.setReference("study", study);
+        store(studySource);
+        study.addToCollection("studySources", studySource);
 
         /* Min age */
-        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemin"), "minAge", "minAgeUnit", study, trialID);
+        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemin"), "minAge", "minAgeUnit", study);
         /* Max age */
-        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemax"), "maxAge", "maxAgeUnit", study, trialID);
+        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemax"), "maxAge", "maxAgeUnit", study);
 
-        // TODO: index the values from the last one (e.g. 4 total but 2 present)
-        String[] firstNames = {};
-        String[] lastNames = {};
-        String[] affiliations = {};
-        
-        // TODO: this might always be empty, check (currently unused at least)
-        String firstNamesString = this.getAndCleanValue(lineValues, "Public_Contact_Firstname");
-        if (!firstNamesString.isEmpty()) {
-            firstNames = firstNamesString.split(";");
-        }
-
-        String lastNamesString = this.getAndCleanValue(lineValues, "Public_Contact_Lastname");
-        if (!lastNamesString.isEmpty()) {
-            lastNames = lastNamesString.split(";");
-        }
-
-        String affiliationsString = this.getAndCleanValue(lineValues, "Public_Contact_Affiliation");
-        if (!affiliationsString.isEmpty()) {
-            affiliations = affiliationsString.split(";");
-        }
-        /* Address and phone strings present in WHO are unused here since they don't appear in our model */
-        int maxLen = Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length);
-
-        if (maxLen > 0) {
-            for (int i = 0; i < maxLen; i++) {
-                // TODO: Contributor type seems unknown? or is there an order/pre-defined roles in the WHO values?
-                Item sp = createItem("StudyPeople");
-                // TODO: case with semi colons on both ends?
-                if ((lastNames.length == maxLen || (lastNamesString.endsWith(";") && i < lastNames.length)) && !lastNames[i].isBlank()) {
-                    // Case where everyone has names or people missing names are at the end of the list
-                    this.setPublicNameValues(sp, lastNames[i]);
-                } else if (lastNamesString.startsWith(";") && (lastNames.length + i - maxLen >= 0) && !lastNames[lastNames.length + i - maxLen].isBlank()) {
-                    // Case where people missing names are at the beginning of the list
-                    this.setPublicNameValues(sp, lastNames[lastNames.length + i - maxLen]);
-                }
-                // Difference between person affiliation and organisation name?
-                // TODO: not sure how to handle affiliation, there seem to be only one every time?
-                if ((affiliations.length == maxLen || (affiliationsString.endsWith(";") && i < affiliations.length)) && !affiliations[i].isBlank()) {
-                    sp.setAttribute("personAffiliation", affiliations[i]);
-                } else if (affiliationsString.startsWith(";") && (affiliations.length + i - maxLen >= 0) && !affiliations[affiliations.length + i - maxLen].isBlank()) {
-                    sp.setAttribute("personAffiliation", affiliations[affiliations.length + i - maxLen]);
-                }
-
-                sp.setReference("study", study);
-                store(sp);
-                study.addToCollection("studyPeople", sp);
-            }
-        }
+        /* Study people (public and scientific contacts) */
+        this.parseContact(study, lineValues, "public");
+        this.parseContact(study, lineValues, "scientific");
 
         /*<class name="StudyPeople" is-interface="true">
             <reference name="study" referenced-type="Study" reverse-reference="studyPeople"/>
@@ -301,26 +295,195 @@ public class WhoConverter extends BioFileConverter
             <attribute name="organisationRor" type="java.lang.String"/>
         </class>*/
 
+        /* Study type */
+        this.parseStudyType(study, this.getAndCleanValue(lineValues, "study_type"));
+
+        String studyDesign = this.getAndCleanValue(lineValues, "study_design");
+        String phase = this.getAndCleanValue(lineValues, "phase");
+        if (!WhoConverter.isEmptyOrBlankOrNull(studyDesign)) {
+            study.setAttribute("studyEnrolment", studyDesign);
+        }
+        if (!WhoConverter.isEmptyOrBlankOrNull(phase)) {
+            study.setAttribute("studyGenderElig", phase);
+        }
+
+        /* Study features (incl. phase) */
+        this.parseStudyFeatures(study, this.getAndCleanValue(lineValues, "study_type"),
+                                this.getAndCleanValue(lineValues, "phase"));
+
         store(study);
     }
 
     /**
-     * Set values for various person name fields of a Study People instance
+     * Parse secondary IDs input to create StudyIdentifier items.
+     * 
+     * @param study the study item to link to study identifiers
+     * @param secIDsStr the input secondary IDs string
+     */
+    public void parseSecondaryIDs(Item study, String secIDsStr) {
+        if (!WhoConverter.isEmptyOrBlankOrNull(secIDsStr)) {
+            String[] ids = secIDsStr.split(";");
+            for (String id: ids) {
+                if (!WhoConverter.isEmptyOrBlankOrNull(id)) {
+                    Item studyIdentifier = createItem("StudyIdentifier");
+                    studyIdentifier.setAttribute("identifierValue", id);
+                    studyIdentifier.setReference("study", study);
+                    study.addToCollection("studyIdentifiers", studyIdentifier);
+                }
+                // TODO: identifier type
+                // TODO: identifier link
+            }
+
+            /*
+            <class name="StudyIdentifier" is-interface="true">
+                <reference name="study" referenced-type="Study" reverse-reference="studyIdentifiers"/>
+                <attribute name="identifierValue" type="java.lang.String"/>
+                <attribute name="identifierType" type="java.lang.String"/>
+                <attribute name="source" type="java.lang.String"/>
+                <attribute name="sourceRor" type="java.lang.String"/>
+                <attribute name="identifierDate" type="java.lang.String"/>
+                <attribute name="identifierLink" type="java.lang.String"/>
+            </class>
+             */
+        }
+    }
+
+    /**
+     * Parse Public_Contact or Scientific_Contact input fields to create StudyPeople items.
+     * 
+     * @param study the study item to link to study people
+     * @param lineValues the list of all values for a line in the data file
+     * @param contactType public or scientific contact
+     */
+    public void parseContact(Item study, String[] lineValues, String contactType) throws Exception {
+        String[] firstNames = {};
+        String[] lastNames = {};
+        String[] affiliations = {};
+
+        String fieldPrefix = "";
+        if (contactType.equalsIgnoreCase("public")) {
+            fieldPrefix = "Public_";
+        } else if (contactType.equalsIgnoreCase("scientific")) {
+            fieldPrefix = "Scientific_";
+        } else {
+            throw new Exception("Unknown value \"" + contactType + "\" for contactType arg of parseContact()");
+        }
+        
+        String firstNamesString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Firstname"));
+        if (!WhoConverter.isEmptyOrBlankOrNull(firstNamesString)) {
+            firstNames = firstNamesString.split(";");
+        }
+
+        String lastNamesString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Lastname"));
+        if (!WhoConverter.isEmptyOrBlankOrNull(lastNamesString)) {
+            lastNames = lastNamesString.split(";");
+        }
+
+        String affiliationsString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Affiliation"));
+        if (!WhoConverter.isEmptyOrBlankOrNull(affiliationsString)) {
+            affiliations = affiliationsString.split(";");
+        }
+
+        /* Address and phone strings present in WHO are unused here since they don't appear in our model */
+        // Using the field with the most semi-colon-separated elements for iterating
+        int maxLen = Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length);
+
+        String firstName, lastName, affiliation;
+        Item sp;
+
+        if (maxLen > 0) {
+            for (int i = 0; i < maxLen; i++) {
+                sp = createItem("StudyPeople");
+                firstName = "";
+                lastName = "";
+                affiliation = "";
+
+                // TODO: possible that the string ends with both semi-colons?
+                
+                // First name
+                if (!WhoConverter.isEmptyOrBlankOrNull(firstNamesString)) {
+                    if (firstNamesString.endsWith(";") && i < firstNames.length) {
+                        firstName = firstNames[i];
+                    } else if (firstNames.length + i - maxLen >= 0) {
+                        // If the string starts with a semi-colon or not, the indexing is the same as length == maxLen if there is no semi-colon
+                        firstName = firstNames[firstNames.length + i - maxLen].strip();
+                    } else {
+                        this.writeLog("parseContact(): line parsing error, firstName values list is missing a value");
+                    }
+                }
+
+                // Last name
+                if (!WhoConverter.isEmptyOrBlankOrNull(lastNamesString)) {
+                    if (lastNamesString.endsWith(";") && i < lastNames.length) {
+                        lastName = lastNames[i];
+                    } else if (lastNames.length + i - maxLen >= 0) {
+                        // If the string starts with a semi-colon or not, the indexing is the same as length == maxLen if there is no semi-colon
+                        lastName = lastNames[lastNames.length + i - maxLen].strip();
+                    } else {
+                        this.writeLog("parseContact(): line parsing error, lastName values list is missing a value");
+                    }
+                }
+
+                // Affiliation (raw value from data)
+                if (!WhoConverter.isEmptyOrBlankOrNull(affiliationsString)) {
+                    if (affiliationsString.endsWith(";") && i < affiliations.length) {
+                        affiliation = affiliations[i];
+                    } else if (affiliations.length + i - maxLen >= 0) {
+                        // If the string starts with a semi-colon or not, the indexing is the same as length == maxLen if there is no semi-colon
+                        affiliation = affiliations[affiliations.length + i - maxLen].strip();
+                    } else {
+                        this.writeLog("parseContact(): line parsing error, affiliation values list is missing a value");
+                    }
+                }
+
+                // Setting the values
+                this.setPeopleValues(sp, firstName, lastName, affiliation, contactType);
+
+                // TODO: handle affiliation differently? (same for multiple people) NCT04163835
+                // TODO: how to avoid duplicates that are not really duplicates? NCT04163835
+                // TODO: also set organisation field?
+                // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/af313e05f60012df56c8a6dd3cbb73a9fe1cd906/GeneralHelpers/StringFunctions.cs#L947
+
+                sp.setReference("study", study);
+                store(sp);
+                study.addToCollection("studyPeople", sp);
+            }
+        }
+    }
+
+    /**
+     * Set values for various person fields of a Study People instance.
      * 
      * @param studyPeople the studyPeople instance to set fields of
-     * @param fullName the full name string
+     * @param firstName the first name value
+     * @param lastName the last name value
+     * @param affiliation the affiliation value
+     * @param contactType public or scientific contact
      */
-    public void setPublicNameValues(Item studyPeople, String fullName) {
-        fullName = fullName.strip();
-        String[] separatedName = fullName.split(" ");
-
-        if (separatedName.length > 1) {
-            studyPeople.setAttribute("personGivenName", separatedName[0]);
-            studyPeople.setAttribute("personFamilyName", separatedName[separatedName.length-1]);
-        } else {
-            studyPeople.setAttribute("personFamilyName", fullName);
+    public void setPeopleValues(Item studyPeople, String firstName, String lastName, String affiliation, String contactType) {
+        // TODO: attempt at separating first name/last name if one of firstName/lastName is empty?
+        // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
+        if (!WhoConverter.isEmptyOrBlankOrNull(firstName) && !WhoConverter.isEmptyOrBlankOrNull(lastName)) {
+            studyPeople.setAttribute("personGivenName", firstName);
+            studyPeople.setAttribute("personFamilyName", lastName);
+            studyPeople.setAttribute("personFullName", (firstName + " " + lastName));
+        } else if (!WhoConverter.isEmptyOrBlankOrNull(firstName)) {
+            studyPeople.setAttribute("personFullName", firstName);
+        } else if (!WhoConverter.isEmptyOrBlankOrNull(lastName)) {
+            studyPeople.setAttribute("personFullName", lastName);
         }
-        studyPeople.setAttribute("personFullName", fullName); 
+        
+        if (!WhoConverter.isEmptyOrBlankOrNull(affiliation)) {
+            studyPeople.setAttribute("personAffiliation", affiliation);
+        }
+
+        // TODO: normalise against MDR CV?
+        if (contactType.equalsIgnoreCase("public")) {
+            studyPeople.setAttribute("contribType", "Public contact");
+        } else {
+            // Exception already thrown earlier so value can't be anything other than "scientific"
+            studyPeople.setAttribute("contribType", "Scientific contact");
+        }
     }
 
     /**
@@ -330,14 +493,13 @@ public class WhoConverter extends BioFileConverter
      * @param ageAttr the age attribute name to set (either minAge or maxAge)
      * @param unitAttr the unit attribute name to set (either minAgeUnit or maxAgeUnit)
      * @param study the study item containing the attributes to set
-     * @param trialID the trial ID for logging purposes
      */
-    public void parseAgeField(String ageStr, String ageAttr, String unitAttr, Item study, String trialID) {
-        if (!ageStr.isEmpty()) {
+    public void parseAgeField(String ageStr, String ageAttr, String unitAttr, Item study) {
+        if (!WhoConverter.isEmptyOrBlankOrNull(ageStr)) {
             // Check for N/A or no limit
             Matcher mAgeNotApplicable = P_AGE_NOT_APPLICABLE.matcher(ageStr);
             if (mAgeNotApplicable.matches()) {
-                study.setAttribute(ageAttr, STR_AGE_NOT_APPLICABLE);
+                study.setAttribute(ageAttr, STR_NOT_APPLICABLE);
             } else {
                 Matcher mAgeNotStated = P_AGE_NOT_STATED.matcher(ageStr);
                 if (mAgeNotStated.matches()) {
@@ -359,14 +521,14 @@ public class WhoConverter extends BioFileConverter
                                             if (g1.equals(">")) {
                                                 ageNumber++;
                                             } else {
-                                                this.writeLog(trialID + " Wrong inequality sign for minAgeUnit: "
+                                                this.writeLog("Wrong inequality sign for minAgeUnit: "
                                                                 + g1 + " full string: " + ageStr);
                                             }
                                         } else if (ageAttr.equalsIgnoreCase("maxage")) {
                                             if (g1.equals("<")) {
                                                 ageNumber--;
                                             } else {
-                                                this.writeLog(trialID + " Wrong inequality sign for maxAgeUnit: "
+                                                this.writeLog("Wrong inequality sign for maxAgeUnit: "
                                                                 + g1 + " full string: " + ageStr);
                                             }
                                         }
@@ -377,28 +539,147 @@ public class WhoConverter extends BioFileConverter
                                     study.setAttribute(ageAttr, g2);
                                 }
 
-                                if (!(g3 == null)) {
+                                // TODO: how to check unit against data?
+                                if (!(g3 == null || g3.equalsIgnoreCase("age"))) {
                                     study.setAttribute(unitAttr, WhoConverter.normaliseUnit(g3));
-                                } else {    // If no unit, we assume it's years
+                                } else {    // If no unit (or unit is "age"), we assume it's years
                                     study.setAttribute(unitAttr, "Years");
                                 }
 
                                 successful = true;
                             } else {
-                                this.writeLog(trialID + " Wrong format minAge value: " 
+                                this.writeLog("Wrong format minAge value: " 
                                                 + g2 + " full string: " + ageStr);
                             }
                         }
                         if (!successful) {
-                            this.writeLog(trialID + " Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
+                            this.writeLog("Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
                                 ", parsed groups: -g1: " + g1 + " -g2: " + g2 + " -g3: " + g3);
                         }
                     } else {
-                        this.writeLog(trialID + " Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
+                        this.writeLog("Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
                             ", no matches found");
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Parse study type input to set value of study type field.
+     * 
+     * @param study the study item to set the study type value of
+     * @param studyTypeStr the input study type string
+     */
+    public void parseStudyType(Item study, String studyTypeStr) {
+        // TODO: handle the "interventional/observational" value
+        // Interventional/observational
+        Matcher mTypeDefault = P_TYPE_DEFAULT.matcher(studyTypeStr);
+        if (mTypeDefault.matches()) {
+            String type = mTypeDefault.group(1);
+            if (type.equalsIgnoreCase("intervention") || type.equalsIgnoreCase("observation")) {
+                study.setAttribute("studyType", WhoConverter.normaliseType(type));
+            } else {
+                this.writeLog("Wrong value for study type match: " + type + ", full string: " + studyTypeStr);
+            }
+        } else {
+            // Expanded access
+            Matcher mTypeExpanded = P_TYPE_EXPANDED.matcher(studyTypeStr);
+            if (mTypeExpanded.matches()) {
+                study.setAttribute("studyType", STR_TYPE_EXPANDED);
+            } else {
+                // N/A
+                Matcher mTypeNA = P_TYPE_NOT_APPLICABLE.matcher(studyTypeStr);
+                if (mTypeNA.matches()) {
+                    study.setAttribute("studyType", STR_NOT_APPLICABLE);
+                } else {    // Other
+                    study.setAttribute("studyType", STR_TYPE_OTHER);
+                }
+            }
+        }
+    }
+
+    /**
+     * Parse phase and study features input to create StudyFeature items.
+     * 
+     * @param study the study item to link to study features
+     * @param featuresStr the input study features string
+     * @param phaseStr the input phase string
+     */
+    public void parseStudyFeatures(Item study, String featuresStr, String phaseStr) throws Exception {
+        if (!WhoConverter.isEmptyOrBlankOrNull(phaseStr)) {
+            Item phaseFeature = createItem("StudyFeature");
+            phaseFeature.setAttribute("featureType", "Phase");
+
+            Matcher mPhaseNumber = P_PHASE_NUMBER.matcher(phaseStr);
+            if (mPhaseNumber.matches()) {   // "Numbers" match
+                String phase = mPhaseNumber.group(1);
+                String nb1 = mPhaseNumber.group(2);
+                String nb2 = mPhaseNumber.group(3);
+                if (nb1 != null) {
+                    if ((phase != null && phase.toLowerCase().contains("early")) || nb1.equals("0")) {  // Early phase 1
+                        phaseFeature.setAttribute("featureValue", "Early phase 1");
+                        if (nb2 != null) {
+                            this.writeLog("Anomaly: second number matched for early phase string, phase: " 
+                                            + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
+                        }
+                    } else if (nb2 != null) {   // Two phases
+                        phaseFeature.setAttribute("featureValue", "Phase " + WhoConverter.convertPhaseNumber(nb1) + "/" + WhoConverter.convertPhaseNumber(nb2));
+                    } else {    // One phase
+                        phaseFeature.setAttribute("featureValue", "Phase " + WhoConverter.convertPhaseNumber(nb1));
+                    }
+                } else {
+                    this.writeLog("Anomaly: matched \"numbers\" phase string but no phase number, phase: " 
+                                    + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
+                }
+            } else {
+                Matcher mPhaseVerbose = P_PHASE_VERBOSE.matcher(phaseStr);
+                if (mPhaseVerbose.matches()) {    // "Verbose" match
+                    String p1 = mPhaseVerbose.group(1);
+                    String p2 = mPhaseVerbose.group(2);
+                    String p3 = mPhaseVerbose.group(3);
+                    String p4 = mPhaseVerbose.group(4);
+                    if (p1 != null || p2 != null || p3 != null || p4 != null) {
+                        // Getting group indices where group is yes
+                        String[] phasesGroups = {p1, p2, p3, p4};
+                        ArrayList<Integer> phasesRes = new ArrayList<Integer>();
+                        for (int i = 1; i <= phasesGroups.length; i++) {
+                            if (phasesGroups[i-1] != null && phasesGroups[i-1].equalsIgnoreCase("yes")) {
+                                phasesRes.add(i);
+                            }
+                        }
+
+                        if (phasesRes.size() > 0) {
+                            if (phasesRes.size() == 1) {    // One phase
+                                phaseFeature.setAttribute("featureValue", "Phase " + String.valueOf(phasesRes.get(0)));
+                            } else if (phasesRes.size() == 2) { // Two phases
+                                phaseFeature.setAttribute("featureValue", "Phase " + String.valueOf(phasesRes.get(0)) + "/" + String.valueOf(phasesRes.get(1)));
+                            } else {
+                                this.writeLog("Anomaly: matched more than 2 groups for \"verbose\" phase field, g1: " + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
+                            }
+                        } else {
+                            this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: " + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
+                        }
+                    } else {
+                        this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: " + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
+                    }
+                } else {
+                    Matcher mPhaseNA = P_TYPE_NOT_APPLICABLE.matcher(phaseStr);
+                    if (mPhaseNA.matches()) {   // N/A
+                        phaseFeature.setAttribute("featureValue", STR_NOT_APPLICABLE);
+                    } else {    // Using raw value
+                        phaseFeature.setAttribute("featureValue", phaseStr);
+                    }
+                } 
+            }
+
+            phaseFeature.setReference("study", study);
+            store(phaseFeature);
+            study.addToCollection("studyFeatures", phaseFeature);
+        }
+
+        if (!WhoConverter.isEmptyOrBlankOrNull(featuresStr)) {
+            ;
         }
     }
 
@@ -410,14 +691,27 @@ public class WhoConverter extends BioFileConverter
     public void writeLog(String text) {
         try {
             if (this.logWriter != null) {
-                this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + text + "\n");
-                this.logWriter.flush();
+                if (this.trialID != null) {
+                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + this.trialID + " - " + text + "\n");
+                    this.logWriter.flush();
+                } else {
+                    System.out.println("WHO - Trial ID null (cannot write logs)");
+                }
             } else {
                 System.out.println("WHO - Log writer is null (cannot write logs)");
             }
         } catch(IOException e) {
             System.out.println("WHO - Couldn't write to log file");
         }
+    }
+
+    /**
+     * Check if a string is empty, only contains whitespaces, or is equal to "NULL".
+     * 
+     * @return true if empty or only contains whitespaces or is equal to "NULL", false otherwise
+     */
+    public static boolean isEmptyOrBlankOrNull(String s) {
+        return (s.isEmpty() || s.isBlank() || s.equalsIgnoreCase("NULL"));
     }
 
     /**
@@ -429,6 +723,27 @@ public class WhoConverter extends BioFileConverter
      */
     public static String normaliseUnit(String u) {
         return WhoConverter.normaliseWord(u) + "s";
+    }
+
+    /**
+     * Normalise study type by normalising word and adding a trailing "al" to the word (intervention/observation)
+     * 
+     * @param t the study type to normalise
+     * @return the normalised type
+     * @see #normaliseWord()
+     */
+    public static String normaliseType(String t) {
+        return WhoConverter.normaliseWord(t) + "al";
+    }
+
+    /**
+     * Convert phase number (1-4) to digit string. Only returns a different string if the input is in Roman numerals.
+     * 
+     * @param n the input digit string, possibly in roman numerals
+     * @return the converted phase number
+     */
+    public static String convertPhaseNumber(String n) {
+        return WhoConverter.PHASE_NUMBER_MAP.get(n.toLowerCase());
     }
 
     /**
@@ -458,6 +773,19 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
+     * Get field value from array of values using a field's position-lookup Map, value is also cleaned without stripping it of leading/trailing whitespaces.
+     * 
+     * @param lineValues the list of all values for a line in the data file
+     * @param field the name of the field to get the value of
+     * @return the cleaned value of the field
+     * @see #cleanValue()
+     */
+    public String getAndCleanValueNoStrip(String[] lineValues, String field) {
+        // TODO: handle errors
+        return WhoConverter.cleanValue(lineValues[this.fieldsToInd.get(field)]);
+    }
+
+    /**
      * Remove extra quotes, unescape HTML chars, and strip the string of empty spaces.
      * 
      * @param s the value to clean
@@ -467,6 +795,18 @@ public class WhoConverter extends BioFileConverter
      */
     public static String cleanValue(String s) {
         return WhoConverter.unescapeHtml(WhoConverter.removeQuotes(s)).strip();
+    }
+
+    /**
+     * Remove extra quotes, and unescape HTML chars.
+     * 
+     * @param s the value to clean
+     * @return the cleaned value
+     * @see #unescapeHtml()
+     * @see #removeQuotes()
+     */
+    public static String cleanValueNoStrip(String s) {
+        return WhoConverter.unescapeHtml(WhoConverter.removeQuotes(s));
     }
 
     /**
