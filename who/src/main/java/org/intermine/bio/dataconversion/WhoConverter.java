@@ -623,7 +623,7 @@ public class WhoConverter extends BioFileConverter
                             this.writeLog("Anomaly: second number matched for early phase string, phase: " 
                                             + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
                         }
-                    } else if (nb2 != null) {   // Two phases
+                    } else if (nb2 != null && !nb1.equalsIgnoreCase(nb2)) {   // Two phases
                         phaseFeature.setAttribute("featureValue", "Phase " + WhoConverter.convertPhaseNumber(nb1) + "/" + WhoConverter.convertPhaseNumber(nb2));
                     } else {    // One phase
                         phaseFeature.setAttribute("featureValue", "Phase " + WhoConverter.convertPhaseNumber(nb1));
