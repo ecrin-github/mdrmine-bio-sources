@@ -58,12 +58,25 @@ public class WhoConverter extends BioFileConverter
 {
     /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
     // TODO: add "-" as no-limit?
-    private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A|no\\h*limit|no|-2147483648).*", Pattern.CASE_INSENSITIVE);  // N/A / No limit
-    private static final Pattern P_AGE_NOT_STATED = Pattern.compile(".*(none|not\\h*stated).*", Pattern.CASE_INSENSITIVE);  // Not stated
+    private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(
+        ".*(not\\h*applicable|N/?A|no\\h*limit|no|-2147483648).*", 
+        Pattern.CASE_INSENSITIVE);  // N/A / No limit
+    private static final Pattern P_AGE_NOT_STATED = Pattern.compile(
+        ".*(none|not\\h*stated).*", 
+        Pattern.CASE_INSENSITIVE);  // Not stated
     // [number][unit] possibly with gt/lt in front (gte/lte is not interesting here)
-    private static final Pattern P_AGE = Pattern.compile("[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_TYPE_DEFAULT = Pattern.compile(".*(intervention|observation).*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_TYPE_EXPANDED = Pattern.compile(".*expanded\\h*access.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_AGE = Pattern.compile(
+        "[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*", 
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_INTERVENTIONAL = Pattern.compile(
+        ".*(BA\\/BE|intervention\\w*)\\b(?!.*observation).*", 
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_OBSERVATIONAL = Pattern.compile(
+        ".*(PMS|factors|epidemio?logical|^observation\\w*)\\b(?!\\h+invasive).*", 
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_OTHER = Pattern.compile(".*(observational\\h+invasive|other\\w*).*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_BASIC_SCIENCE = Pattern.compile(".*basic.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_EXPANDED_ACCESS = Pattern.compile(".*expanded.*", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_TYPE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A).*", Pattern.CASE_INSENSITIVE);  // N/A
     private static final String PHASE_NBS = "0|1|2|3|4|iv|iii|ii|i";  // No subroutines in Java Regex
     private static final Pattern P_PHASE_NUMBER = Pattern.compile(
@@ -73,10 +86,12 @@ public class WhoConverter extends BioFileConverter
         ".*Phase\\h*i\\):\\h*(no|yes)?.*\\(Phase\\h*ii\\):\\h*(no|yes)?.*\\(Phase\\h*iii\\):\\h*(no|yes)?.*\\(Phase\\h*iv\\):\\h*(no|yes)?.*", 
         Pattern.CASE_INSENSITIVE);
     private static final String STR_NOT_APPLICABLE = "N/A";
-    private static final String STR_AGE_NOT_STATED = "Not stated";
+    private static final String STR_UNKNOWN = "Unknown";
+    private static final String STR_NOT_STATED = "Not stated";
     private static final String STR_TYPE_INTERVENTIONAL = "Interventional";
     private static final String STR_TYPE_OBSERVATIONAL = "Observational";
-    private static final String STR_TYPE_EXPANDED = "Expanded access";
+    private static final String STR_TYPE_BASIC_SCIENCE = "Basic science";
+    private static final String STR_TYPE_EXPANDED_ACCESS = "Expanded access";
     private static final String STR_TYPE_OTHER = "Other";
     static final Map<String, String> PHASE_NUMBER_MAP = Map.of(
         "1", "1", 
@@ -503,7 +518,7 @@ public class WhoConverter extends BioFileConverter
             } else {
                 Matcher mAgeNotStated = P_AGE_NOT_STATED.matcher(ageStr);
                 if (mAgeNotStated.matches()) {
-                    study.setAttribute(ageAttr, STR_AGE_NOT_STATED);
+                    study.setAttribute(ageAttr, STR_NOT_STATED);
                 } else {
                     Matcher mAge = P_AGE.matcher(ageStr);
                     boolean successful = false;
@@ -572,28 +587,37 @@ public class WhoConverter extends BioFileConverter
      * @param studyTypeStr the input study type string
      */
     public void parseStudyType(Item study, String studyTypeStr) {
-        // TODO: handle the "interventional/observational" value
-        // Interventional/observational
-        Matcher mTypeDefault = P_TYPE_DEFAULT.matcher(studyTypeStr);
-        if (mTypeDefault.matches()) {
-            String type = mTypeDefault.group(1);
-            if (type.equalsIgnoreCase("intervention") || type.equalsIgnoreCase("observation")) {
-                study.setAttribute("studyType", WhoConverter.normaliseType(type));
-            } else {
-                this.writeLog("Wrong value for study type match: " + type + ", full string: " + studyTypeStr);
-            }
-        } else {
-            // Expanded access
-            Matcher mTypeExpanded = P_TYPE_EXPANDED.matcher(studyTypeStr);
-            if (mTypeExpanded.matches()) {
-                study.setAttribute("studyType", STR_TYPE_EXPANDED);
-            } else {
-                // N/A
-                Matcher mTypeNA = P_TYPE_NOT_APPLICABLE.matcher(studyTypeStr);
-                if (mTypeNA.matches()) {
-                    study.setAttribute("studyType", STR_NOT_APPLICABLE);
+        if (!WhoConverter.isEmptyOrBlankOrNull(studyTypeStr)) {
+            study.setAttribute("studyStatus", studyTypeStr);
+            Matcher mTypeInterventional = P_TYPE_INTERVENTIONAL.matcher(studyTypeStr);
+            if (mTypeInterventional.matches()) {    // Interventional
+                study.setAttribute("studyType", STR_TYPE_INTERVENTIONAL);
+            } else {    // Observational
+                Matcher mTypeObservational = P_TYPE_OBSERVATIONAL.matcher(studyTypeStr);
+                if (mTypeObservational.matches()) {
+                    study.setAttribute("studyType", STR_TYPE_OBSERVATIONAL);
                 } else {    // Other
-                    study.setAttribute("studyType", STR_TYPE_OTHER);
+                    Matcher mTypeOther = P_TYPE_OTHER.matcher(studyTypeStr);
+                    if (mTypeOther.matches()) {
+                        study.setAttribute("studyType", STR_TYPE_OTHER);
+                    } else {    // Basic science
+                        Matcher mTypeBasicScience = P_TYPE_BASIC_SCIENCE.matcher(studyTypeStr);
+                        if (mTypeBasicScience.matches()) {
+                            study.setAttribute("studyType", STR_TYPE_BASIC_SCIENCE);
+                        } else {    // N/A
+                            Matcher mTypeNA = P_TYPE_NOT_APPLICABLE.matcher(studyTypeStr);
+                            if (mTypeNA.matches()) {
+                                study.setAttribute("studyType", STR_NOT_APPLICABLE);
+                            } else {    // Expanded access
+                                Matcher mTypeExpandedAcess = P_TYPE_EXPANDED_ACCESS.matcher(studyTypeStr);
+                                if (mTypeExpandedAcess.matches()) {
+                                    study.setAttribute("studyType", STR_TYPE_EXPANDED_ACCESS);
+                                } else {    // Unknown
+                                    study.setAttribute("studyType", STR_UNKNOWN);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
