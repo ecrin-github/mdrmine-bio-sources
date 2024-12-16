@@ -85,6 +85,9 @@ public class WhoConverter extends BioFileConverter
     private static final Pattern P_PHASE_VERBOSE = Pattern.compile(
         ".*Phase\\h*i\\):\\h*(no|yes)?.*\\(Phase\\h*ii\\):\\h*(no|yes)?.*\\(Phase\\h*iii\\):\\h*(no|yes)?.*\\(Phase\\h*iv\\):\\h*(no|yes)?.*", 
         Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_FEATURE_INTERVENTIONAL = Pattern.compile(
+        "(allocation\\h*:\\h*([^.,;]*)([\\.,;]))?\\h*(intervention\\h* model\\h*:\\h*([^.,;]*)\\3)?\\h*(primary\\h*purpose\\h*:\\h*([^.,;]*)\\3)?\\h*(masking\\h*:\\h*(.*)\\3)?.*", 
+        Pattern.CASE_INSENSITIVE);
     private static final String STR_NOT_APPLICABLE = "N/A";
     private static final String STR_UNKNOWN = "Unknown";
     private static final String STR_NOT_STATED = "Not stated";
@@ -93,6 +96,11 @@ public class WhoConverter extends BioFileConverter
     private static final String STR_TYPE_BASIC_SCIENCE = "Basic science";
     private static final String STR_TYPE_EXPANDED_ACCESS = "Expanded access";
     private static final String STR_TYPE_OTHER = "Other";
+    private static final String STR_FEATURE_ALLOCATION = "Allocation";
+    private static final String STR_FEATURE_INTERVENTION_MODEL = "Intervention model";
+    private static final String STR_FEATURE_PRIMARY_PURPOSE = "Primary purpose";
+    private static final String STR_FEATURE_MASKING = "Masking";
+
     static final Map<String, String> PHASE_NUMBER_MAP = Map.of(
         "1", "1", 
         "2", "2", 
@@ -222,7 +230,7 @@ public class WhoConverter extends BioFileConverter
         Item study = createItem("Study");
 
         // TODO: DOs
-        // TODO: something with last_update?
+        // TODO: something with last_update? is is trial start date ?
 
         // TODO: skip creating study if ID is missing?
 
@@ -297,19 +305,6 @@ public class WhoConverter extends BioFileConverter
         this.parseContact(study, lineValues, "public");
         this.parseContact(study, lineValues, "scientific");
 
-        /*<class name="StudyPeople" is-interface="true">
-            <reference name="study" referenced-type="Study" reverse-reference="studyPeople"/>
-            <attribute name="contribType" type="java.lang.Integer"/>
-            <attribute name="personGivenName" type="java.lang.String"/>
-            <attribute name="personFamilyName" type="java.lang.String"/>
-            <attribute name="personFullName" type="java.lang.String"/>
-            <attribute name="orcid" type="java.lang.String"/>
-            <attribute name="personAffiliation" type="java.lang.String"/>
-            <attribute name="organisation" type="java.lang.Integer"/>
-            <attribute name="organisationName" type="java.lang.String"/>
-            <attribute name="organisationRor" type="java.lang.String"/>
-        </class>*/
-
         /* Study type */
         this.parseStudyType(study, this.getAndCleanValue(lineValues, "study_type"));
 
@@ -323,7 +318,7 @@ public class WhoConverter extends BioFileConverter
         }
 
         /* Study features (incl. phase) */
-        this.parseStudyFeatures(study, this.getAndCleanValue(lineValues, "study_type"),
+        this.parseStudyFeatures(study, this.getAndCleanValue(lineValues, "study_design"),
                                 this.getAndCleanValue(lineValues, "phase"));
 
         store(study);
@@ -348,18 +343,6 @@ public class WhoConverter extends BioFileConverter
                 // TODO: identifier type
                 // TODO: identifier link
             }
-
-            /*
-            <class name="StudyIdentifier" is-interface="true">
-                <reference name="study" referenced-type="Study" reverse-reference="studyIdentifiers"/>
-                <attribute name="identifierValue" type="java.lang.String"/>
-                <attribute name="identifierType" type="java.lang.String"/>
-                <attribute name="source" type="java.lang.String"/>
-                <attribute name="sourceRor" type="java.lang.String"/>
-                <attribute name="identifierDate" type="java.lang.String"/>
-                <attribute name="identifierLink" type="java.lang.String"/>
-            </class>
-             */
         }
     }
 
@@ -703,8 +686,40 @@ public class WhoConverter extends BioFileConverter
         }
 
         if (!WhoConverter.isEmptyOrBlankOrNull(featuresStr)) {
-            ;
+            // TODO: improve parsing of study features, currently it works only for most interventional studies
+            Matcher mFeatureInterventional = P_FEATURE_INTERVENTIONAL.matcher(featuresStr);
+            if (mFeatureInterventional.matches()) { // Interventional features
+                String allocation = mFeatureInterventional.group(2);
+                String model = mFeatureInterventional.group(5);
+                String purpose = mFeatureInterventional.group(7);
+                String masking = mFeatureInterventional.group(9);
+                this.createAndStoreFeature(study, STR_FEATURE_ALLOCATION, allocation);
+                this.createAndStoreFeature(study, STR_FEATURE_INTERVENTION_MODEL, model);
+                this.createAndStoreFeature(study, STR_FEATURE_PRIMARY_PURPOSE, purpose);
+                this.createAndStoreFeature(study, STR_FEATURE_MASKING, masking);
+            } else {    // Using raw value
+                this.createAndStoreFeature(study, "", featuresStr);
+            }
         }
+    }
+
+    /**
+     * TODO
+     */
+    public boolean createAndStoreFeature(Item study, String featureType, String featureValue) throws Exception {
+        boolean success = false;
+        if (!WhoConverter.isEmptyOrBlankOrNull(featureValue)) {
+            Item studyFeature = createItem("StudyFeature");
+            if (!WhoConverter.isEmptyOrBlankOrNull(featureType)) {
+                studyFeature.setAttribute("featureType", featureType);
+            }
+            studyFeature.setAttribute("featureValue", featureValue);
+            studyFeature.setReference("study", study);
+            store(studyFeature);
+            study.addToCollection("studyFeatures", studyFeature);
+            success = true;
+        }
+        return success;
     }
 
     /**
@@ -730,12 +745,12 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * Check if a string is empty, only contains whitespaces, or is equal to "NULL".
+     * Check if a string is null, empty, only contains whitespaces, or is equal to "NULL".
      * 
-     * @return true if empty or only contains whitespaces or is equal to "NULL", false otherwise
+     * @return true if null or empty or only contains whitespaces or is equal to "NULL", false otherwise
      */
     public static boolean isEmptyOrBlankOrNull(String s) {
-        return (s.isEmpty() || s.isBlank() || s.equalsIgnoreCase("NULL"));
+        return (s == null || s.isEmpty() || s.isBlank() || s.equalsIgnoreCase("NULL"));
     }
 
     /**
