@@ -38,9 +38,13 @@ import java.util.HashSet;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
+import org.intermine.xml.full.Attribute;
 
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.text.WordUtils;
+
+import org.jsoup.Jsoup;
 
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
@@ -50,6 +54,7 @@ import com.opencsv.ICSVWriter;
 import com.opencsv.exceptions.CsvMalformedLineException;
 
 
+
 /**
  * Class to parse values from a WHO data file and store them as MDRMine items
  * @author ECRIN
@@ -57,13 +62,15 @@ import com.opencsv.exceptions.CsvMalformedLineException;
 public class WhoConverter extends BioFileConverter
 {
     /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
-    // TODO: add "-" as no-limit?
+    // TODO: "-"/"--" are none or unknown?
+    private static final Pattern P_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A).*", Pattern.CASE_INSENSITIVE);  // N/A
+    private static final Pattern P_NONE = Pattern.compile(".*\\b(none|no)\\b.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_UNKNOWN = Pattern.compile(".*\\b(unknown|not\\h*specified|not\\h*stated)\\b.*", Pattern.CASE_INSENSITIVE);
+    // TODO: N/A != none?
+    // TODO: "-" as no limit?
     private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(
-        ".*(not\\h*applicable|N/?A|no\\h*limit|no|-2147483648).*", 
+        ".*(not\\h*applicable|N/?A|no\\h*limit|no|none|-2147483648).*", 
         Pattern.CASE_INSENSITIVE);  // N/A / No limit
-    private static final Pattern P_AGE_NOT_STATED = Pattern.compile(
-        ".*(none|not\\h*stated).*", 
-        Pattern.CASE_INSENSITIVE);  // Not stated
     // [number][unit] possibly with gt/lt in front (gte/lte is not interesting here)
     private static final Pattern P_AGE = Pattern.compile(
         "[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*", 
@@ -77,7 +84,6 @@ public class WhoConverter extends BioFileConverter
     private static final Pattern P_TYPE_OTHER = Pattern.compile(".*(observational\\h+invasive|other\\w*).*", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_TYPE_BASIC_SCIENCE = Pattern.compile(".*basic.*", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_TYPE_EXPANDED_ACCESS = Pattern.compile(".*expanded.*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_TYPE_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A).*", Pattern.CASE_INSENSITIVE);  // N/A
     private static final String PHASE_NBS = "0|1|2|3|4|iv|iii|ii|i";  // No subroutines in Java Regex
     private static final Pattern P_PHASE_NUMBER = Pattern.compile(
         "^(Phase|Early\\h+phase)?[-|\\h]*(0|1|2|3|4|iv|iii|ii|i)(?>[^1234iv\\n]+\\b(0|1|2|3|4|iv|iii|ii|i))?.*", 
@@ -88,18 +94,38 @@ public class WhoConverter extends BioFileConverter
     private static final Pattern P_FEATURE_INTERVENTIONAL = Pattern.compile(
         "(allocation\\h*:\\h*([^.,;]*)([\\.,;]))?\\h*(intervention\\h* model\\h*:\\h*([^.,;]*)\\3)?\\h*(primary\\h*purpose\\h*:\\h*([^.,;]*)\\3)?\\h*(masking\\h*:\\h*(.*)\\3)?.*", 
         Pattern.CASE_INSENSITIVE);
-    private static final String STR_NOT_APPLICABLE = "N/A";
-    private static final String STR_UNKNOWN = "Unknown";
-    private static final String STR_NOT_STATED = "Not stated";
-    private static final String STR_TYPE_INTERVENTIONAL = "Interventional";
-    private static final String STR_TYPE_OBSERVATIONAL = "Observational";
-    private static final String STR_TYPE_BASIC_SCIENCE = "Basic science";
-    private static final String STR_TYPE_EXPANDED_ACCESS = "Expanded access";
-    private static final String STR_TYPE_OTHER = "Other";
-    private static final String STR_FEATURE_ALLOCATION = "Allocation";
-    private static final String STR_FEATURE_INTERVENTION_MODEL = "Intervention model";
-    private static final String STR_FEATURE_PRIMARY_PURPOSE = "Primary purpose";
-    private static final String STR_FEATURE_MASKING = "Masking";
+    private static final Pattern P_GENDER_ALL = Pattern.compile("^\\h*(all|both|b).*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_GENDER_STRUCTURED = Pattern.compile(".*(Female:\\h*(\\w+|)).*(Male:\\h*(\\w+|)).*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_GENDER_MF = Pattern.compile("^\\h*((?:<br>\\h*)?\\b(male|men|m)\\w*\\b)(.*(female|women|f)\\w*\\b)?.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_GENDER_FM = Pattern.compile("^\\h*(\\b(female|women|f)\\w*\\b)(.*(male|men|m)\\w*\\b)?.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_IEC_NONE = Pattern.compile("^((?:inclusion|exclusion) criteria):\\h*(|no\\w*(?:\\h*exclusion\\h*criteria)?|\\/)\\.?$", 
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_IEC_NA = Pattern.compile("^((?:inclusion|exclusion) criteria):\\h*(not\\h*applicable|n\\/?a)\\.?$", Pattern.CASE_INSENSITIVE);
+    /* Studies */
+    private static final String NOT_APPLICABLE = "N/A";
+    private static final String UNKNOWN = "Unknown";
+    private static final String NONE = "None";
+    private static final String NOT_STATED = "Not stated";
+    private static final String TYPE_INTERVENTIONAL = "Interventional";
+    private static final String TYPE_OBSERVATIONAL = "Observational";
+    private static final String TYPE_BASIC_SCIENCE = "Basic science";
+    private static final String TYPE_EXPANDED_ACCESS = "Expanded access";
+    private static final String TYPE_OTHER = "Other";
+    private static final String FEATURE_ALLOCATION = "Allocation";
+    private static final String FEATURE_INTERVENTION_MODEL = "Intervention model";
+    private static final String FEATURE_PRIMARY_PURPOSE = "Primary purpose";
+    private static final String FEATURE_MASKING = "Masking";
+    private static final String SPONSOR_NONE = "No sponsor";
+    private static final String GENDER_ALL = "All";
+    private static final String GENDER_WOMEN = "Female";
+    private static final String GENDER_MEN = "Male";
+    private static final String IC_PREFIX = "Inclusion criteria: ";
+    private static final String EC_PREFIX = "Exclusion criteria: ";
+    /* Objects */
+    private static final String O_TYPE_TRIAL_REGISTRY_ENTRY = "Trial registry entry";
+    private static final String O_CLASS_TEXT = "Text";
+    private static final String CONTRIBUTOR_TYPE_SPONSOR = "Sponsor";
+    private static final String CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT = "Scientific support organisation";
 
     static final Map<String, String> PHASE_NUMBER_MAP = Map.of(
         "1", "1", 
@@ -228,13 +254,15 @@ public class WhoConverter extends BioFileConverter
      */
     public void storeValues(String[] lineValues) throws Exception {
         Item study = createItem("Study");
+        // study.setAttribute("newField", "15");
+        Item doRegistryEntry = createItem("DataObject");
 
-        // TODO: DOs
-        // TODO: something with last_update? is is trial start date ?
+        // TODO: something with last_update? is it trial start date?
+        // TODO: do something with date registration / date enrolment?
 
         // TODO: skip creating study if ID is missing?
 
-        /* ID and ID URL */
+        /* ID and ID URL + DO */
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
         this.trialID = trialID;
         if (!WhoConverter.isEmptyOrBlankOrNull(trialID)) {
@@ -247,11 +275,15 @@ public class WhoConverter extends BioFileConverter
             if (!WhoConverter.isEmptyOrBlankOrNull(url)) {
                 studyIdentifier.setAttribute("identifierLink", url);
 
-                // Logging URLs containing an ID that seemingly does not match the primary ID
-                String[] url_split = url.split("/");
-                if (!url_split[url_split.length-1].equalsIgnoreCase(trialID)) {
-                    this.writeLog("URL ID (url: " + url +  ") does not match trial ID (" + trialID + ")");
-                }
+                doRegistryEntry.setAttribute("objectType", O_TYPE_TRIAL_REGISTRY_ENTRY);
+                doRegistryEntry.setAttribute("objectClass", O_CLASS_TEXT);
+                Item doInst = createItem("ObjectInstance");
+                doInst.setAttribute("url", url);
+                doInst.setReference("dataObject", doRegistryEntry);
+                store(doInst);
+                store(doRegistryEntry);
+                doRegistryEntry.addToCollection("objectInstances", doInst);
+                // TODO: resource type?
             }
             store(studyIdentifier);
             study.addToCollection("studyIdentifiers", studyIdentifier);
@@ -296,11 +328,6 @@ public class WhoConverter extends BioFileConverter
         store(studySource);
         study.addToCollection("studySources", studySource);
 
-        /* Min age */
-        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemin"), "minAge", "minAgeUnit", study);
-        /* Max age */
-        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemax"), "maxAge", "maxAgeUnit", study);
-
         /* Study people (public and scientific contacts) */
         this.parseContact(study, lineValues, "public");
         this.parseContact(study, lineValues, "scientific");
@@ -310,18 +337,161 @@ public class WhoConverter extends BioFileConverter
 
         String studyDesign = this.getAndCleanValue(lineValues, "study_design");
         String phase = this.getAndCleanValue(lineValues, "phase");
-        if (!WhoConverter.isEmptyOrBlankOrNull(studyDesign)) {
-            study.setAttribute("studyEnrolment", studyDesign);
-        }
-        if (!WhoConverter.isEmptyOrBlankOrNull(phase)) {
-            study.setAttribute("studyGenderElig", phase);
-        }
 
         /* Study features (incl. phase) */
         this.parseStudyFeatures(study, this.getAndCleanValue(lineValues, "study_design"),
                                 this.getAndCleanValue(lineValues, "phase"));
 
+        /* Brief description 1/3 (study design) */
+        // Note: using the fields currently used by the MDR to construct the briefDescription value
+        // TODO: change/improve this field?
+        this.addToBriefDescription(study, studyDesign);
+
+        /* Study enrolment */
+        String studyEnrolment = this.getAndCleanValue(lineValues, "Target_size");
+        if (!WhoConverter.isEmptyOrBlankOrNull(studyEnrolment)) {
+            try {
+                // Note: setAttribute() only accepts String, value is then automatically converted to the type in the xml model, 
+                // but we do have to check that it is actually a number
+                if (isPosWholeNumber(studyEnrolment)) {
+                    study.setAttribute("studyEnrolment", studyEnrolment);
+                }
+            } catch (NumberFormatException e) {
+                this.writeLog("Couldn't cast to int this study enrolment value: " + studyEnrolment);
+            }
+        }
+
+        /* Study status */
+        // TODO: normalise values
+        String studyStatus = this.getAndCleanValue(lineValues, "Recruitment_status");
+        if (!WhoConverter.isEmptyOrBlankOrNull(studyStatus)) {
+            study.setAttribute("studyStatus", studyStatus);
+        }
+
+        /* Study people: sponsors */
+        String primarySponsor = this.getAndCleanValue(lineValues, "Primary_sponsor");
+        String secondarySponsors = this.getAndCleanValue(lineValues, "Secondary_sponsors");
+        // TODO: what is source support?
+        String sourceSupport = this.getAndCleanValue(lineValues, "Source_Support");
+
+        /* Primary and secondary sponsors, scientific support organisation (source support)*/
+        this.createAndStoreStudyPeople(study, primarySponsor, CONTRIBUTOR_TYPE_SPONSOR);
+        // TODO: there may be multiple sponsors in this field
+        this.createAndStoreStudyPeople(study, secondarySponsors, CONTRIBUTOR_TYPE_SPONSOR);
+        // Checking if the source support string is different than the primary and secondary sponsors + is not "please refer to primary and secondary sponsors"
+        if (!sourceSupport.toLowerCase().contains("please") && !sourceSupport.equalsIgnoreCase(primarySponsor) && !sourceSupport.equalsIgnoreCase(secondarySponsors)) {
+            this.createAndStoreStudyPeople(study, sourceSupport, CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT);
+        }
+
+        /* Study countries */
+        // TODO: reference country CV object + normalise values
+        // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
+        String countries = this.getAndCleanValue(lineValues, "Countries");
+        if (!WhoConverter.isEmptyOrBlankOrNull(countries)) {
+            if (countries.contains(";")) {
+                String[] countriesList = countries.split(";");
+                for (String country: countriesList) {
+                    if (!WhoConverter.isEmptyOrBlankOrNull(country)) {
+                        this.createAndStoreCountry(study, country);
+                    }
+                }
+            } else {
+                this.createAndStoreCountry(study, countries);
+            }
+        }
+
+        /* Study conditions */
+        // TODO: match values with CT codes/ICD Codes
+        String conditions = this.getAndCleanValue(lineValues, "Conditions");
+        if (!WhoConverter.isEmptyOrBlankOrNull(conditions)) {
+            if (conditions.contains(";")) {
+                String[] conditionsList = conditions.split(";");
+                for (String condition: conditionsList) {
+                    if (!WhoConverter.isEmptyOrBlankOrNull(condition)) {
+                        this.createAndStoreCondition(study, condition);
+                    }
+                }
+            } else {
+                this.createAndStoreCondition(study, conditions);
+            }
+        }
+
+        /* Interventions */
+        String interventions = this.getAndCleanValue(lineValues, "Interventions");
+        if (!WhoConverter.isEmptyOrBlankOrNull(interventions)) {
+            study.setAttribute("interventions", interventions);
+        }
+
+        /* Brief description 2/3 (interventions) */
+        this.addToBriefDescription(study, interventions);
+
+        /* Min age */
+        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemin"), "minAge", "minAgeUnit", study);
+        /* Max age */
+        this.parseAgeField(this.getAndCleanValue(lineValues, "Agemax"), "maxAge", "maxAgeUnit", study);
+
+        /* Gender */
+        String gender = this.getAndCleanValue(lineValues, "Gender");
+        if (!WhoConverter.isEmptyOrBlankOrNull(gender)) {
+            this.parseGender(study, gender);
+        }
+
+        /* IEC */
+        String ic = this.getAndCleanValue(lineValues, "Inclusion_Criteria");
+        String ec = this.getAndCleanValue(lineValues, "Exclusion_Criteria");
+        this.parseIEC(study, ic, ec);
+
+        /* Primary outcome */
+        // TODO: handle main empty values
+        String primaryOutcome = this.getAndCleanValue(lineValues, "Primary_Outcome");
+        if (!WhoConverter.isEmptyOrBlankOrNull(primaryOutcome)) {
+            study.setAttribute("primaryOutcome", primaryOutcome);
+        }
+
+        /* Brief description 3/3 (primary outcome) */
+        this.addToBriefDescription(study, primaryOutcome);
+
+        /* Secondary outcomes */
+        // TODO: handle main empty values + N/A
+        String secondaryOutcomes = this.getAndCleanValue(lineValues, "Secondary_Outcomes");
+        if (!WhoConverter.isEmptyOrBlankOrNull(secondaryOutcomes)) {
+            study.setAttribute("secondaryOutcomes", secondaryOutcomes);
+        }
+
+        String bridgingFlag = this.getAndCleanValue(lineValues, "Bridging_flag");
+        String bridgedType = this.getAndCleanValue(lineValues, "Bridged_type");
+        String childs = this.getAndCleanValue(lineValues, "Childs");
+        if (!WhoConverter.isEmptyOrBlankOrNull(bridgingFlag)) {
+            study.setAttribute("testField1", bridgingFlag);
+        }
+        if (!WhoConverter.isEmptyOrBlankOrNull(bridgedType)) {
+            study.setAttribute("testField2", bridgedType);
+        }
+        if (!WhoConverter.isEmptyOrBlankOrNull(childs)) {
+            study.setAttribute("testField3", childs);
+        }
+
         store(study);
+    }
+
+    /**
+     * Concatenate text on a new line to study brief description field value.
+     * 
+     * @param study the study item to modify the brief description field of
+     * @param text the text to concatenate (or set, if the field's value is empty) to the study's brief description
+     */
+    public void addToBriefDescription(Item study, String text) {
+        if (!WhoConverter.isEmptyOrBlankOrNull(text)) {
+            Attribute briefDescription = study.getAttribute("briefDescription");
+            if (briefDescription != null) {
+                String currentDesc = briefDescription.getValue();
+                if (!WhoConverter.isEmptyOrBlankOrNull(currentDesc)) {
+                    study.setAttribute("briefDescription", currentDesc + "\n" + text);
+                } else {
+                    study.setAttribute("briefDescription", text);
+                }
+            }
+        }
     }
 
     /**
@@ -476,6 +646,7 @@ public class WhoConverter extends BioFileConverter
         }
 
         // TODO: normalise against MDR CV?
+        // TODO: values to constant
         if (contactType.equalsIgnoreCase("public")) {
             studyPeople.setAttribute("contribType", "Public contact");
         } else {
@@ -497,11 +668,11 @@ public class WhoConverter extends BioFileConverter
             // Check for N/A or no limit
             Matcher mAgeNotApplicable = P_AGE_NOT_APPLICABLE.matcher(ageStr);
             if (mAgeNotApplicable.matches()) {
-                study.setAttribute(ageAttr, STR_NOT_APPLICABLE);
-            } else {
-                Matcher mAgeNotStated = P_AGE_NOT_STATED.matcher(ageStr);
+                study.setAttribute(ageAttr, NOT_APPLICABLE);
+            } else {    // Not stated
+                Matcher mAgeNotStated = P_UNKNOWN.matcher(ageStr);
                 if (mAgeNotStated.matches()) {
-                    study.setAttribute(ageAttr, STR_NOT_STATED);
+                    study.setAttribute(ageAttr, NOT_STATED);
                 } else {
                     Matcher mAge = P_AGE.matcher(ageStr);
                     boolean successful = false;
@@ -574,29 +745,29 @@ public class WhoConverter extends BioFileConverter
             study.setAttribute("studyStatus", studyTypeStr);
             Matcher mTypeInterventional = P_TYPE_INTERVENTIONAL.matcher(studyTypeStr);
             if (mTypeInterventional.matches()) {    // Interventional
-                study.setAttribute("studyType", STR_TYPE_INTERVENTIONAL);
+                study.setAttribute("studyType", TYPE_INTERVENTIONAL);
             } else {    // Observational
                 Matcher mTypeObservational = P_TYPE_OBSERVATIONAL.matcher(studyTypeStr);
                 if (mTypeObservational.matches()) {
-                    study.setAttribute("studyType", STR_TYPE_OBSERVATIONAL);
+                    study.setAttribute("studyType", TYPE_OBSERVATIONAL);
                 } else {    // Other
                     Matcher mTypeOther = P_TYPE_OTHER.matcher(studyTypeStr);
                     if (mTypeOther.matches()) {
-                        study.setAttribute("studyType", STR_TYPE_OTHER);
+                        study.setAttribute("studyType", TYPE_OTHER);
                     } else {    // Basic science
                         Matcher mTypeBasicScience = P_TYPE_BASIC_SCIENCE.matcher(studyTypeStr);
                         if (mTypeBasicScience.matches()) {
-                            study.setAttribute("studyType", STR_TYPE_BASIC_SCIENCE);
+                            study.setAttribute("studyType", TYPE_BASIC_SCIENCE);
                         } else {    // N/A
-                            Matcher mTypeNA = P_TYPE_NOT_APPLICABLE.matcher(studyTypeStr);
+                            Matcher mTypeNA = P_NOT_APPLICABLE.matcher(studyTypeStr);
                             if (mTypeNA.matches()) {
-                                study.setAttribute("studyType", STR_NOT_APPLICABLE);
+                                study.setAttribute("studyType", NOT_APPLICABLE);
                             } else {    // Expanded access
                                 Matcher mTypeExpandedAcess = P_TYPE_EXPANDED_ACCESS.matcher(studyTypeStr);
                                 if (mTypeExpandedAcess.matches()) {
-                                    study.setAttribute("studyType", STR_TYPE_EXPANDED_ACCESS);
+                                    study.setAttribute("studyType", TYPE_EXPANDED_ACCESS);
                                 } else {    // Unknown
-                                    study.setAttribute("studyType", STR_UNKNOWN);
+                                    study.setAttribute("studyType", UNKNOWN);
                                 }
                             }
                         }
@@ -671,13 +842,13 @@ public class WhoConverter extends BioFileConverter
                         this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: " + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
                     }
                 } else {
-                    Matcher mPhaseNA = P_TYPE_NOT_APPLICABLE.matcher(phaseStr);
+                    Matcher mPhaseNA = P_NOT_APPLICABLE.matcher(phaseStr);
                     if (mPhaseNA.matches()) {   // N/A
-                        phaseFeature.setAttribute("featureValue", STR_NOT_APPLICABLE);
+                        phaseFeature.setAttribute("featureValue", NOT_APPLICABLE);
                     } else {    // Using raw value
                         phaseFeature.setAttribute("featureValue", phaseStr);
                     }
-                } 
+                }
             }
 
             phaseFeature.setReference("study", study);
@@ -693,10 +864,10 @@ public class WhoConverter extends BioFileConverter
                 String model = mFeatureInterventional.group(5);
                 String purpose = mFeatureInterventional.group(7);
                 String masking = mFeatureInterventional.group(9);
-                this.createAndStoreFeature(study, STR_FEATURE_ALLOCATION, allocation);
-                this.createAndStoreFeature(study, STR_FEATURE_INTERVENTION_MODEL, model);
-                this.createAndStoreFeature(study, STR_FEATURE_PRIMARY_PURPOSE, purpose);
-                this.createAndStoreFeature(study, STR_FEATURE_MASKING, masking);
+                this.createAndStoreFeature(study, FEATURE_ALLOCATION, allocation);
+                this.createAndStoreFeature(study, FEATURE_INTERVENTION_MODEL, model);
+                this.createAndStoreFeature(study, FEATURE_PRIMARY_PURPOSE, purpose);
+                this.createAndStoreFeature(study, FEATURE_MASKING, masking);
             } else {    // Using raw value
                 this.createAndStoreFeature(study, "", featuresStr);
             }
@@ -720,6 +891,206 @@ public class WhoConverter extends BioFileConverter
             success = true;
         }
         return success;
+    }
+
+    /**
+     * TODO
+     */
+    public void createAndStoreStudyPeople(Item study, String studyPeopleStr, String contribType) throws Exception {
+        if (!WhoConverter.isEmptyOrBlankOrNull(studyPeopleStr)) {
+            boolean store = true;
+            Item studyPeople = createItem("StudyPeople");
+            studyPeople.setAttribute("contribType", contribType);
+
+            Matcher mStudyPeopleNA = P_NOT_APPLICABLE.matcher(studyPeopleStr);
+            if (mStudyPeopleNA.matches()) {    // N/A
+                studyPeople.setAttribute("personFullName", NOT_APPLICABLE);
+                studyPeople.setAttribute("organisationName", NOT_APPLICABLE);
+            } else {    // No sponsor
+                Matcher mStudyPeopleNone = P_NONE.matcher(studyPeopleStr);
+                if (mStudyPeopleNone.matches()) {
+                    if (contribType.equals(CONTRIBUTOR_TYPE_SPONSOR)) {
+                        studyPeople.setAttribute("personFullName", SPONSOR_NONE);
+                        studyPeople.setAttribute("organisationName", SPONSOR_NONE);
+                    } else {
+                        // Not storing "None" scientific support organisations
+                        store = false;
+                    }
+                } else {    // Using raw value
+                    if (contribType.equals(CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT)) {
+                        studyPeople.setAttribute("organisationName", studyPeopleStr);
+                    } else {
+                        // TODO: setting both for now, need logic to distinguish people from orgs? -> check MDR
+                        studyPeople.setAttribute("organisationName", studyPeopleStr);
+                        studyPeople.setAttribute("personFullName", studyPeopleStr);
+                    }
+                }
+            }
+
+            if (store) {
+                studyPeople.setReference("study", study);
+                store(studyPeople);
+                study.addToCollection("studyPeople", studyPeople);
+            }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public boolean createAndStoreCountry(Item study, String countryStr) throws Exception {
+        boolean success = false;
+        if (!WhoConverter.isEmptyOrBlankOrNull(countryStr)) {
+            Item country = createItem("StudyCountry");
+            // Don't categorise prepositions?
+            country.setAttribute("countryName", WordUtils.capitalizeFully(countryStr, ' ', '-'));
+
+            country.setReference("study", study);
+            store(country);
+            study.addToCollection("studyCountries", country);
+            success = false;
+        }
+        return success;
+    }
+
+    /**
+     * TODO
+     */
+    public boolean createAndStoreCondition(Item study, String conditionStr) throws Exception {
+        boolean success = false;
+        if (!WhoConverter.isEmptyOrBlankOrNull(conditionStr)) {
+            Item condition = createItem("StudyCondition");
+            condition.setAttribute("originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-'));
+
+            condition.setReference("study", study);
+            store(condition);
+            study.addToCollection("studyConditions", condition);
+            success = false;
+        }
+        return success;
+    }
+
+    /**
+     * TODO
+     */
+    public void parseGender(Item study, String genderStr) {
+        Matcher mGenderAll = P_GENDER_ALL.matcher(genderStr);
+        if (mGenderAll.matches()) {
+            study.setAttribute("studyGenderElig", GENDER_ALL);
+        } else {    // "structured" pattern
+
+            Matcher mGenderStructured = P_GENDER_STRUCTURED.matcher(genderStr);
+            if (mGenderStructured.matches()) {
+                this.setGenderFromMatches(study, mGenderStructured, genderStr, GENDER_WOMEN, GENDER_MEN, true);
+            } else {    // "Non-structured" pattern
+
+                Matcher mGenderMF = P_GENDER_MF.matcher(genderStr);
+                if (mGenderMF.matches()) {
+                    this.setGenderFromMatches(study, mGenderMF, genderStr, GENDER_MEN, GENDER_WOMEN, false);
+                } else {
+
+                    Matcher mGenderFM = P_GENDER_FM.matcher(genderStr);
+                    if (mGenderFM.matches()) {
+                        this.setGenderFromMatches(study, mGenderFM, genderStr, GENDER_WOMEN, GENDER_MEN, false);
+                    } else {    // Not specified
+                    
+                        Matcher mGenderNotSpecified = P_UNKNOWN.matcher(genderStr);
+                        if (mGenderNotSpecified.matches()) {
+                            study.setAttribute("studyGenderElig", UNKNOWN);
+                        } else {    // Raw value (shouldn't happen)
+
+                            study.setAttribute("studyGenderElig", genderStr);
+                            this.writeLog("Couldn't parse study gender (used raw value): " + genderStr);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Set study gender field using regex group matches.
+     * 
+     * @param study the study item to set the gender field of
+     * @param m the regex matcher with the groups
+     * @param genderStr the gender input string
+     * @param gender1 the value to set if (only) the first group matches
+     * @param gender2 the value to set if (only) the second group matches
+     * @param structured a boolean indicating if the regex used was structured (P_GENDER_STRUCTURED) or not (P_GENDER_MF, P_GENDER_FM)
+     */
+    public void setGenderFromMatches(Item study, Matcher m, String genderStr, String gender1, String gender2, boolean structured) {
+        String g1 = m.group(2);
+        String g2 = m.group(4);
+        if (g1 != null && g2 != null && (!structured || (g1.equalsIgnoreCase("yes") && g2.equalsIgnoreCase("yes")))) {
+            study.setAttribute("studyGenderElig", GENDER_ALL);
+        } else if (g1 != null && (!structured || g1.equalsIgnoreCase("yes"))) {
+            study.setAttribute("studyGenderElig", gender1);
+        } else if (g2 != null && (!structured || g2.equalsIgnoreCase("yes"))) {
+            study.setAttribute("studyGenderElig", gender2);
+        } else {
+            this.writeLog("Match for study gender (structured regex) but no gender found, string: " + genderStr);
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void parseIEC(Item study, String icStr, String ecStr) {
+        StringBuilder iec = new StringBuilder();
+
+        /* Inclusion criteria */
+        if (!WhoConverter.isEmptyOrBlankOrNull(icStr)) {    // None
+            Matcher mIcNone = P_IEC_NONE.matcher(icStr);
+            if (mIcNone.matches()) {
+                String g1None = mIcNone.group(2);
+                if (!WhoConverter.isEmptyOrBlankOrNull(g1None)) {
+                    iec.append(IC_PREFIX + NONE);
+                } else {
+                    iec.append(IC_PREFIX + UNKNOWN);
+                }
+            } else {    // N/A
+                Matcher mIcNA = P_IEC_NA.matcher(icStr);
+                if (mIcNA.matches()) {
+                    iec.append(IC_PREFIX + NOT_APPLICABLE);
+                } else {    // Raw value
+                    iec.append(icStr);
+                }
+            }
+        }
+
+        /* Exclusion criteria */
+        if (!WhoConverter.isEmptyOrBlankOrNull(ecStr)) {    // None
+            Matcher mEcNone = P_IEC_NONE.matcher(ecStr);
+
+            String adaptedEcPrefix = "";
+            if (iec.length() > 0) {
+                adaptedEcPrefix = ". " + EC_PREFIX;
+            } else {
+                adaptedEcPrefix = EC_PREFIX;
+            }
+
+            if (mEcNone.matches()) {
+                String g2None = mEcNone.group(2);
+                if (!WhoConverter.isEmptyOrBlankOrNull(g2None)) {
+                    iec.append(adaptedEcPrefix + NONE);
+                } else {
+                    iec.append(adaptedEcPrefix + UNKNOWN);
+                }
+            } else {    // N/A
+                Matcher mEcNA = P_IEC_NA.matcher(ecStr);
+                if (mEcNA.matches()) {
+                    iec.append(adaptedEcPrefix + NOT_APPLICABLE);
+                } else {    // Raw value
+                    iec.append(ecStr);
+                }
+            }
+        }
+
+        // Setting IEC string constructed from IC + EC
+        String iecStr = iec.toString();
+        if (!WhoConverter.isEmptyOrBlankOrNull(iecStr)) {
+            study.setAttribute("iec", iecStr);
+        }
     }
 
     /**
@@ -855,7 +1226,9 @@ public class WhoConverter extends BioFileConverter
      * @return the unescaped string
      */
     public static String unescapeHtml(String s) {
-        return StringEscapeUtils.unescapeHtml4(s);
+        // TODO: replace with jsoup unescaping
+        // return StringEscapeUtils.unescapeHtml4(s);
+        return Jsoup.parse(s).text();
     }
 
     /**
