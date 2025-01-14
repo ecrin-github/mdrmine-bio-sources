@@ -11,48 +11,32 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
-import java.time.DateTimeException;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.Set;
-import java.util.HashSet;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 import org.intermine.xml.full.Attribute;
 
-import org.apache.commons.text.StringEscapeUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.text.WordUtils;
-
-import org.jsoup.Jsoup;
 
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
-import com.opencsv.ICSVWriter;
 import com.opencsv.exceptions.CsvMalformedLineException;
 
 
@@ -61,7 +45,7 @@ import com.opencsv.exceptions.CsvMalformedLineException;
  * Class to parse values from a WHO data file and store them as MDRMine items
  * @author ECRIN
  */
-public class WhoConverter extends BioFileConverter
+public class WhoConverter extends BaseConverter
 {
     /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
     // TODO: "-"/"--" are none or unknown?
@@ -107,45 +91,9 @@ public class WhoConverter extends BioFileConverter
     private static final Pattern P_FIX_EUCTR = Pattern.compile("(?<!:)\\/\\/", Pattern.CASE_INSENSITIVE);
     private static final DateTimeFormatter P_DATE_D_M_Y_SLASHES = DateTimeFormatter.ofPattern("d/M/uuuu");
     private static final DateTimeFormatter P_DATE_D_MWORD_Y_SPACES = DateTimeFormatter.ofPattern("d MMMM uuuu");
-    /* Studies */
-    private static final String NOT_APPLICABLE = "N/A";
-    private static final String UNKNOWN = "Unknown";
-    private static final String NONE = "None";
-    private static final String NOT_STATED = "Not stated";
-    private static final String TYPE_INTERVENTIONAL = "Interventional";
-    private static final String TYPE_OBSERVATIONAL = "Observational";
-    private static final String TYPE_BASIC_SCIENCE = "Basic science";
-    private static final String TYPE_EXPANDED_ACCESS = "Expanded access";
-    private static final String TYPE_OTHER = "Other";
-    private static final String FEATURE_PHASE = "Phase";
-    private static final String FEATURE_ALLOCATION = "Allocation";
-    private static final String FEATURE_INTERVENTION_MODEL = "Intervention model";
-    private static final String FEATURE_PRIMARY_PURPOSE = "Primary purpose";
-    private static final String FEATURE_MASKING = "Masking";
-    private static final String FEATURE_TIME_PERSPECTIVE = "Time perspective";
-    private static final String FEATURE_RETROSPECTIVE = "Retrospective";
-    private static final String SPONSOR_NONE = "No sponsor";
-    private static final String GENDER_ALL = "All";
-    private static final String GENDER_WOMEN = "Female";
-    private static final String GENDER_MEN = "Male";
+
     private static final String IC_PREFIX = "Inclusion criteria: ";
     private static final String EC_PREFIX = "Exclusion criteria: ";
-    /* Objects */
-    private static final String O_TYPE_TRIAL_REGISTRY_ENTRY = "Trial registry entry";
-    private static final String O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY = "Trial registry results summary";
-    private static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
-    private static final String O_ACCESS_TYPE_PUBLIC = "Public";
-    private static final String O_CLASS_TEXT = "Text";
-    private static final String O_RESOURCE_TYPE_PDF = "PDF";
-    private static final String O_RESOURCE_TYPE_WORD_DOC = "Word doc";
-    private static final String O_RESOURCE_TYPE_WEB_TEXT = "Web text";
-    private static final String O_TITLE_RESULTS_SUMMARY = "Results summary";
-    private static final String O_TITLE_REGISTRY_ENTRY = "Registry web page";
-    private static final String CONTRIBUTOR_TYPE_SPONSOR = "Sponsor";
-    private static final String CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT = "Scientific support organisation";
-    private static final String DATE_TYPE_AVAILABLE = "Available";
-    private static final String DATE_TYPE_CREATED = "Created";
-    private static final String DATE_TYPE_UPDATED = "Updated";
 
     static final Map<String, String> PHASE_NUMBER_MAP = Map.of(
         "1", "1", 
@@ -158,16 +106,11 @@ public class WhoConverter extends BioFileConverter
         "iv", "4"
     );
 
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss.SSS");
-
-    private static final String DATASET_TITLE = "ICTRPWeek22July2024";
+    private static final String DATASET_TITLE = "ICTRPFullExport-1003291-20-06-2024.csv";
     private static final String DATA_SOURCE_NAME = "WHO";
 
     private String headersFilePath = "";
-    private String logDir = "";
     private Map<String, Integer> fieldsToInd;
-    private Writer logWriter = null;
-    private String trialID = null;  // Used for logging
 
     /**
      * Constructor
@@ -189,45 +132,9 @@ public class WhoConverter extends BioFileConverter
     }
 
     /**
-     * Set logDir from the corresponding source property in project.xml.
-     * Method called by InterMine.
-     * 
-     * @param logDir the path to the directory where the log file will be created
-     */
-    public void setLogDir(String logDir) {
-        this.logDir = logDir;
-    }
-
-    /**
-     * Instantiate logger by creating log file and writer.
-     * This sets the logWriter instance attribute.
-     */
-    public void startLogging() throws Exception {
-        if (!this.logDir.equals("")) {
-            String current_timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-                
-            Path logDir = Paths.get(this.logDir);
-            if (!Files.exists(logDir)) Files.createDirectories(logDir);
-
-            Path logFile = Paths.get(logDir.toString(), current_timestamp + "_who.log");
-            this.logWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile.toString()), "utf-8"));
-        } else {
-            throw new Exception("Log folder not specified");
-        }
-    }
-
-    /**
-     * Close opened log writer.
-     */
-    public void stopLogging() throws IOException {
-        if (this.logWriter != null) {
-            this.logWriter.close();
-        }
-    }
-
-    /**
      * Process WHO data file by iterating on each line of the data file.
      * Method called by InterMine.
+     * {@inheritDoc}
      */
     public void process(Reader reader) throws Exception {
         /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
@@ -251,7 +158,7 @@ public class WhoConverter extends BioFileConverter
         // TODO: performance tests? compared to iterator
         while (nextLine != null) {
             if (!skipNext) {
-                this.storeValues(nextLine);
+                this.parseAndStoreValues(nextLine);
             } else {
                 skipNext = false;
             }
@@ -272,7 +179,7 @@ public class WhoConverter extends BioFileConverter
      * 
      * @param lineValues the list of raw values of a line in the data file
      */
-    public void storeValues(String[] lineValues) throws Exception {
+    public void parseAndStoreValues(String[] lineValues) throws Exception {
         Item study = createItem("Study");
 
         // Used for registry entry DO
@@ -284,14 +191,14 @@ public class WhoConverter extends BioFileConverter
         String url = this.getAndCleanValue(lineValues, "url");
         this.trialID = trialID;
 
-        if (!WhoConverter.isNullOrEmptyOrBlank(trialID)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID)) {
             Item studyIdentifier = createItem("StudyIdentifier");
             studyIdentifier.setAttribute("identifierValue", trialID);
             studyIdentifier.setReference("study", study);
 
             /* Primary identifier URL */
             
-            if (!WhoConverter.isNullOrEmptyOrBlank(url)) {
+            if (!ConverterUtils.isNullOrEmptyOrBlank(url)) {
                 studyIdentifier.setAttribute("identifierLink", url);
             }
             store(studyIdentifier);
@@ -306,7 +213,7 @@ public class WhoConverter extends BioFileConverter
 
         /* Public title */
         String publicTitle = this.getAndCleanValue(lineValues, "public_title");
-        if (!WhoConverter.isNullOrEmptyOrBlank(publicTitle)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(publicTitle)) {
             Item studyTitle = createItem("StudyTitle");
             study.setAttribute("displayTitle", publicTitle);
 
@@ -321,7 +228,7 @@ public class WhoConverter extends BioFileConverter
 
         /* Scientific title */
         String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
-        if (!WhoConverter.isNullOrEmptyOrBlank(scientificTitle)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(scientificTitle)) {
             Item studyTitle = createItem("StudyTitle");
             studyTitle.setAttribute("titleType", "Scientific Title");
             studyTitle.setAttribute("titleText", scientificTitle);
@@ -365,11 +272,11 @@ public class WhoConverter extends BioFileConverter
 
         // Results date posted also used later
         String resultsDatePosted = this.getAndCleanValue(lineValues, "results_date_posted");
-        String publicationYear = WhoConverter.getYearFromISODateString(resultsDatePosted);
-        if (!WhoConverter.isNullOrEmptyOrBlank(lastUpdate)) {
+        String publicationYear = ConverterUtils.getYearFromISODateString(resultsDatePosted);
+        if (!ConverterUtils.isNullOrEmptyOrBlank(lastUpdate)) {
             study.setAttribute("testField13", lastUpdate);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(registrationDate)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(registrationDate)) {
             study.setAttribute("testField14", registrationDate);
         }
         this.createAndStoreRegistryEntryDO(study, url, lastUpdate, registrationDate, publicationYear);
@@ -383,9 +290,9 @@ public class WhoConverter extends BioFileConverter
         // Copying current MDR logic: using results_actual_enrollment field if not null and a numeric value, using target_size field otherwise
         // Note: setAttribute() only accepts String, value is then automatically converted to the type in the xml model, 
         // but we do have to check that it is actually a (positive) number
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsActualEnrollment) && WhoConverter.isPosWholeNumber(resultsActualEnrollment)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsActualEnrollment) && ConverterUtils.isPosWholeNumber(resultsActualEnrollment)) {
             studyEnrolment = resultsActualEnrollment;
-        } else if (!WhoConverter.isNullOrEmptyOrBlank(targetSize) && WhoConverter.isPosWholeNumber(targetSize)) {
+        } else if (!ConverterUtils.isNullOrEmptyOrBlank(targetSize) && ConverterUtils.isPosWholeNumber(targetSize)) {
             studyEnrolment = targetSize;
         }
         if (studyEnrolment != null) {
@@ -399,7 +306,7 @@ public class WhoConverter extends BioFileConverter
         /* Study status */
         // TODO: normalise values
         String studyStatus = this.getAndCleanValue(lineValues, "Recruitment_status");
-        if (!WhoConverter.isNullOrEmptyOrBlank(studyStatus)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyStatus)) {
             study.setAttribute("studyStatus", studyStatus);
         }
 
@@ -410,12 +317,12 @@ public class WhoConverter extends BioFileConverter
         String sourceSupport = this.getAndCleanValue(lineValues, "Source_Support");
 
         /* Primary and secondary sponsors, scientific support organisation (source support)*/
-        this.createAndStoreStudyPeople(study, primarySponsor, CONTRIBUTOR_TYPE_SPONSOR);
+        this.createAndStoreStudyPeople(study, primarySponsor, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
         // TODO: there may be multiple sponsors in this field
-        this.createAndStoreStudyPeople(study, secondarySponsors, CONTRIBUTOR_TYPE_SPONSOR);
+        this.createAndStoreStudyPeople(study, secondarySponsors, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
         // Checking if the source support string is different than the primary and secondary sponsors + is not "please refer to primary and secondary sponsors"
         if (!sourceSupport.toLowerCase().contains("please") && !sourceSupport.equalsIgnoreCase(primarySponsor) && !sourceSupport.equalsIgnoreCase(secondarySponsors)) {
-            this.createAndStoreStudyPeople(study, sourceSupport, CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT);
+            this.createAndStoreStudyPeople(study, sourceSupport, ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT);
         }
 
         /* Study countries */
@@ -423,11 +330,11 @@ public class WhoConverter extends BioFileConverter
         // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
         // TODO: to function
         String countries = this.getAndCleanValue(lineValues, "Countries");
-        if (!WhoConverter.isNullOrEmptyOrBlank(countries)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(countries)) {
             if (countries.contains(";")) {
                 String[] countriesList = countries.split(";");
                 for (String country: countriesList) {
-                    if (!WhoConverter.isNullOrEmptyOrBlank(country)) {
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(country)) {
                         this.createAndStoreCountry(study, country);
                     }
                 }
@@ -440,11 +347,11 @@ public class WhoConverter extends BioFileConverter
         // TODO: match values with CT codes/ICD Codes
         // TODO: to function
         String conditions = this.getAndCleanValue(lineValues, "Conditions");
-        if (!WhoConverter.isNullOrEmptyOrBlank(conditions)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(conditions)) {
             if (conditions.contains(";")) {
                 String[] conditionsList = conditions.split(";");
                 for (String condition: conditionsList) {
-                    if (!WhoConverter.isNullOrEmptyOrBlank(condition)) {
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(condition)) {
                         this.createAndStoreCondition(study, condition);
                     }
                 }
@@ -455,7 +362,7 @@ public class WhoConverter extends BioFileConverter
 
         /* Interventions */
         String interventions = this.getAndCleanValue(lineValues, "Interventions");
-        if (!WhoConverter.isNullOrEmptyOrBlank(interventions)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(interventions)) {
             study.setAttribute("interventions", interventions);
         }
 
@@ -469,7 +376,7 @@ public class WhoConverter extends BioFileConverter
 
         /* Gender */
         String gender = this.getAndCleanValue(lineValues, "Gender");
-        if (!WhoConverter.isNullOrEmptyOrBlank(gender)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(gender)) {
             this.parseGender(study, gender);
         }
 
@@ -481,7 +388,7 @@ public class WhoConverter extends BioFileConverter
         /* Primary outcome */
         // TODO: handle main empty values
         String primaryOutcome = this.getAndCleanValue(lineValues, "Primary_Outcome");
-        if (!WhoConverter.isNullOrEmptyOrBlank(primaryOutcome)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(primaryOutcome)) {
             study.setAttribute("primaryOutcome", primaryOutcome);
         }
 
@@ -502,13 +409,13 @@ public class WhoConverter extends BioFileConverter
         String bridgingFlag = this.getAndCleanValue(lineValues, "Bridging_flag");
         String bridgedType = this.getAndCleanValue(lineValues, "Bridged_type");
         String childs = this.getAndCleanValue(lineValues, "Childs");
-        if (!WhoConverter.isNullOrEmptyOrBlank(bridgingFlag)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(bridgingFlag)) {
             study.setAttribute("testField1", bridgingFlag);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(bridgedType)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(bridgedType)) {
             study.setAttribute("testField2", bridgedType);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(childs)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(childs)) {
             study.setAttribute("testField3", childs);
         }
 
@@ -516,18 +423,18 @@ public class WhoConverter extends BioFileConverter
         // most of the time value is anticipated when status is pending and actual when status is recruiting
         // In MDR WHO model but unused
         String typeEnrolment = this.getAndCleanValue(lineValues, "type_enrolment");
-        if (!WhoConverter.isNullOrEmptyOrBlank(typeEnrolment)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(typeEnrolment)) {
             study.setAttribute("testField4", typeEnrolment);
         }
 
         // Note: retrospective studies are, at the same proportion as non-retrospective studies, interventional (= the majority) -> seems wrong?
         String retrospectiveFlag = this.getAndCleanValue(lineValues, "Retrospective_flag");
         // TODO: to function
-        if (!WhoConverter.isNullOrEmptyOrBlank(retrospectiveFlag)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(retrospectiveFlag)) {
             if (retrospectiveFlag.equalsIgnoreCase("1")) {
                 Item retrospectiveFeature = createItem("StudyFeature");
-                retrospectiveFeature.setAttribute("featureType", FEATURE_TIME_PERSPECTIVE);
-                retrospectiveFeature.setAttribute("featureValue", FEATURE_RETROSPECTIVE);
+                retrospectiveFeature.setAttribute("featureType", ConverterCVT.FEATURE_TIME_PERSPECTIVE);
+                retrospectiveFeature.setAttribute("featureValue", ConverterCVT.FEATURE_RETROSPECTIVE);
                 
                 retrospectiveFeature.setReference("study", study);
                 store(retrospectiveFeature);
@@ -555,13 +462,13 @@ public class WhoConverter extends BioFileConverter
         // Not in MDR, outcome measures text, unused or add somehow to both primary and secondary outcomes
         String resultsOutcomeMeasures = this.getAndCleanValue(lineValues, "results_outcome_measures");
 
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsBaselineChar)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsBaselineChar)) {
             study.setAttribute("testField5", resultsBaselineChar);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsParticipantFlow)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsParticipantFlow)) {
             study.setAttribute("testField6", resultsParticipantFlow);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsOutcomeMeasures)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsOutcomeMeasures)) {
             study.setAttribute("testField7", resultsOutcomeMeasures);
         }
 
@@ -578,7 +485,7 @@ public class WhoConverter extends BioFileConverter
         // In MDR WHO model but unused, 9% of yes, 91% of empty values
         String resultsYesNo = this.getAndCleanValue(lineValues, "results_yes_no");
 
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsYesNo)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsYesNo)) {
             study.setAttribute("testField8", resultsYesNo);
         }
 
@@ -592,16 +499,16 @@ public class WhoConverter extends BioFileConverter
         // Not in MDR, name of ethics committee (not exactly address)
         String ethicsContactAddress = this.getAndCleanValue(lineValues, "Ethics_Contact_Address");
         
-        if (!WhoConverter.isNullOrEmptyOrBlank(ethicsStatus)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(ethicsStatus)) {
             study.setAttribute("testField9", ethicsStatus);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(ethicsApprovalDate)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(ethicsApprovalDate)) {
             study.setAttribute("testField10", ethicsApprovalDate);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(ethicsContactName)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(ethicsContactName)) {
             study.setAttribute("testField11", ethicsContactName);
         }
-        if (!WhoConverter.isNullOrEmptyOrBlank(ethicsContactAddress)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(ethicsContactAddress)) {
             study.setAttribute("testField12", ethicsContactAddress);
         }
 
@@ -615,11 +522,11 @@ public class WhoConverter extends BioFileConverter
      * @param text the text to concatenate (or set, if the field's value is empty) to the study's brief description
      */
     public void addToBriefDescription(Item study, String text) {
-        if (!WhoConverter.isNullOrEmptyOrBlank(text)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(text)) {
             Attribute briefDescription = study.getAttribute("briefDescription");
             if (briefDescription != null) {
                 String currentDesc = briefDescription.getValue();
-                if (!WhoConverter.isNullOrEmptyOrBlank(currentDesc)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(currentDesc)) {
                     study.setAttribute("briefDescription", currentDesc + "\n" + text);
                 } else {
                     study.setAttribute("briefDescription", text);
@@ -635,10 +542,10 @@ public class WhoConverter extends BioFileConverter
      * @param secIDsStr the input secondary IDs string
      */
     public void parseSecondaryIDs(Item study, String secIDsStr) {
-        if (!WhoConverter.isNullOrEmptyOrBlank(secIDsStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(secIDsStr)) {
             String[] ids = secIDsStr.split(";");
             for (String id: ids) {
-                if (!WhoConverter.isNullOrEmptyOrBlank(id)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
                     Item studyIdentifier = createItem("StudyIdentifier");
                     studyIdentifier.setAttribute("identifierValue", id);
                     studyIdentifier.setReference("study", study);
@@ -672,17 +579,17 @@ public class WhoConverter extends BioFileConverter
         }
         
         String firstNamesString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Firstname"));
-        if (!WhoConverter.isNullOrEmptyOrBlank(firstNamesString)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(firstNamesString)) {
             firstNames = firstNamesString.split(";");
         }
 
         String lastNamesString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Lastname"));
-        if (!WhoConverter.isNullOrEmptyOrBlank(lastNamesString)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(lastNamesString)) {
             lastNames = lastNamesString.split(";");
         }
 
         String affiliationsString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Affiliation"));
-        if (!WhoConverter.isNullOrEmptyOrBlank(affiliationsString)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(affiliationsString)) {
             affiliations = affiliationsString.split(";");
         }
 
@@ -703,7 +610,7 @@ public class WhoConverter extends BioFileConverter
                 // TODO: possible that the string ends with both semi-colons?
                 
                 // First name
-                if (!WhoConverter.isNullOrEmptyOrBlank(firstNamesString)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(firstNamesString)) {
                     if (firstNamesString.endsWith(";") && i < firstNames.length) {
                         firstName = firstNames[i];
                     } else if (firstNames.length + i - maxLen >= 0) {
@@ -715,7 +622,7 @@ public class WhoConverter extends BioFileConverter
                 }
 
                 // Last name
-                if (!WhoConverter.isNullOrEmptyOrBlank(lastNamesString)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(lastNamesString)) {
                     if (lastNamesString.endsWith(";") && i < lastNames.length) {
                         lastName = lastNames[i];
                     } else if (lastNames.length + i - maxLen >= 0) {
@@ -727,7 +634,7 @@ public class WhoConverter extends BioFileConverter
                 }
 
                 // Affiliation (raw value from data)
-                if (!WhoConverter.isNullOrEmptyOrBlank(affiliationsString)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(affiliationsString)) {
                     if (affiliationsString.endsWith(";") && i < affiliations.length) {
                         affiliation = affiliations[i];
                     } else if (affiliations.length + i - maxLen >= 0) {
@@ -765,17 +672,17 @@ public class WhoConverter extends BioFileConverter
     public void setPeopleValues(Item studyPeople, String firstName, String lastName, String affiliation, String contactType) {
         // TODO: attempt at separating first name/last name if one of firstName/lastName is empty?
         // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
-        if (!WhoConverter.isNullOrEmptyOrBlank(firstName) && !WhoConverter.isNullOrEmptyOrBlank(lastName)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(firstName) && !ConverterUtils.isNullOrEmptyOrBlank(lastName)) {
             studyPeople.setAttribute("personGivenName", firstName);
             studyPeople.setAttribute("personFamilyName", lastName);
             studyPeople.setAttribute("personFullName", (firstName + " " + lastName));
-        } else if (!WhoConverter.isNullOrEmptyOrBlank(firstName)) {
+        } else if (!ConverterUtils.isNullOrEmptyOrBlank(firstName)) {
             studyPeople.setAttribute("personFullName", firstName);
-        } else if (!WhoConverter.isNullOrEmptyOrBlank(lastName)) {
+        } else if (!ConverterUtils.isNullOrEmptyOrBlank(lastName)) {
             studyPeople.setAttribute("personFullName", lastName);
         }
         
-        if (!WhoConverter.isNullOrEmptyOrBlank(affiliation)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(affiliation)) {
             studyPeople.setAttribute("personAffiliation", affiliation);
         }
 
@@ -798,15 +705,15 @@ public class WhoConverter extends BioFileConverter
      * @param study the study item containing the attributes to set
      */
     public void parseAgeField(String ageStr, String ageAttr, String unitAttr, Item study) {
-        if (!WhoConverter.isNullOrEmptyOrBlank(ageStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(ageStr)) {
             // Check for N/A or no limit
             Matcher mAgeNotApplicable = P_AGE_NOT_APPLICABLE.matcher(ageStr);
             if (mAgeNotApplicable.matches()) {
-                study.setAttribute(ageAttr, NOT_APPLICABLE);
+                study.setAttribute(ageAttr, ConverterCVT.NOT_APPLICABLE);
             } else {    // Not stated
                 Matcher mAgeNotStated = P_UNKNOWN.matcher(ageStr);
                 if (mAgeNotStated.matches()) {
-                    study.setAttribute(ageAttr, NOT_STATED);
+                    study.setAttribute(ageAttr, ConverterCVT.NOT_STATED);
                 } else {
                     Matcher mAge = P_AGE.matcher(ageStr);
                     boolean successful = false;
@@ -844,7 +751,7 @@ public class WhoConverter extends BioFileConverter
 
                                 // TODO: how to check unit against data?
                                 if (!(g3 == null || g3.equalsIgnoreCase("age"))) {
-                                    study.setAttribute(unitAttr, WhoConverter.normaliseUnit(g3));
+                                    study.setAttribute(unitAttr, ConverterUtils.normaliseUnit(g3));
                                 } else {    // If no unit (or unit is "age"), we assume it's years
                                     study.setAttribute(unitAttr, "Years");
                                 }
@@ -875,33 +782,33 @@ public class WhoConverter extends BioFileConverter
      * @param studyTypeStr the input study type string
      */
     public void parseStudyType(Item study, String studyTypeStr) {
-        if (!WhoConverter.isNullOrEmptyOrBlank(studyTypeStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyTypeStr)) {
             study.setAttribute("studyStatus", studyTypeStr);
             Matcher mTypeInterventional = P_TYPE_INTERVENTIONAL.matcher(studyTypeStr);
             if (mTypeInterventional.matches()) {    // Interventional
-                study.setAttribute("studyType", TYPE_INTERVENTIONAL);
+                study.setAttribute("studyType", ConverterCVT.TYPE_INTERVENTIONAL);
             } else {    // Observational
                 Matcher mTypeObservational = P_TYPE_OBSERVATIONAL.matcher(studyTypeStr);
                 if (mTypeObservational.matches()) {
-                    study.setAttribute("studyType", TYPE_OBSERVATIONAL);
+                    study.setAttribute("studyType", ConverterCVT.TYPE_OBSERVATIONAL);
                 } else {    // Other
                     Matcher mTypeOther = P_TYPE_OTHER.matcher(studyTypeStr);
                     if (mTypeOther.matches()) {
-                        study.setAttribute("studyType", TYPE_OTHER);
+                        study.setAttribute("studyType", ConverterCVT.TYPE_OTHER);
                     } else {    // Basic science
                         Matcher mTypeBasicScience = P_TYPE_BASIC_SCIENCE.matcher(studyTypeStr);
                         if (mTypeBasicScience.matches()) {
-                            study.setAttribute("studyType", TYPE_BASIC_SCIENCE);
+                            study.setAttribute("studyType", ConverterCVT.TYPE_BASIC_SCIENCE);
                         } else {    // N/A
                             Matcher mTypeNA = P_NOT_APPLICABLE.matcher(studyTypeStr);
                             if (mTypeNA.matches()) {
-                                study.setAttribute("studyType", NOT_APPLICABLE);
+                                study.setAttribute("studyType", ConverterCVT.NOT_APPLICABLE);
                             } else {    // Expanded access
                                 Matcher mTypeExpandedAcess = P_TYPE_EXPANDED_ACCESS.matcher(studyTypeStr);
                                 if (mTypeExpandedAcess.matches()) {
-                                    study.setAttribute("studyType", TYPE_EXPANDED_ACCESS);
+                                    study.setAttribute("studyType", ConverterCVT.TYPE_EXPANDED_ACCESS);
                                 } else {    // Unknown
-                                    study.setAttribute("studyType", UNKNOWN);
+                                    study.setAttribute("studyType", ConverterCVT.UNKNOWN);
                                 }
                             }
                         }
@@ -919,9 +826,9 @@ public class WhoConverter extends BioFileConverter
      * @param phaseStr the input phase string
      */
     public void parseStudyFeatures(Item study, String featuresStr, String phaseStr) throws Exception {
-        if (!WhoConverter.isNullOrEmptyOrBlank(phaseStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(phaseStr)) {
             Item phaseFeature = createItem("StudyFeature");
-            phaseFeature.setAttribute("featureType", FEATURE_PHASE);
+            phaseFeature.setAttribute("featureType", ConverterCVT.FEATURE_PHASE);
 
             Matcher mPhaseNumber = P_PHASE_NUMBER.matcher(phaseStr);
             if (mPhaseNumber.matches()) {   // "Numbers" match
@@ -978,7 +885,7 @@ public class WhoConverter extends BioFileConverter
                 } else {
                     Matcher mPhaseNA = P_NOT_APPLICABLE.matcher(phaseStr);
                     if (mPhaseNA.matches()) {   // N/A
-                        phaseFeature.setAttribute("featureValue", NOT_APPLICABLE);
+                        phaseFeature.setAttribute("featureValue", ConverterCVT.NOT_APPLICABLE);
                     } else {    // Using raw value
                         phaseFeature.setAttribute("featureValue", phaseStr);
                     }
@@ -990,7 +897,7 @@ public class WhoConverter extends BioFileConverter
             study.addToCollection("studyFeatures", phaseFeature);
         }
 
-        if (!WhoConverter.isNullOrEmptyOrBlank(featuresStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(featuresStr)) {
             // TODO: improve parsing of study features, currently it works only for most interventional studies
             Matcher mFeatureInterventional = P_FEATURE_INTERVENTIONAL.matcher(featuresStr);
             if (mFeatureInterventional.matches()) { // Interventional features
@@ -998,10 +905,10 @@ public class WhoConverter extends BioFileConverter
                 String model = mFeatureInterventional.group(5);
                 String purpose = mFeatureInterventional.group(7);
                 String masking = mFeatureInterventional.group(9);
-                this.createAndStoreFeature(study, FEATURE_ALLOCATION, allocation);
-                this.createAndStoreFeature(study, FEATURE_INTERVENTION_MODEL, model);
-                this.createAndStoreFeature(study, FEATURE_PRIMARY_PURPOSE, purpose);
-                this.createAndStoreFeature(study, FEATURE_MASKING, masking);
+                this.createAndStoreFeature(study, ConverterCVT.FEATURE_ALLOCATION, allocation);
+                this.createAndStoreFeature(study, ConverterCVT.FEATURE_INTERVENTION_MODEL, model);
+                this.createAndStoreFeature(study, ConverterCVT.FEATURE_PRIMARY_PURPOSE, purpose);
+                this.createAndStoreFeature(study, ConverterCVT.FEATURE_MASKING, masking);
             } else {    // Using raw value
                 this.createAndStoreFeature(study, "", featuresStr);
             }
@@ -1009,7 +916,7 @@ public class WhoConverter extends BioFileConverter
     }
 
     public void parseDateEnrolment(Item study, String dateEnrolment) {
-        if (!WhoConverter.isNullOrEmptyOrBlank(dateEnrolment)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(dateEnrolment)) {
             study.setAttribute("testField15", dateEnrolment);
             LocalDate parsedDate = null;
             String year = null;
@@ -1017,17 +924,17 @@ public class WhoConverter extends BioFileConverter
 
             // ISO format
             // TODO: refactor
-            parsedDate = WhoConverter.getDateFromString(dateEnrolment, null);
+            parsedDate = ConverterUtils.getDateFromString(dateEnrolment, null);
             if (parsedDate != null) {
                 year = String.valueOf(parsedDate.getYear());
                 month = String.valueOf(parsedDate.getMonthValue());
             } else {    // d(d)/m(m)/yyyy
-                parsedDate = WhoConverter.getDateFromString(dateEnrolment, P_DATE_D_M_Y_SLASHES);
+                parsedDate = ConverterUtils.getDateFromString(dateEnrolment, P_DATE_D_M_Y_SLASHES);
                 if (parsedDate != null) {
                     year = String.valueOf(parsedDate.getYear());
                     month = String.valueOf(parsedDate.getMonthValue());
                 } else {    // dd month(word) yyyy
-                    parsedDate = WhoConverter.getDateFromString(dateEnrolment, P_DATE_D_MWORD_Y_SPACES);
+                    parsedDate = ConverterUtils.getDateFromString(dateEnrolment, P_DATE_D_MWORD_Y_SPACES);
                     if (parsedDate != null) {
                         year = String.valueOf(parsedDate.getYear());
                         month = String.valueOf(parsedDate.getMonthValue());
@@ -1037,10 +944,10 @@ public class WhoConverter extends BioFileConverter
                 }
             }
 
-            if (year != null && WhoConverter.isPosWholeNumber(year)) {
+            if (year != null && ConverterUtils.isPosWholeNumber(year)) {
                 study.setAttribute("studyStartYear", year);
             }
-            if (month != null && WhoConverter.isPosWholeNumber(month)) {
+            if (month != null && ConverterUtils.isPosWholeNumber(month)) {
                 study.setAttribute("studyStartMonth", month);
             }
         }
@@ -1048,13 +955,13 @@ public class WhoConverter extends BioFileConverter
 
     public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String resultsAdverseEvents, String resultsDatePosted) {
         StringBuilder constructedSecondaryOutcomes = new StringBuilder();
-        if (!WhoConverter.isNullOrEmptyOrBlank(secondaryOutcomes)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(secondaryOutcomes)) {
             constructedSecondaryOutcomes.append(secondaryOutcomes);
         }
         // TODO: check that resultsDatePosted date is valid
         // Filtering out placeholder links (drks.de)
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsAdverseEvents) 
-            && !(resultsAdverseEvents.contains("drks.de") && WhoConverter.isNullOrEmptyOrBlank(resultsDatePosted))) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsAdverseEvents) 
+            && !(resultsAdverseEvents.contains("drks.de") && ConverterUtils.isNullOrEmptyOrBlank(resultsDatePosted))) {
             if (secondaryOutcomes.length() > 0) {
                 if (!secondaryOutcomes.endsWith(".")) {
                     constructedSecondaryOutcomes.append(".");
@@ -1065,7 +972,7 @@ public class WhoConverter extends BioFileConverter
             constructedSecondaryOutcomes.append(resultsAdverseEvents);
         }
         
-        if (!WhoConverter.isNullOrEmptyOrBlank(constructedSecondaryOutcomes.toString())) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(constructedSecondaryOutcomes.toString())) {
             study.setAttribute("secondaryOutcomes", constructedSecondaryOutcomes.toString());
         }
     }
@@ -1076,9 +983,9 @@ public class WhoConverter extends BioFileConverter
      */
     public boolean createAndStoreFeature(Item study, String featureType, String featureValue) throws Exception {
         boolean success = false;
-        if (!WhoConverter.isNullOrEmptyOrBlank(featureValue)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(featureValue)) {
             Item studyFeature = createItem("StudyFeature");
-            if (!WhoConverter.isNullOrEmptyOrBlank(featureType)) {
+            if (!ConverterUtils.isNullOrEmptyOrBlank(featureType)) {
                 studyFeature.setAttribute("featureType", featureType);
             }
             studyFeature.setAttribute("featureValue", featureValue);
@@ -1095,27 +1002,27 @@ public class WhoConverter extends BioFileConverter
      * todo should return created studyPeople
      */
     public void createAndStoreStudyPeople(Item study, String studyPeopleStr, String contribType) throws Exception {
-        if (!WhoConverter.isNullOrEmptyOrBlank(studyPeopleStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyPeopleStr)) {
             boolean store = true;
             Item studyPeople = createItem("StudyPeople");
             studyPeople.setAttribute("contribType", contribType);
 
             Matcher mStudyPeopleNA = P_NOT_APPLICABLE.matcher(studyPeopleStr);
             if (mStudyPeopleNA.matches()) {    // N/A
-                studyPeople.setAttribute("personFullName", NOT_APPLICABLE);
-                studyPeople.setAttribute("organisationName", NOT_APPLICABLE);
+                studyPeople.setAttribute("personFullName", ConverterCVT.NOT_APPLICABLE);
+                studyPeople.setAttribute("organisationName", ConverterCVT.NOT_APPLICABLE);
             } else {    // No sponsor
                 Matcher mStudyPeopleNone = P_NONE.matcher(studyPeopleStr);
                 if (mStudyPeopleNone.matches()) {
-                    if (contribType.equals(CONTRIBUTOR_TYPE_SPONSOR)) {
-                        studyPeople.setAttribute("personFullName", SPONSOR_NONE);
-                        studyPeople.setAttribute("organisationName", SPONSOR_NONE);
+                    if (contribType.equals(ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR)) {
+                        studyPeople.setAttribute("personFullName", ConverterCVT.SPONSOR_NONE);
+                        studyPeople.setAttribute("organisationName", ConverterCVT.SPONSOR_NONE);
                     } else {
                         // Not storing "None" scientific support organisations
                         store = false;
                     }
                 } else {    // Using raw value
-                    if (contribType.equals(CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT)) {
+                    if (contribType.equals(ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT)) {
                         studyPeople.setAttribute("organisationName", studyPeopleStr);
                     } else {
                         // TODO: setting both for now, need logic to distinguish people from orgs? -> check MDR
@@ -1139,7 +1046,7 @@ public class WhoConverter extends BioFileConverter
      */
     public boolean createAndStoreCountry(Item study, String countryStr) throws Exception {
         boolean success = false;
-        if (!WhoConverter.isNullOrEmptyOrBlank(countryStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(countryStr)) {
             Item country = createItem("StudyCountry");
             // Don't categorise prepositions?
             country.setAttribute("countryName", WordUtils.capitalizeFully(countryStr, ' ', '-'));
@@ -1158,7 +1065,7 @@ public class WhoConverter extends BioFileConverter
      */
     public boolean createAndStoreCondition(Item study, String conditionStr) throws Exception {
         boolean success = false;
-        if (!WhoConverter.isNullOrEmptyOrBlank(conditionStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(conditionStr)) {
             Item condition = createItem("StudyCondition");
             condition.setAttribute("originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-'));
 
@@ -1180,45 +1087,45 @@ public class WhoConverter extends BioFileConverter
         // Note: current MDR avoids duplicate with registry entry url, but maybe it makes sense to have duplicate
         boolean success = false;
         // Filtering out drks.de URL with no date posted (they are placeholders)
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsUrlLink) && !(resultsUrlLink.contains("drks.de") && WhoConverter.isNullOrEmptyOrBlank(resultsDatePosted))) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink) && !(resultsUrlLink.contains("drks.de") && ConverterUtils.isNullOrEmptyOrBlank(resultsDatePosted))) {
             Item resultsSummaryDO = createItem("DataObject");
             // Title
-            resultsSummaryDO.setAttribute("title", O_TITLE_RESULTS_SUMMARY);
+            resultsSummaryDO.setAttribute("title", ConverterCVT.O_TITLE_RESULTS_SUMMARY);
 
             // Display title
-            String studyDisplayTitle = getDisplayTitleFromStudy(study);
-            if (!WhoConverter.isNullOrEmptyOrBlank(studyDisplayTitle)) {
-                resultsSummaryDO.setAttribute("displayTitle", studyDisplayTitle + " - " + O_TITLE_RESULTS_SUMMARY);
+            String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                resultsSummaryDO.setAttribute("displayTitle", studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY);
             } else {
-                resultsSummaryDO.setAttribute("displayTitle", O_TITLE_RESULTS_SUMMARY);
+                resultsSummaryDO.setAttribute("displayTitle", ConverterCVT.O_TITLE_RESULTS_SUMMARY);
             }
             // Instance with results URL
             // TODO: system? (=source)
             Item resultsInst = createItem("ObjectInstance");
             resultsInst.setAttribute("url", resultsUrlLink);
-            resultsInst.setAttribute("resourceType", O_RESOURCE_TYPE_WEB_TEXT);
+            resultsInst.setAttribute("resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT);
             resultsInst.setReference("dataObject", resultsSummaryDO);
             store(resultsInst);
             resultsSummaryDO.addToCollection("objectInstances", resultsInst);
             
             // Results completed date
-            if (!WhoConverter.isNullOrEmptyOrBlank(resultsDateCompleted)) {
-                this.createAndStoreDate(resultsSummaryDO, resultsDateCompleted, DATE_TYPE_CREATED, null);
+            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsDateCompleted)) {
+                this.createAndStoreDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED, null);
             }
 
             // Results posted date
-            if (!WhoConverter.isNullOrEmptyOrBlank(resultsDatePosted)) {
-                Item dateCreated = this.createAndStoreDate(resultsSummaryDO, resultsDatePosted, DATE_TYPE_AVAILABLE, null);
+            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsDatePosted)) {
+                Item dateCreated = this.createAndStoreDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE, null);
                 // Publication year
-                String publicationYear = WhoConverter.getYearFromISODateString(resultsDatePosted);
-                if (!WhoConverter.isNullOrEmptyOrBlank(publicationYear)) {
+                String publicationYear = ConverterUtils.getYearFromISODateString(resultsDatePosted);
+                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
                     resultsSummaryDO.setAttribute("publicationYear", publicationYear);
                 }
             }
 
             // Object class and type
-            resultsSummaryDO.setAttribute("objectClass", O_CLASS_TEXT);
-            resultsSummaryDO.setAttribute("objectType", O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY);
+            resultsSummaryDO.setAttribute("objectClass", ConverterCVT.O_CLASS_TEXT);
+            resultsSummaryDO.setAttribute("objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY);
             resultsSummaryDO.setReference("linkedStudy", study);
             store(resultsSummaryDO);
             study.addToCollection("studyObjects", resultsSummaryDO);
@@ -1232,22 +1139,22 @@ public class WhoConverter extends BioFileConverter
      */
     public Item createAndStoreDate(Item dataObject, String dateStr, String dateType, DateTimeFormatter dateFormatter) throws Exception {
         Item date = null;
-        if (!WhoConverter.isNullOrEmptyOrBlank(dateStr)) {
-            LocalDate parsedDate = WhoConverter.getDateFromString(dateStr, dateFormatter);
+        if (!ConverterUtils.isNullOrEmptyOrBlank(dateStr)) {
+            LocalDate parsedDate = ConverterUtils.getDateFromString(dateStr, dateFormatter);
             if (parsedDate != null) {
                 Item objectDate = createItem("ObjectDate");
                 objectDate.setAttribute("dateType", dateType);
 
                 String year = String.valueOf(parsedDate.getYear());
-                if (WhoConverter.isPosWholeNumber(year)) {
+                if (ConverterUtils.isPosWholeNumber(year)) {
                     objectDate.setAttribute("startYear", year);
                 }
                 String month = String.valueOf(parsedDate.getMonthValue());
-                if (WhoConverter.isPosWholeNumber(month)) {
+                if (ConverterUtils.isPosWholeNumber(month)) {
                     objectDate.setAttribute("startMonth", month);
                 }
                 String day = String.valueOf(parsedDate.getDayOfMonth());
-                if (WhoConverter.isPosWholeNumber(day)) {
+                if (ConverterUtils.isPosWholeNumber(day)) {
                     objectDate.setAttribute("startDay", day);
                 }
                 
@@ -1265,30 +1172,30 @@ public class WhoConverter extends BioFileConverter
      */
     public Item createAndStoreProtocolDO(Item study, String resultsUrlProtocol, String publicationYear) throws Exception {
         Item protocolDO = null;
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsUrlProtocol)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsUrlProtocol)) {
             Matcher mUrl = P_URL.matcher(resultsUrlProtocol);
             if (mUrl.find()) {
                 /* Protocol DO */
                 protocolDO = createItem("DataObject");
-                protocolDO.setAttribute("objectClass", O_CLASS_TEXT);
+                protocolDO.setAttribute("objectClass", ConverterCVT.O_CLASS_TEXT);
                 // In practice, most of the time it's a link to the study page (e.g. CTIS) where there might be the study protocol
                 // TODO: follow MDR logic then? ("CSR summary" type by default and protocol if prot in url name)
-                protocolDO.setAttribute("objectType", O_TYPE_STUDY_PROTOCOL);
-                protocolDO.setAttribute("title", O_TYPE_STUDY_PROTOCOL);
+                protocolDO.setAttribute("objectType", ConverterCVT.O_TYPE_STUDY_PROTOCOL);
+                protocolDO.setAttribute("title", ConverterCVT.O_TYPE_STUDY_PROTOCOL);
                 // TODO: check this
-                if (!WhoConverter.isNullOrEmptyOrBlank(publicationYear)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
                     protocolDO.setAttribute("publicationYear", publicationYear);
                 }
                 // Access type, in practice it might not be the correct access type
                 // Note: only specifying public, not using the various public types MDR has, maybe to change
-                protocolDO.setAttribute("accessType", O_ACCESS_TYPE_PUBLIC);
+                protocolDO.setAttribute("accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC);
 
                 // Display title
-                String studyDisplayTitle = getDisplayTitleFromStudy(study);
-                if (!WhoConverter.isNullOrEmptyOrBlank(studyDisplayTitle)) {
-                    protocolDO.setAttribute("displayTitle", studyDisplayTitle + " - " + O_TYPE_STUDY_PROTOCOL);
+                String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+                if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                    protocolDO.setAttribute("displayTitle", studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL);
                 } else {
-                    protocolDO.setAttribute("displayTitle", O_TYPE_STUDY_PROTOCOL);
+                    protocolDO.setAttribute("displayTitle", ConverterCVT.O_TYPE_STUDY_PROTOCOL);
                 }
 
                 /* Protocol DO instance with URL */
@@ -1300,11 +1207,11 @@ public class WhoConverter extends BioFileConverter
 
                 // File extension (if any) to help determine resource type
                 if (mUrl.group(1).equalsIgnoreCase("pdf")) {
-                    protocolDOInst.setAttribute("resourceType", O_RESOURCE_TYPE_PDF);
+                    protocolDOInst.setAttribute("resourceType", ConverterCVT.O_RESOURCE_TYPE_PDF);
                 } else if (mUrl.group(1).equalsIgnoreCase("doc")) {
-                    protocolDOInst.setAttribute("resourceType", O_RESOURCE_TYPE_WORD_DOC);
+                    protocolDOInst.setAttribute("resourceType", ConverterCVT.O_RESOURCE_TYPE_WORD_DOC);
                 } else {
-                    protocolDOInst.setAttribute("resourceType", O_RESOURCE_TYPE_WEB_TEXT);
+                    protocolDOInst.setAttribute("resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT);
                 }
 
                 protocolDO.addToCollection("objectInstances", protocolDOInst);
@@ -1324,33 +1231,33 @@ public class WhoConverter extends BioFileConverter
     public void createAndStoreRegistryEntryDO(Item study, String entryUrl, String lastUpdate, String registrationDate, String publicationYear) throws Exception {
         // DO
         Item doRegistryEntry = createItem("DataObject");
-        doRegistryEntry.setAttribute("objectType", O_TYPE_TRIAL_REGISTRY_ENTRY);
-        doRegistryEntry.setAttribute("objectClass", O_CLASS_TEXT);
-        doRegistryEntry.setAttribute("title", O_TYPE_TRIAL_REGISTRY_ENTRY);
-        if (!WhoConverter.isNullOrEmptyOrBlank(publicationYear)) {
+        doRegistryEntry.setAttribute("objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+        doRegistryEntry.setAttribute("objectClass", ConverterCVT.O_CLASS_TEXT);
+        doRegistryEntry.setAttribute("title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+        if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
             doRegistryEntry.setAttribute("publicationYear", publicationYear);
         }
-        String studyDisplayTitle = this.getDisplayTitleFromStudy(study);
-        if (!WhoConverter.isNullOrEmptyOrBlank(studyDisplayTitle)) {
-            doRegistryEntry.setAttribute("displayTitle", studyDisplayTitle + "-" + O_TITLE_REGISTRY_ENTRY);
+        String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            doRegistryEntry.setAttribute("displayTitle", studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY);
         } else {
-            doRegistryEntry.setAttribute("displayTitle", O_TITLE_REGISTRY_ENTRY);
+            doRegistryEntry.setAttribute("displayTitle", ConverterCVT.O_TITLE_REGISTRY_ENTRY);
         }
 
         // Instance
         Item doInst = createItem("ObjectInstance");
         doInst.setAttribute("url", entryUrl);
-        doInst.setAttribute("resourceType", O_RESOURCE_TYPE_WEB_TEXT);
+        doInst.setAttribute("resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT);
 
         // Registry entry created date
-        if (!WhoConverter.isNullOrEmptyOrBlank(registrationDate)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(registrationDate)) {
             // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
-            Item dateUpdated = this.createAndStoreDate(doRegistryEntry, registrationDate, DATE_TYPE_CREATED, P_DATE_D_M_Y_SLASHES);
+            Item dateUpdated = this.createAndStoreDate(doRegistryEntry, registrationDate, ConverterCVT.DATE_TYPE_CREATED, P_DATE_D_M_Y_SLASHES);
         }
 
         // Last update
-        if (!WhoConverter.isNullOrEmptyOrBlank(lastUpdate)) {
-            Item dateCreated = this.createAndStoreDate(doRegistryEntry, lastUpdate, DATE_TYPE_UPDATED, P_DATE_D_MWORD_Y_SPACES);
+        if (!ConverterUtils.isNullOrEmptyOrBlank(lastUpdate)) {
+            Item dateCreated = this.createAndStoreDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED, P_DATE_D_MWORD_Y_SPACES);
         }
 
         doInst.setReference("dataObject", doRegistryEntry);
@@ -1367,27 +1274,27 @@ public class WhoConverter extends BioFileConverter
     public void parseGender(Item study, String genderStr) {
         Matcher mGenderAll = P_GENDER_ALL.matcher(genderStr);
         if (mGenderAll.matches()) {
-            study.setAttribute("studyGenderElig", GENDER_ALL);
+            study.setAttribute("studyGenderElig", ConverterCVT.GENDER_ALL);
         } else {    // "structured" pattern
 
             Matcher mGenderStructured = P_GENDER_STRUCTURED.matcher(genderStr);
             if (mGenderStructured.matches()) {
-                this.setGenderFromMatches(study, mGenderStructured, genderStr, GENDER_WOMEN, GENDER_MEN, true);
+                this.setGenderFromMatches(study, mGenderStructured, genderStr, ConverterCVT.GENDER_WOMEN, ConverterCVT.GENDER_MEN, true);
             } else {    // "Non-structured" pattern
 
                 Matcher mGenderMF = P_GENDER_MF.matcher(genderStr);
                 if (mGenderMF.matches()) {
-                    this.setGenderFromMatches(study, mGenderMF, genderStr, GENDER_MEN, GENDER_WOMEN, false);
+                    this.setGenderFromMatches(study, mGenderMF, genderStr, ConverterCVT.GENDER_MEN, ConverterCVT.GENDER_WOMEN, false);
                 } else {
 
                     Matcher mGenderFM = P_GENDER_FM.matcher(genderStr);
                     if (mGenderFM.matches()) {
-                        this.setGenderFromMatches(study, mGenderFM, genderStr, GENDER_WOMEN, GENDER_MEN, false);
+                        this.setGenderFromMatches(study, mGenderFM, genderStr, ConverterCVT.GENDER_WOMEN, ConverterCVT.GENDER_MEN, false);
                     } else {    // Not specified
                     
                         Matcher mGenderNotSpecified = P_UNKNOWN.matcher(genderStr);
                         if (mGenderNotSpecified.matches()) {
-                            study.setAttribute("studyGenderElig", UNKNOWN);
+                            study.setAttribute("studyGenderElig", ConverterCVT.UNKNOWN);
                         } else {    // Raw value (shouldn't happen)
 
                             study.setAttribute("studyGenderElig", genderStr);
@@ -1413,7 +1320,7 @@ public class WhoConverter extends BioFileConverter
         String g1 = m.group(2);
         String g2 = m.group(4);
         if (g1 != null && g2 != null && (!structured || (g1.equalsIgnoreCase("yes") && g2.equalsIgnoreCase("yes")))) {
-            study.setAttribute("studyGenderElig", GENDER_ALL);
+            study.setAttribute("studyGenderElig", ConverterCVT.GENDER_ALL);
         } else if (g1 != null && (!structured || g1.equalsIgnoreCase("yes"))) {
             study.setAttribute("studyGenderElig", gender1);
         } else if (g2 != null && (!structured || g2.equalsIgnoreCase("yes"))) {
@@ -1430,19 +1337,19 @@ public class WhoConverter extends BioFileConverter
         StringBuilder iec = new StringBuilder();
 
         /* Inclusion criteria */
-        if (!WhoConverter.isNullOrEmptyOrBlank(icStr)) {    // None
+        if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) {    // None
             Matcher mIcNone = P_IEC_NONE.matcher(icStr);
             if (mIcNone.matches()) {
                 String g1None = mIcNone.group(2);
-                if (!WhoConverter.isNullOrEmptyOrBlank(g1None)) {
-                    iec.append(IC_PREFIX + NONE);
+                if (!ConverterUtils.isNullOrEmptyOrBlank(g1None)) {
+                    iec.append(IC_PREFIX + ConverterCVT.NONE);
                 } else {
-                    iec.append(IC_PREFIX + UNKNOWN);
+                    iec.append(IC_PREFIX + ConverterCVT.UNKNOWN);
                 }
             } else {    // N/A
                 Matcher mIcNA = P_IEC_NA.matcher(icStr);
                 if (mIcNA.matches()) {
-                    iec.append(IC_PREFIX + NOT_APPLICABLE);
+                    iec.append(IC_PREFIX + ConverterCVT.NOT_APPLICABLE);
                 } else {    // Raw value
                     iec.append(icStr);
                 }
@@ -1450,7 +1357,7 @@ public class WhoConverter extends BioFileConverter
         }
 
         /* Exclusion criteria */
-        if (!WhoConverter.isNullOrEmptyOrBlank(ecStr)) {    // None
+        if (!ConverterUtils.isNullOrEmptyOrBlank(ecStr)) {    // None
             Matcher mEcNone = P_IEC_NONE.matcher(ecStr);
 
             String adaptedEcPrefix = "";
@@ -1462,15 +1369,15 @@ public class WhoConverter extends BioFileConverter
 
             if (mEcNone.matches()) {
                 String g2None = mEcNone.group(2);
-                if (!WhoConverter.isNullOrEmptyOrBlank(g2None)) {
-                    iec.append(adaptedEcPrefix + NONE);
+                if (!ConverterUtils.isNullOrEmptyOrBlank(g2None)) {
+                    iec.append(adaptedEcPrefix + ConverterCVT.NONE);
                 } else {
-                    iec.append(adaptedEcPrefix + UNKNOWN);
+                    iec.append(adaptedEcPrefix + ConverterCVT.UNKNOWN);
                 }
             } else {    // N/A
                 Matcher mEcNA = P_IEC_NA.matcher(ecStr);
                 if (mEcNA.matches()) {
-                    iec.append(adaptedEcPrefix + NOT_APPLICABLE);
+                    iec.append(adaptedEcPrefix + ConverterCVT.NOT_APPLICABLE);
                 } else {    // Raw value
                     iec.append(ecStr);
                 }
@@ -1479,7 +1386,7 @@ public class WhoConverter extends BioFileConverter
 
         // Setting IEC string constructed from IC + EC
         String iecStr = iec.toString();
-        if (!WhoConverter.isNullOrEmptyOrBlank(iecStr)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(iecStr)) {
             study.setAttribute("iec", iecStr);
         }
     }
@@ -1487,7 +1394,7 @@ public class WhoConverter extends BioFileConverter
     public void parseDataSharingStatement(Item study, String resultsIPDPlan, String resultsIPDDescription) {
         StringBuilder dSSBuilder = new StringBuilder();
 
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsIPDPlan)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsIPDPlan)) {
             dSSBuilder.append(resultsIPDPlan);
             if (!resultsIPDPlan.endsWith(".")) {
                 dSSBuilder.append(".");
@@ -1495,135 +1402,14 @@ public class WhoConverter extends BioFileConverter
             dSSBuilder.append(" ");
         }
 
-        if (!WhoConverter.isNullOrEmptyOrBlank(resultsIPDDescription)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(resultsIPDDescription)) {
             dSSBuilder.append(resultsIPDDescription);
         }
 
         String dataSharingStatement = dSSBuilder.toString();
-        if (!WhoConverter.isNullOrEmptyOrBlank(dataSharingStatement)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(dataSharingStatement)) {
             study.setAttribute("dataSharingStatement", dataSharingStatement);
         }
-    }
-
-    /**
-     * Write to WHO log file with timestamp.
-     * 
-     * @param text the log text
-     */
-    public void writeLog(String text) {
-        try {
-            if (this.logWriter != null) {
-                if (this.trialID != null) {
-                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + this.trialID + " - " + text + "\n");
-                    this.logWriter.flush();
-                } else {
-                    System.out.println("WHO - Trial ID null (cannot write logs)");
-                }
-            } else {
-                System.out.println("WHO - Log writer is null (cannot write logs)");
-            }
-        } catch(IOException e) {
-            System.out.println("WHO - Couldn't write to log file");
-        }
-    }
-
-    /**
-     * TODO
-     */
-    public static LocalDate getDateFromString(String dateStr, DateTimeFormatter dateFormatter) {
-        LocalDate parsedDate = null;
-        try {
-            if (dateFormatter != null) {
-                parsedDate = LocalDate.parse(dateStr, dateFormatter);
-            } else {
-                // ISO date format parsing
-                parsedDate = LocalDate.parse(dateStr);
-            }
-        } catch(DateTimeException e) {
-            ;
-            // this.writeLog("createAndStoreDate(): Couldn't parse date: " + dateStr + " error: " + e);
-        }
-        return parsedDate;
-    }
-
-    /**
-     * Check if a string is null, empty, only contains whitespaces, or is equal to "NULL".
-     * 
-     * @return true if null or empty or only contains whitespaces or is equal to "NULL", false otherwise
-     */
-    public static boolean isNullOrEmptyOrBlank(String s) {
-        return (s == null || s.isEmpty() || s.equalsIgnoreCase("NULL") || s.isBlank());
-    }
-
-    /**
-     * Normalise word and add trailing s to unit.
-     * 
-     * @param u the unit to normalise
-     * @return the normalised unit
-     * @see #normaliseWord()
-     */
-    public static String normaliseUnit(String u) {
-        return WhoConverter.normaliseWord(u) + "s";
-    }
-
-    /**
-     * Normalise study type by normalising word and adding a trailing "al" to the word (intervention/observation)
-     * 
-     * @param t the study type to normalise
-     * @return the normalised type
-     * @see #normaliseWord()
-     */
-    public static String normaliseType(String t) {
-        return WhoConverter.normaliseWord(t) + "al";
-    }
-
-    /**
-     * Convert phase number (1-4) to digit string. Only returns a different string if the input is in Roman numerals.
-     * 
-     * @param n the input digit string, possibly in roman numerals
-     * @return the converted phase number
-     */
-    public static String convertPhaseNumber(String n) {
-        return WhoConverter.PHASE_NUMBER_MAP.get(n.toLowerCase());
-    }
-
-    /**
-     * Uppercase first letter and lowercase the rest.
-     * 
-     * @param w the word to normalise
-     * @return the normalised word
-     */
-    public static String normaliseWord(String w) {
-        if (w.length() > 0) {
-            w = w.substring(0,1).toUpperCase() + w.substring(1).toLowerCase();
-        }
-        return w;
-    }
-    
-    /**
-     * TODO
-     */
-    public static String getYearFromISODateString(String dateStr) {
-        String year = null;
-
-        LocalDate parsedDate = WhoConverter.getDateFromString(dateStr, null);
-        if (parsedDate != null) {
-            year = String.valueOf(parsedDate.getYear());
-        }
-
-        return year;
-    }
-
-    /**
-     * TODO
-     */
-    public String getDisplayTitleFromStudy(Item study) {
-        String studyDisplayTitle = null;
-        Attribute studyDisplayTitleAttr = study.getAttribute("displayTitle");
-        if (studyDisplayTitleAttr != null) {
-            studyDisplayTitle = studyDisplayTitleAttr.getValue();
-        }
-        return studyDisplayTitle;
     }
 
     /**
@@ -1636,7 +1422,7 @@ public class WhoConverter extends BioFileConverter
      */
     public String getAndCleanValue(String[] lineValues, String field) {
         // TODO: handle errors
-        return WhoConverter.cleanValue(lineValues[this.fieldsToInd.get(field)].strip());
+        return this.cleanValue(lineValues[this.fieldsToInd.get(field)], true);
     }
 
     /**
@@ -1649,84 +1435,22 @@ public class WhoConverter extends BioFileConverter
      */
     public String getAndCleanValueNoStrip(String[] lineValues, String field) {
         // TODO: handle errors
-        return WhoConverter.cleanValue(lineValues[this.fieldsToInd.get(field)]);
+        return this.cleanValue(lineValues[this.fieldsToInd.get(field)], false);
     }
 
     /**
-     * Remove extra quotes, unescape HTML chars, and strip the string of empty spaces.
+     * Remove extra quotes, unescape HTML chars, and strip the string of any leading/trailing whitespace.
      * 
      * @param s the value to clean
      * @return the cleaned value
      * @see #unescapeHtml()
      * @see #removeQuotes()
      */
-    public static String cleanValue(String s) {
-        return WhoConverter.unescapeHtml(WhoConverter.removeQuotes(s)).strip();
-    }
-
-    /**
-     * Remove extra quotes, and unescape HTML chars.
-     * 
-     * @param s the value to clean
-     * @return the cleaned value
-     * @see #unescapeHtml()
-     * @see #removeQuotes()
-     */
-    public static String cleanValueNoStrip(String s) {
-        return WhoConverter.unescapeHtml(WhoConverter.removeQuotes(s));
-    }
-
-    /**
-     * Unescape HTML4 characters.
-     * 
-     * @param s the string potentially containing escaped HTML4 characters
-     * @return the unescaped string
-     */
-    public static String unescapeHtml(String s) {
-        // TODO: replace with jsoup unescaping
-        // return StringEscapeUtils.unescapeHtml4(s);
-        return Jsoup.parse(s).text();
-    }
-
-    /**
-     * Remove leading and trailing double quotes from a string.
-     * Unfortunately opencsv only transforms triple double-quoted values into single double-quotes values, 
-     * so we have to remove the remaining quotes manually.
-     * 
-     * @param s the string to remove quotes from
-     * @return the string without leading and trailing double quotes
-     */
-    public static String removeQuotes(String s) {
-        if (s != null && s.length() > 1 && s.charAt(0) == '"' && s.charAt(s.length()-1) == '"') {
-            return s.substring(1, s.length()-1);
+    public String cleanValue(String s, boolean strip) {
+        if (strip) {
+            return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s)).strip();
         }
-        return s;
-    }
-
-    /**
-     * Test if a string is a positive whole number.
-     * 
-     * @param s the string to test
-     * @return true if string is a positive whole number, false otherwise
-     */
-    public static boolean isPosWholeNumber(String s) {
-        if (s.length() == 0) { return false; }
-        
-        for (int i = 0; i < s.length(); i++) {
-            if (Character.isDigit(s.charAt(i))) {
-                continue;
-            }
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * TODO
-     */
-    public static String getSeparatedDateFromISODateString(String date) {
-        return date.substring(0, 4);
+        return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s));
     }
 
     /**
@@ -1763,5 +1487,15 @@ public class WhoConverter extends BioFileConverter
         }
 
         return fieldsToInd;
+    }
+
+    /**
+     * Convert phase number (1-4) to digit string. Only returns a different string if the input is in Roman numerals.
+     * 
+     * @param n the input digit string, possibly in roman numerals
+     * @return the converted phase number
+     */
+    public static String convertPhaseNumber(String n) {
+        return WhoConverter.PHASE_NUMBER_MAP.get(n.toLowerCase());
     }
 }

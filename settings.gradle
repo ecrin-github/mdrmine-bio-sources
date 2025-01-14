@@ -7,3 +7,7 @@ include ':bio-source-biolincc'
 project(':bio-source-biolincc').projectDir = new File(settingsDir, './biolincc')
 include ':bio-source-pubmed'
 project(':bio-source-pubmed').projectDir = new File(settingsDir, './pubmed')
+include ':bio-source-ctis'
+project(':bio-source-ctis').projectDir = new File(settingsDir, './ctis')
+include ':common'
+project(':common').projectDir = new File(settingsDir, './common')
