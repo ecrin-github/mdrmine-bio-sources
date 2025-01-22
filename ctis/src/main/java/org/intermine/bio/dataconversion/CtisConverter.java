@@ -123,7 +123,8 @@ public class CtisConverter extends BaseConverter
             study.setAttribute("displayTitle", trialTitle);
             // Note: guessing these are scientific titles by comparing them to WHO scientific titles, as they often contain
             // an acronym of the title at the end of it, and are notably longer than public titles
-            this.createAndStoreTitle(study, trialTitle, ConverterCVT.TITLE_TYPE_SCIENTIFIC);
+            this.createAndStoreClassItem(study, "StudyTitle", 
+                new String[][]{{"titleText", trialTitle}, {"titleType", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
         } else {
             study.setAttribute("displayTitle", "Unknown study title");
         }
@@ -131,7 +132,7 @@ public class CtisConverter extends BaseConverter
         // Sponsor protocol code
         String protocolCode = this.getAndCleanValue(lineValues, "Protocol code");
         /* Protocol DO */
-        this.createAndStoreProtocolDO(study, protocolCode);
+        this.parseProtocolCode(study, protocolCode);
 
         /* Trial status */
         String overallTrialStatus = this.getAndCleanValue(lineValues, "Overall trial status");
@@ -190,53 +191,28 @@ public class CtisConverter extends BaseConverter
      * Note: The sponsor's protocol code can be modified at any time so we can't set a date/publication year from the fields in the data file
      * https://www.bfarm.de/SharedDocs/Downloads/DE/Arzneimittel/KlinischePruefung/EudraCT_EU-CTR_QuA.pdf?__blob=publicationFile
      */
-    public Item createAndStoreProtocolDO(Item study, String protocolCode) throws Exception {
-        Item protocolDO = null;
+    public void parseProtocolCode(Item study, String protocolCode) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(protocolCode)) {
-            /* Protocol DO */
-            protocolDO = createItem("DataObject");
-            protocolDO.setAttribute("objectClass", ConverterCVT.O_CLASS_TEXT);
-            protocolDO.setAttribute("objectType", ConverterCVT.O_TYPE_STUDY_PROTOCOL);
-            protocolDO.setAttribute("title", ConverterCVT.O_TYPE_STUDY_PROTOCOL);
-
             // TODO: Try to get URL from euclinicaltrials.eu/ctis-public/view/[trial ID]? protocol can be in trial documents tab
 
             // Display title
             String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+            String doDisplayTitle;
             if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
-                protocolDO.setAttribute("displayTitle", studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL);
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
             } else {
-                protocolDO.setAttribute("displayTitle", ConverterCVT.O_TYPE_STUDY_PROTOCOL);
+                doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
             }
 
-            Item objectIdentifier = createItem("ObjectIdentifier");
-            objectIdentifier.setAttribute("identifierValue", protocolCode);
-            objectIdentifier.setAttribute("identifierType", ConverterCVT.ID_TYPE_SPONSOR);
+            /* Protocol DO */
+            Item protocolDO = this.createAndStoreClassItem(study, "DataObject", 
+                new String[][]{{"objectClass", ConverterCVT.O_CLASS_TEXT}, {"objectType", ConverterCVT.O_TYPE_STUDY_PROTOCOL},
+                                {"title", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, {"displayTitle", doDisplayTitle}});
 
-            protocolDO.addToCollection("objectIdentifiers", objectIdentifier);
-            study.addToCollection("studyObjects", protocolDO);
-            protocolDO.setReference("linkedStudy", study);
-            objectIdentifier.setReference("dataObject", protocolDO);
-            store(protocolDO);
-            store(objectIdentifier);
+            /* Object identifier: protocol code */
+            this.createAndStoreClassItem(protocolDO, "ObjectIdentifier", 
+                new String[][]{{"identifierValue", protocolCode}, {"identifierType", ConverterCVT.ID_TYPE_SPONSOR}});
         }
-        return protocolDO;
-    }
-
-    /**
-     * TODO
-     */
-    public Item createAndStoreTitle(Item study, String studyTitleStr, String titleType) throws Exception {
-        Item studyTitle = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyTitleStr)) {
-            studyTitle = createItem("StudyTitle");
-            studyTitle.setAttribute("titleType", titleType);
-            studyTitle.setAttribute("titleText", studyTitleStr);
-            studyTitle.setReference("study", study);
-            store(studyTitle);
-            study.addToCollection("studyTitles", studyTitle);
-        }
-        return studyTitle;
     }
 
     /**
@@ -259,7 +235,9 @@ public class CtisConverter extends BaseConverter
             
             if (colonSeparatedValues.length > 1) {
                 if (colonSeparatedValues.length == 2) {
-                    this.createAndStoreCountry(study, colonSeparatedValues[0], colonSeparatedValues[1]);
+                    // TODO: check country name not empty?
+                    this.createAndStoreClassItem(study, "StudyCountry", 
+                        new String[][]{{"countryName", colonSeparatedValues[0]}, {"status", colonSeparatedValues[1]}});
                 } else {
                     String currentCountry = "";
 
@@ -267,13 +245,15 @@ public class CtisConverter extends BaseConverter
                         if (ind == 0) {
                             currentCountry = colonSeparatedValues[ind];
                         } else if (ind == colonSeparatedValues.length-1) {
-                            this.createAndStoreCountry(study, currentCountry, colonSeparatedValues[ind]);
+                            this.createAndStoreClassItem(study, "StudyCountry", 
+                                new String[][]{{"countryName", currentCountry}, {"status", colonSeparatedValues[ind]}});
                         } else {
                             // Note: this would not work properly if one of the countries names happened to contain a comma, 
                             // which as of writing this never happens in the data
                             Matcher mStatusCountry = P_STATUS_COUNTRY.matcher(colonSeparatedValues[ind]);
                             if (mStatusCountry.matches()) {
-                                this.createAndStoreCountry(study, currentCountry, mStatusCountry.group(1));
+                                this.createAndStoreClassItem(study, "StudyCountry", 
+                                    new String[][]{{"countryName", currentCountry}, {"status", mStatusCountry.group(1)}});
                                 currentCountry = mStatusCountry.group(2);
                             } else {
                                 this.writeLog("parseStudyCountries(): couldn't match colon separated values, index: " 
@@ -286,24 +266,6 @@ public class CtisConverter extends BaseConverter
                 this.writeLog("parseStudyCountries(): couldn't parse \"Location(s) and recruitment status\": " + locationAndRecruitmentStatus);
             }
         }
-    }
-
-    /**
-     * TODO
-     */
-    public Item createAndStoreCountry(Item study, String countryName, String status) throws Exception {
-        Item studyCountry = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(countryName)) {
-            studyCountry = createItem("StudyCountry");
-            studyCountry.setAttribute("countryName", countryName);
-            if (!ConverterUtils.isNullOrEmptyOrBlank(status)) {
-                studyCountry.setAttribute("status", status);
-            }
-            studyCountry.setReference("study", study);
-            store(studyCountry);
-            study.addToCollection("studyCountries", studyCountry);
-        }
-        return studyCountry;
     }
 
     /**
@@ -530,36 +492,10 @@ public class CtisConverter extends BaseConverter
     public void parseStudyConditions(Item study, String studyConditions) throws Exception {
         // TODO: separate multiple conditions somehow?
         // TODO: match with MedDRA/other medical terms
-        this.createAndStoreCondition(study, studyConditions, ConverterCVT.CV_MEDDRA, null, null, null);
-    }
-
-    /**
-     * TODO
-     */
-    public Item createAndStoreCondition(Item study, String originalValue, String originalCTType, String originalCTCode, String icdCode, String icdName) throws Exception {
-        Item condition = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(originalValue)) {
-            condition = createItem("StudyCondition");
-            condition.setAttribute("originalValue", originalValue);
-            
-            if (!ConverterUtils.isNullOrEmptyOrBlank(originalCTType)) {
-                condition.setAttribute("originalCTType", originalCTType);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(originalCTCode)) {
-                condition.setAttribute("originalCTCode", originalCTCode);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(icdCode)) {
-                condition.setAttribute("icdCode", icdCode);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(icdName)) {
-                condition.setAttribute("icdName", icdName);
-            }
-
-            condition.setReference("study", study);
-            store(condition);
-            study.addToCollection("studyConditions", condition);
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyConditions)) {
+            this.createAndStoreClassItem(study, "StudyCondition", 
+                new String[][]{{"originalValue", studyConditions}, {"originalCTType", ConverterCVT.CV_MEDDRA}});
         }
-        return condition;
     }
 
     /**
@@ -581,13 +517,15 @@ public class CtisConverter extends BaseConverter
                         // TODO: topic type
                         // TODO: matching with mesh code and value
                         // Note: these seem to be MeSH Tree codes but couldn't find the version of the vocabulary, C13 in dataset is C12.050 in MeSH
-                        this.createAndStoreStudyTopic(study, null, t1, ConverterCVT.CV_MESH_TREE, c1, null, null);
+                        this.createAndStoreClassItem(study, "StudyTopic", 
+                            new String[][]{{"originalValue", t1}, {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", c1}});
                         addedCodes.add(c1);
                     }
                     if (!addedCodes.contains(c2)) { // In theory only the first (parent) topic can appear multiple times, but we check for the child topic anyway
                         // TODO: topic type
                         // TODO: matching with mesh code and value
-                        this.createAndStoreStudyTopic(study, null, t2, ConverterCVT.CV_MESH_TREE, c2, null, null);
+                        this.createAndStoreClassItem(study, "StudyTopic", 
+                            new String[][]{{"originalValue", t2}, {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", c2}});
                         addedCodes.add(c2);
                     }
                 }   // else, "not possible to specify" matched
@@ -595,40 +533,6 @@ public class CtisConverter extends BaseConverter
                 this.writeLog("parseStudyTopics(): couldn't parse study topics pair: " + topicPair);
             }
         }
-    }
-
-    /**
-     * TODO
-     */
-    public Item createAndStoreStudyTopic(Item study, String topicType, String originalValue, 
-        String originalCTType, String originalCTCode, String meshCode, String meshValue) throws Exception {
-        Item topic = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(originalValue)) {
-            topic = createItem("StudyTopic");
-            // TODO: original value or another field?
-            topic.setAttribute("originalValue", originalValue);
-            
-            if (!ConverterUtils.isNullOrEmptyOrBlank(topicType)) {
-                topic.setAttribute("topicType", topicType);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(originalCTType)) {
-                topic.setAttribute("originalCTType", originalCTType);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(originalCTCode)) {
-                topic.setAttribute("originalCTCode", originalCTCode);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(meshCode)) {
-                topic.setAttribute("meshCode", meshCode);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(meshValue)) {
-                topic.setAttribute("meshValue", meshValue);
-            }
-
-            topic.setReference("study", study);
-            store(topic);
-            study.addToCollection("studyTopics", topic);
-        }
-        return topic;
     }
 
     /**
@@ -643,31 +547,14 @@ public class CtisConverter extends BaseConverter
                 if (p2 == null) {   // One phase number
                     this.createAndStoreClassItem(study, "StudyFeature", 
                         new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", ConverterUtils.convertPhaseNumber(p1)}});
-                    // this.createAndStoreStudyFeature(study, ConverterCVT.FEATURE_PHASE, ConverterUtils.convertPhaseNumber(p1));
                 } else {    // Two phase numbers
                     this.createAndStoreClassItem(study, "StudyFeature", 
                         new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", ConverterUtils.constructMultiplePhasesString(p1, p2)}});
-                    // this.createAndStoreStudyFeature(study, ConverterCVT.FEATURE_PHASE, ConverterUtils.constructMultiplePhasesString(p1, p2));
                 }
             } else {
                 this.writeLog("parseTrialPhase(): couldn't parse trial phase string: " + trialPhase);
             }
         }
-    }
-
-    /**
-     * TODO
-     */
-    public Item createAndStoreStudyFeature(Item study, String featureType, String featureValue) throws Exception {
-        Item feature = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(featureValue)) {
-            feature = createItem("StudyFeature");
-            feature.setAttribute("featureValue", featureValue);
-            if (!ConverterUtils.isNullOrEmptyOrBlank(featureType)) {
-                feature.setAttribute("featureType", featureType);
-            }
-        }
-        return feature;
     }
 
     /**
