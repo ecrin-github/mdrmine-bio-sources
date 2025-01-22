@@ -95,17 +95,6 @@ public class WhoConverter extends BaseConverter
     private static final String IC_PREFIX = "Inclusion criteria: ";
     private static final String EC_PREFIX = "Exclusion criteria: ";
 
-    static final Map<String, String> PHASE_NUMBER_MAP = Map.of(
-        "1", "1", 
-        "2", "2", 
-        "3", "3", 
-        "4", "4", 
-        "i", "1", 
-        "ii", "2", 
-        "iii", "3", 
-        "iv", "4"
-    );
-
     private static final String DATASET_TITLE = "ICTRPFullExport-1003291-20-06-2024.csv";
     private static final String DATA_SOURCE_NAME = "WHO";
 
@@ -138,7 +127,7 @@ public class WhoConverter extends BaseConverter
      */
     public void process(Reader reader) throws Exception {
         /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
-        this.startLogging();
+        this.startLogging("who");
 
         this.fieldsToInd = this.getHeaders();
 
@@ -191,33 +180,20 @@ public class WhoConverter extends BaseConverter
         String url = this.getAndCleanValue(lineValues, "url");
         this.trialID = trialID;
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID)) {
-            Item studyIdentifier = createItem("StudyIdentifier");
-            studyIdentifier.setAttribute("identifierValue", trialID);
-            studyIdentifier.setReference("study", study);
-
-            /* Primary identifier URL */
-            
-            if (!ConverterUtils.isNullOrEmptyOrBlank(url)) {
-                studyIdentifier.setAttribute("identifierLink", url);
-            }
-            store(studyIdentifier);
-            study.addToCollection("studyIdentifiers", studyIdentifier);
-            // TODO: identifier type
-            // TODO: identifier date
-        }
+        this.createAndStoreStudyIdentifier(study, trialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, url);
 
         /* Secondary IDs */
         String secondaryIDs = this.getAndCleanValue(lineValues, "SecondaryIDs");
         this.parseSecondaryIDs(study, secondaryIDs);
 
         /* Public title */
+        // TODO: to function
         String publicTitle = this.getAndCleanValue(lineValues, "public_title");
         if (!ConverterUtils.isNullOrEmptyOrBlank(publicTitle)) {
             Item studyTitle = createItem("StudyTitle");
             study.setAttribute("displayTitle", publicTitle);
 
-            studyTitle.setAttribute("titleType", "Public title");
+            studyTitle.setAttribute("titleType", ConverterCVT.TITLE_TYPE_PUBLIC);
             studyTitle.setAttribute("titleText", publicTitle);
             studyTitle.setReference("study", study);
             store(studyTitle);
@@ -227,10 +203,11 @@ public class WhoConverter extends BaseConverter
         }
 
         /* Scientific title */
+        // TODO: to function
         String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
         if (!ConverterUtils.isNullOrEmptyOrBlank(scientificTitle)) {
             Item studyTitle = createItem("StudyTitle");
-            studyTitle.setAttribute("titleType", "Scientific Title");
+            studyTitle.setAttribute("titleType", ConverterCVT.TITLE_TYPE_SCIENTIFIC);
             studyTitle.setAttribute("titleText", scientificTitle);
             studyTitle.setReference("study", study);
             store(studyTitle);
@@ -843,9 +820,9 @@ public class WhoConverter extends BaseConverter
                                             + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
                         }
                     } else if (nb2 != null && !nb1.equalsIgnoreCase(nb2)) {   // Two phases
-                        phaseFeature.setAttribute("featureValue", "Phase " + WhoConverter.convertPhaseNumber(nb1) + "/" + WhoConverter.convertPhaseNumber(nb2));
+                        phaseFeature.setAttribute("featureValue", "Phase " + ConverterUtils.constructMultiplePhasesString(nb1, nb2));
                     } else {    // One phase
-                        phaseFeature.setAttribute("featureValue", "Phase " + WhoConverter.convertPhaseNumber(nb1));
+                        phaseFeature.setAttribute("featureValue", "Phase " + ConverterUtils.convertPhaseNumber(nb1));
                     }
                 } else {
                     this.writeLog("Anomaly: matched \"numbers\" phase string but no phase number, phase: " 
@@ -1487,15 +1464,5 @@ public class WhoConverter extends BaseConverter
         }
 
         return fieldsToInd;
-    }
-
-    /**
-     * Convert phase number (1-4) to digit string. Only returns a different string if the input is in Roman numerals.
-     * 
-     * @param n the input digit string, possibly in roman numerals
-     * @return the converted phase number
-     */
-    public static String convertPhaseNumber(String n) {
-        return WhoConverter.PHASE_NUMBER_MAP.get(n.toLowerCase());
     }
 }

@@ -13,6 +13,7 @@ package org.intermine.bio.dataconversion;
 import java.time.format.DateTimeFormatter;
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.util.Map;
 
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
@@ -27,6 +28,17 @@ import org.jsoup.Jsoup;
  */
 public class ConverterUtils
 {
+    public static final Map<String, String> PHASE_NUMBER_MAP = Map.of(
+        "1", "1", 
+        "2", "2", 
+        "3", "3", 
+        "4", "4", 
+        "i", "1", 
+        "ii", "2", 
+        "iii", "3", 
+        "iv", "4"
+    );
+
     /**
      * Check if a string is null, empty, only contains whitespaces, or is equal to "NULL".
      * 
@@ -102,6 +114,23 @@ public class ConverterUtils
             studyDisplayTitle = studyDisplayTitleAttr.getValue();
         }
         return studyDisplayTitle;
+    }
+
+    /**
+     * Convert phase number (1-4) to digit string. Only returns a different string if the input is in Roman numerals.
+     * 
+     * @param n the input digit string, possibly in roman numerals
+     * @return the converted phase number
+     */
+    public static String convertPhaseNumber(String n) {
+        return ConverterUtils.PHASE_NUMBER_MAP.get(n.toLowerCase());
+    }
+
+    /**
+     * TODO
+     */
+    public static String constructMultiplePhasesString(String p1, String p2) {
+        return ConverterUtils.convertPhaseNumber(p1) + "/" + ConverterUtils.convertPhaseNumber(p2);
     }
 
     /**

@@ -22,5 +22,5 @@ processResources {
 }
 
 dependencies {
-    compile project(':common')
+    compile project(':commons')
 }

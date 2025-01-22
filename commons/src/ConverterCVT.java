@@ -40,6 +40,7 @@ public class ConverterCVT
     public static final String GENDER_ALL = "All";
     public static final String GENDER_WOMEN = "Female";
     public static final String GENDER_MEN = "Male";
+    public static final String AGE_IN_UTERO = "In utero";
 
     /* Objects */
     public static final String O_TYPE_TRIAL_REGISTRY_ENTRY = "Trial registry entry";
@@ -57,4 +58,12 @@ public class ConverterCVT
     public static final String DATE_TYPE_AVAILABLE = "Available";
     public static final String DATE_TYPE_CREATED = "Created";
     public static final String DATE_TYPE_UPDATED = "Updated";
+
+    public static final String TITLE_TYPE_PUBLIC = "Public title";
+    public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";
+    public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
+    public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
+    public static final String CV_MEDDRA = "MedDRA";
+    public static final String CV_MESH = "MeSH";
+    public static final String CV_MESH_TREE = "MeSH Tree";
 }

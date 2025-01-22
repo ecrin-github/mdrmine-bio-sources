@@ -21,10 +21,15 @@ import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 
 
 import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.ClassDescriptor;
 import org.intermine.metadata.Model;
+import org.intermine.metadata.ReferenceDescriptor ;
+import org.intermine.xml.full.Item;
 
 
 
@@ -60,17 +65,41 @@ public abstract class BaseConverter extends BioFileConverter
     }
 
     /**
+     * TODO
+     */
+    public Item createAndStoreStudyIdentifier(Item study, String id, String identifierType, String identifierLink) throws Exception {
+        Item studyIdentifier = null;
+
+        if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+            studyIdentifier = createItem("StudyIdentifier");
+            studyIdentifier.setAttribute("identifierValue", trialID);
+            if (!ConverterUtils.isNullOrEmptyOrBlank(identifierType)) {
+                studyIdentifier.setAttribute("identifierType", identifierType);
+            }
+            if (!ConverterUtils.isNullOrEmptyOrBlank(identifierLink)) {
+                studyIdentifier.setAttribute("identifierLink", identifierLink);
+            }
+            studyIdentifier.setReference("study", study);
+
+            store(studyIdentifier);
+            study.addToCollection("studyIdentifiers", studyIdentifier);
+        }
+
+        return studyIdentifier;
+    }
+
+    /**
      * Instantiate logger by creating log file and writer.
      * This sets the logWriter instance attribute.
      */
-    public void startLogging() throws Exception {
+    public void startLogging(String suffix) throws Exception {
         if (!this.logDir.equals("")) {
             String current_timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
                 
             Path logDir = Paths.get(this.logDir);
             if (!Files.exists(logDir)) Files.createDirectories(logDir);
 
-            Path logFile = Paths.get(logDir.toString(), current_timestamp + "_ctis.log");
+            Path logFile = Paths.get(logDir.toString(), current_timestamp + "_" + suffix + ".log");
             this.logWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile.toString()), "utf-8"));
         } else {
             throw new Exception("Log folder not specified");
@@ -119,6 +148,42 @@ public abstract class BaseConverter extends BioFileConverter
      */
     public void setLogDir(String logDir) {
         this.logDir = logDir;
+    }
+
+    /**
+     * Create and store item (instance) of a class. Works for all classes that are not "top-level" classes (i.e. Study and DataObject).
+     * 
+     * @param mainClassItem the already created item of the main class to reference (either "Study" or "DataObject")
+     * @param className the name of the class to create an item of
+     * @param kv array of field name - field value pairs to set class item attribute values
+     * @return the created item
+     */
+    public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
+        Item classItem = createItem(className);
+
+        // Get class descriptor to get reference field
+        ClassDescriptor cd = this.getModel().getClassDescriptorByName(className);
+        ReferenceDescriptor[] rdArr = cd.getReferenceDescriptors().toArray(ReferenceDescriptor[]::new);
+
+        // Get reference field of class (either "study" or "dataObject")
+        String referencedClass = rdArr[0].getName();
+        // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
+        String reverseReferencedClass = rdArr[0].getReverseReferenceFieldName();
+
+        // Set class values from fieldName - value pairs passed as argument
+        // TODO: can indicate second dimension length?
+        for (int i = 0; i < kv.length; i++) {
+            if (kv[i].length != 2) {
+                throw new Exception("Key value tuple is not of length == 2");
+            }
+            classItem.setAttributeIfNotNull(kv[i][0], kv[i][1]);
+        }
+
+        classItem.setReference(referencedClass, mainClassItem);
+        store(classItem);
+        mainClassItem.addToCollection(reverseReferencedClass, classItem);
+
+        return classItem;
     }
 
     /**
