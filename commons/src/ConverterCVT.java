@@ -41,11 +41,13 @@ public class ConverterCVT
     public static final String GENDER_WOMEN = "Female";
     public static final String GENDER_MEN = "Male";
     public static final String AGE_IN_UTERO = "In utero";
+    public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
 
     /* Objects */
     public static final String O_TYPE_TRIAL_REGISTRY_ENTRY = "Trial registry entry";
     public static final String O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY = "Trial registry results summary";
     public static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
+    public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_CLASS_TEXT = "Text";
     public static final String O_RESOURCE_TYPE_PDF = "PDF";
@@ -58,6 +60,7 @@ public class ConverterCVT
     public static final String DATE_TYPE_AVAILABLE = "Available";
     public static final String DATE_TYPE_CREATED = "Created";
     public static final String DATE_TYPE_UPDATED = "Updated";
+    public static final String DATE_TYPE_ISSUED = "Issued";
 
     public static final String TITLE_TYPE_PUBLIC = "Public title";
     public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";

@@ -38,6 +38,8 @@ public class ConverterUtils
         "iii", "3", 
         "iv", "4"
     );
+    public static final DateTimeFormatter P_DATE_D_M_Y_SLASHES = DateTimeFormatter.ofPattern("d/M/uuuu");
+    public static final DateTimeFormatter P_DATE_D_MWORD_Y_SPACES = DateTimeFormatter.ofPattern("d MMMM uuuu");
 
     /**
      * Check if a string is null, empty, only contains whitespaces, or is equal to "NULL".
@@ -107,13 +109,33 @@ public class ConverterUtils
     /**
      * TODO
      */
-    public static String getDisplayTitleFromStudy(Item study) {
-        String studyDisplayTitle = null;
-        Attribute studyDisplayTitleAttr = study.getAttribute("displayTitle");
-        if (studyDisplayTitleAttr != null) {
-            studyDisplayTitle = studyDisplayTitleAttr.getValue();
+    public static String getValueOfItemAttribute(Item item, String attrName) {
+        String attrValue = null;
+        Attribute itemAttr = item.getAttribute(attrName);
+        if (itemAttr != null) {
+            attrValue = itemAttr.getValue();
         }
-        return studyDisplayTitle;
+        return attrValue;
+    }
+
+    /**
+     * Concatenate text on a new line to study brief description field value.
+     * 
+     * @param study the study item to modify the brief description field of
+     * @param text the text to concatenate (or set, if the field's value is empty) to the study's brief description
+     */
+    public static void addToBriefDescription(Item study, String text) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(text)) {
+            Attribute briefDescription = study.getAttribute("briefDescription");
+            if (briefDescription != null) {
+                String currentDesc = briefDescription.getValue();
+                if (!ConverterUtils.isNullOrEmptyOrBlank(currentDesc)) {
+                    study.setAttribute("briefDescription", currentDesc + "\n" + text);
+                } else {
+                    study.setAttribute("briefDescription", text);
+                }
+            }
+        }
     }
 
     /**

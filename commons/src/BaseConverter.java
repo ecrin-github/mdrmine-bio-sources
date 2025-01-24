@@ -43,7 +43,7 @@ public abstract class BaseConverter extends BioFileConverter
 
     private String logDir = "";
     private Writer logWriter = null;
-    protected String trialID = null;  // Used for logging
+    protected String trialID = null;
 
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
                              String dataSetTitle) {
@@ -151,9 +151,9 @@ public abstract class BaseConverter extends BioFileConverter
     }
 
     /**
-     * Create and store item (instance) of a class. Works for all classes that are not "top-level" classes (i.e. Study and DataObject).
+     * Create and store item (instance) of a class. Works for all classes except the Study class.
      * 
-     * @param mainClassItem the already created item of the main class to reference (either "Study" or "DataObject")
+     * @param mainClassItem the already created item of the main class to reference (Study)
      * @param className the name of the class to create an item of
      * @param kv array of field name - field value pairs to set class item attribute values
      * @return the created item
@@ -165,13 +165,12 @@ public abstract class BaseConverter extends BioFileConverter
         ClassDescriptor cd = this.getModel().getClassDescriptorByName(className);
         ReferenceDescriptor[] rdArr = cd.getReferenceDescriptors().toArray(ReferenceDescriptor[]::new);
 
-        // Get reference field of class (either "study" or "dataObject")
+        // Get reference field of class (either "study" or "linkedStudy" for data objects)
         String referencedClass = rdArr[0].getName();
         // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
         String reverseReferencedClass = rdArr[0].getReverseReferenceFieldName();
 
         // Set class values from fieldName - value pairs passed as argument
-        // TODO: can indicate second dimension length?
         for (int i = 0; i < kv.length; i++) {
             if (kv[i].length != 2) {
                 throw new Exception("Key value tuple is not of length == 2");
@@ -184,6 +183,24 @@ public abstract class BaseConverter extends BioFileConverter
         mainClassItem.addToCollection(reverseReferencedClass, classItem);
 
         return classItem;
+    }
+
+    /**
+     * TODO
+     */
+    public Item createAndStoreObjectDate(Item dataObject, String dateStr, DateTimeFormatter dateFormatter, String dateType) throws Exception {
+        Item objectDate = null;
+
+        LocalDate date = ConverterUtils.getDateFromString(dateStr, dateFormatter);
+        if (date != null) {
+            objectDate = this.createAndStoreClassItem(dataObject, "ObjectDate", 
+                new String[][]{{"dateType", dateType}, {"dateAsString", date.toString()}, 
+                                {"startDay", String.valueOf(date.getDayOfMonth())}, 
+                                {"startMonth", String.valueOf(date.getMonthValue())}, 
+                                {"startYear", String.valueOf(date.getYear())}});
+        }
+
+        return objectDate;
     }
 
     /**
