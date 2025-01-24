@@ -89,8 +89,6 @@ public class WhoConverter extends BaseConverter
     private static final Pattern P_IEC_NA = Pattern.compile("^((?:inclusion|exclusion) criteria):\\h*(not\\h*applicable|n\\/?a)\\.?$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_URL = Pattern.compile("\\b[^\\s]+\\.(pdf|doc|[a-zA-Z]).*\\b", Pattern.CASE_INSENSITIVE); // TODO: improve probably
     private static final Pattern P_FIX_EUCTR = Pattern.compile("(?<!:)\\/\\/", Pattern.CASE_INSENSITIVE);
-    private static final DateTimeFormatter P_DATE_D_M_Y_SLASHES = DateTimeFormatter.ofPattern("d/M/uuuu");
-    private static final DateTimeFormatter P_DATE_D_MWORD_Y_SPACES = DateTimeFormatter.ofPattern("d MMMM uuuu");
 
     private static final String IC_PREFIX = "Inclusion criteria: ";
     private static final String EC_PREFIX = "Exclusion criteria: ";
@@ -170,6 +168,7 @@ public class WhoConverter extends BaseConverter
      */
     public void parseAndStoreValues(String[] lineValues) throws Exception {
         Item study = createItem("Study");
+        // TODO: study end date?
 
         // Used for registry entry DO
         String lastUpdate = this.getAndCleanValue(lineValues, "last_update");
@@ -238,7 +237,7 @@ public class WhoConverter extends BaseConverter
         /* Brief description 1/3 (study design) */
         // Note: using the fields currently used by the MDR to construct the briefDescription value
         // TODO: change/improve this field?
-        this.addToBriefDescription(study, studyDesign);
+        ConverterUtils.addToBriefDescription(study, studyDesign);
 
         /* Registry entry DO */
         String registrationDate = this.getAndCleanValue(lineValues, "Date_registration");
@@ -294,12 +293,12 @@ public class WhoConverter extends BaseConverter
         String sourceSupport = this.getAndCleanValue(lineValues, "Source_Support");
 
         /* Primary and secondary sponsors, scientific support organisation (source support)*/
-        this.createAndStoreStudyPeople(study, primarySponsor, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
+        this.createAndStoreStudyOrg(study, primarySponsor, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
         // TODO: there may be multiple sponsors in this field
-        this.createAndStoreStudyPeople(study, secondarySponsors, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
+        this.createAndStoreStudyOrg(study, secondarySponsors, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
         // Checking if the source support string is different than the primary and secondary sponsors + is not "please refer to primary and secondary sponsors"
         if (!sourceSupport.toLowerCase().contains("please") && !sourceSupport.equalsIgnoreCase(primarySponsor) && !sourceSupport.equalsIgnoreCase(secondarySponsors)) {
-            this.createAndStoreStudyPeople(study, sourceSupport, ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT);
+            this.createAndStoreStudyOrg(study, sourceSupport, ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT);
         }
 
         /* Study countries */
@@ -338,13 +337,14 @@ public class WhoConverter extends BaseConverter
         }
 
         /* Interventions */
+        // TODO: use for study topics
         String interventions = this.getAndCleanValue(lineValues, "Interventions");
         if (!ConverterUtils.isNullOrEmptyOrBlank(interventions)) {
             study.setAttribute("interventions", interventions);
         }
 
         /* Brief description 2/3 (interventions) */
-        this.addToBriefDescription(study, interventions);
+        ConverterUtils.addToBriefDescription(study, interventions);
 
         /* Min age */
         this.parseAgeField(this.getAndCleanValue(lineValues, "Agemin"), "minAge", "minAgeUnit", study);
@@ -370,7 +370,7 @@ public class WhoConverter extends BaseConverter
         }
 
         /* Brief description 3/3 (primary outcome) */
-        this.addToBriefDescription(study, primaryOutcome);
+        ConverterUtils.addToBriefDescription(study, primaryOutcome);
 
         /* Secondary outcomes */
         // TODO: handle main empty values + N/A
@@ -490,26 +490,6 @@ public class WhoConverter extends BaseConverter
         }
 
         store(study);
-    }
-
-    /**
-     * Concatenate text on a new line to study brief description field value.
-     * 
-     * @param study the study item to modify the brief description field of
-     * @param text the text to concatenate (or set, if the field's value is empty) to the study's brief description
-     */
-    public void addToBriefDescription(Item study, String text) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(text)) {
-            Attribute briefDescription = study.getAttribute("briefDescription");
-            if (briefDescription != null) {
-                String currentDesc = briefDescription.getValue();
-                if (!ConverterUtils.isNullOrEmptyOrBlank(currentDesc)) {
-                    study.setAttribute("briefDescription", currentDesc + "\n" + text);
-                } else {
-                    study.setAttribute("briefDescription", text);
-                }
-            }
-        }
     }
 
     /**
@@ -896,36 +876,24 @@ public class WhoConverter extends BaseConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(dateEnrolment)) {
             study.setAttribute("testField15", dateEnrolment);
             LocalDate parsedDate = null;
-            String year = null;
-            String month = null;
 
-            // ISO format
             // TODO: refactor
+            // ISO format
             parsedDate = ConverterUtils.getDateFromString(dateEnrolment, null);
-            if (parsedDate != null) {
-                year = String.valueOf(parsedDate.getYear());
-                month = String.valueOf(parsedDate.getMonthValue());
-            } else {    // d(d)/m(m)/yyyy
-                parsedDate = ConverterUtils.getDateFromString(dateEnrolment, P_DATE_D_M_Y_SLASHES);
-                if (parsedDate != null) {
-                    year = String.valueOf(parsedDate.getYear());
-                    month = String.valueOf(parsedDate.getMonthValue());
-                } else {    // dd month(word) yyyy
-                    parsedDate = ConverterUtils.getDateFromString(dateEnrolment, P_DATE_D_MWORD_Y_SPACES);
-                    if (parsedDate != null) {
-                        year = String.valueOf(parsedDate.getYear());
-                        month = String.valueOf(parsedDate.getMonthValue());
-                    } else {
+            if (parsedDate == null) {   // d(d)/m(m)/yyyy
+                parsedDate = ConverterUtils.getDateFromString(dateEnrolment, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+                if (parsedDate == null) {   // dd month(word) yyyy
+                    parsedDate = ConverterUtils.getDateFromString(dateEnrolment, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
+                    if (parsedDate == null) {
                         this.writeLog("parseDateEnrolment(): couldn't parse date: " + dateEnrolment);
                     }
                 }
             }
 
-            if (year != null && ConverterUtils.isPosWholeNumber(year)) {
-                study.setAttribute("studyStartYear", year);
-            }
-            if (month != null && ConverterUtils.isPosWholeNumber(month)) {
-                study.setAttribute("studyStartMonth", month);
+            if (parsedDate != null) {
+                study.setAttribute("studyStartYear", String.valueOf(parsedDate.getYear()));
+                study.setAttribute("studyStartMonth", String.valueOf(parsedDate.getMonthValue()));
+                study.setAttribute("studyStartDay", String.valueOf(parsedDate.getDayOfMonth()));
             }
         }
     }
@@ -976,43 +944,33 @@ public class WhoConverter extends BaseConverter
 
     /**
      * TODO
-     * todo should return created studyPeople
+     * TODO should return created studyPeople
      */
-    public void createAndStoreStudyPeople(Item study, String studyPeopleStr, String contribType) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyPeopleStr)) {
+    public void createAndStoreStudyOrg(Item study, String studyOrgStr, String contribType) throws Exception {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyOrgStr)) {
             boolean store = true;
+            // TODO: setting studyOrganisation object for now, need logic to distinguish people from orgs
             Item studyPeople = createItem("StudyPeople");
             studyPeople.setAttribute("contribType", contribType);
 
-            Matcher mStudyPeopleNA = P_NOT_APPLICABLE.matcher(studyPeopleStr);
-            if (mStudyPeopleNA.matches()) {    // N/A
-                studyPeople.setAttribute("personFullName", ConverterCVT.NOT_APPLICABLE);
-                studyPeople.setAttribute("organisationName", ConverterCVT.NOT_APPLICABLE);
-            } else {    // No sponsor
-                Matcher mStudyPeopleNone = P_NONE.matcher(studyPeopleStr);
-                if (mStudyPeopleNone.matches()) {
+            Matcher mNA = P_NOT_APPLICABLE.matcher(studyOrgStr);
+            if (mNA.matches()) {    // N/A
+                this.createAndStoreClassItem(study, "StudyOrganisation", 
+                    new String[][]{{"contribType", contribType}, 
+                                    {"organisationName", ConverterCVT.NOT_APPLICABLE}});
+            } else {
+                Matcher mNone = P_NONE.matcher(studyOrgStr);
+                if (mNone.matches()) {   // No sponsor
                     if (contribType.equals(ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR)) {
-                        studyPeople.setAttribute("personFullName", ConverterCVT.SPONSOR_NONE);
-                        studyPeople.setAttribute("organisationName", ConverterCVT.SPONSOR_NONE);
-                    } else {
-                        // Not storing "None" scientific support organisations
-                        store = false;
+                        this.createAndStoreClassItem(study, "StudyOrganisation", 
+                            new String[][]{{"contribType", contribType}, 
+                                            {"organisationName", ConverterCVT.SPONSOR_NONE}});
                     }
                 } else {    // Using raw value
-                    if (contribType.equals(ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT)) {
-                        studyPeople.setAttribute("organisationName", studyPeopleStr);
-                    } else {
-                        // TODO: setting both for now, need logic to distinguish people from orgs? -> check MDR
-                        studyPeople.setAttribute("organisationName", studyPeopleStr);
-                        studyPeople.setAttribute("personFullName", studyPeopleStr);
-                    }
+                    this.createAndStoreClassItem(study, "StudyOrganisation", 
+                        new String[][]{{"contribType", contribType}, 
+                                        {"organisationName", studyOrgStr}});
                 }
-            }
-
-            if (store) {
-                studyPeople.setReference("study", study);
-                store(studyPeople);
-                study.addToCollection("studyPeople", studyPeople);
             }
         }
     }
@@ -1070,7 +1028,7 @@ public class WhoConverter extends BaseConverter
             resultsSummaryDO.setAttribute("title", ConverterCVT.O_TITLE_RESULTS_SUMMARY);
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
             if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
                 resultsSummaryDO.setAttribute("displayTitle", studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY);
             } else {
@@ -1168,7 +1126,7 @@ public class WhoConverter extends BaseConverter
                 protocolDO.setAttribute("accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC);
 
                 // Display title
-                String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+                String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
                 if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
                     protocolDO.setAttribute("displayTitle", studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL);
                 } else {
@@ -1214,7 +1172,7 @@ public class WhoConverter extends BaseConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
             doRegistryEntry.setAttribute("publicationYear", publicationYear);
         }
-        String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+        String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
             doRegistryEntry.setAttribute("displayTitle", studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY);
         } else {
@@ -1229,12 +1187,12 @@ public class WhoConverter extends BaseConverter
         // Registry entry created date
         if (!ConverterUtils.isNullOrEmptyOrBlank(registrationDate)) {
             // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
-            Item dateUpdated = this.createAndStoreDate(doRegistryEntry, registrationDate, ConverterCVT.DATE_TYPE_CREATED, P_DATE_D_M_Y_SLASHES);
+            this.createAndStoreDate(doRegistryEntry, registrationDate, ConverterCVT.DATE_TYPE_CREATED, ConverterUtils.P_DATE_D_M_Y_SLASHES);
         }
 
         // Last update
         if (!ConverterUtils.isNullOrEmptyOrBlank(lastUpdate)) {
-            Item dateCreated = this.createAndStoreDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED, P_DATE_D_MWORD_Y_SPACES);
+            this.createAndStoreDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
         }
 
         doInst.setReference("dataObject", doRegistryEntry);
