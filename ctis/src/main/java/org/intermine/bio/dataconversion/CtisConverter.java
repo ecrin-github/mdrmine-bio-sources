@@ -12,6 +12,7 @@ package org.intermine.bio.dataconversion;
  */
 
 import java.io.Reader;
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -44,6 +45,8 @@ public class CtisConverter extends BaseConverter
     private static final Pattern P_STUDY_TOPICS = Pattern.compile(
         "^(?:\\[\\\")?(?:not\\h*possible\\h*to\\h*specify|([^\\[]+)\\h+\\[([^\\]]+)]\\h*-\\h*([^\\[]+)\\[([^\\]]+)])(?:\\\"])?$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_PHASES = Pattern.compile("^.*?phase\\h*(iv|iii|ii|i).*?(?:phase\\h*(iv|iii|ii|i).*)?$", Pattern.CASE_INSENSITIVE);
+
+    private static final String REGISTRY_ENTRY_BASE_URL = "https://euclinicaltrials.eu/ctis-public/view/";
 
     private static final String DATASET_TITLE = "CTIS_trials_20241202";
     private static final String DATA_SOURCE_NAME = "CTIS";
@@ -110,9 +113,11 @@ public class CtisConverter extends BaseConverter
     public void parseAndStoreValues(String[] lineValues) throws Exception {
         Item study = createItem("Study");
         // TODO: source id?
+        // TODO: DOs publication year
 
         /* ID */
         String trialID = this.getAndCleanValue(lineValues, "Trial number");
+        // TODO: change identifier to add CTIS prefix?
         this.trialID = trialID;
 
         this.createAndStoreStudyIdentifier(study, trialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, null);
@@ -120,13 +125,11 @@ public class CtisConverter extends BaseConverter
         /* Study title (need to get it before protocol DO) */
         String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
         if (!ConverterUtils.isNullOrEmptyOrBlank(trialTitle)) {
-            study.setAttribute("displayTitle", trialTitle);
-            // Note: guessing these are scientific titles by comparing them to WHO scientific titles, as they often contain
-            // an acronym of the title at the end of it, and are notably longer than public titles
+            study.setAttributeIfNotNull("displayTitle", trialTitle);
             this.createAndStoreClassItem(study, "StudyTitle", 
                 new String[][]{{"titleText", trialTitle}, {"titleType", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
         } else {
-            study.setAttribute("displayTitle", "Unknown study title");
+            study.setAttributeIfNotNull("displayTitle", "Unknown study title");
         }
         
         // Sponsor protocol code
@@ -147,6 +150,8 @@ public class CtisConverter extends BaseConverter
         // TODO: the multiple ranges may not be continuous but our current model only takes into account min and max ages (no range)
         String ageRangeSecondaryIdentifier = this.getAndCleanValue(lineValues, "Age range secondary identifier");
         this.parseAgeRanges(study, ageGroup, ageRangeSecondaryIdentifier);
+        study.setAttributeIfNotNull("testField1", "CTIS_" + ageGroup);
+        study.setAttributeIfNotNull("testField2", "CTIS_" + ageRangeSecondaryIdentifier);
 
         /* Gender */
         String gender = this.getAndCleanValue(lineValues, "Gender");
@@ -164,9 +169,7 @@ public class CtisConverter extends BaseConverter
         // TODO: match with MedDRA terminology
         String medicalConditions = this.getAndCleanValue(lineValues, "Medical conditions");
         this.parseStudyConditions(study, medicalConditions);
-        if (!ConverterUtils.isNullOrEmptyOrBlank(medicalConditions)) {
-            study.setAttribute("testField3", "CTIS_" + medicalConditions);
-        }
+        study.setAttributeIfNotNull("testField3", "CTIS_" + medicalConditions);
 
         /* Study topics */
         String therapeuticArea = this.getAndCleanValue(lineValues, "Therapeutic area");
@@ -175,13 +178,59 @@ public class CtisConverter extends BaseConverter
         /* Study phase */
         String trialPhase = this.getAndCleanValue(lineValues, "Trial phase");
         this.parseTrialPhase(study, trialPhase);
-        if (!ConverterUtils.isNullOrEmptyOrBlank(trialPhase)) {
-            study.setAttribute("testField4", "CTIS_" + trialPhase);
-        }
 
-        // TODO: create and store refactoring test
-        // TODO: construct briefDescription value (product, primary endpoint, field with study features)
-        
+        /* Study topic: product */
+        String product = this.getAndCleanValue(lineValues, "Product");
+        this.parseProduct(study, product);
+
+        /* Primary outcome */
+        String primaryEndpoint = this.getAndCleanValue(lineValues, "Primary endpoint");
+        this.parsePrimaryEndpoint(study, primaryEndpoint);
+
+        /* Secondary outcome */
+        String secondaryEndpoints = this.getAndCleanValue(lineValues, "Secondary endpoints");
+        this.parseSecondaryEndpoints(study, secondaryEndpoints);
+
+        // All dates are dd/mm/yyyy
+
+        /* Ethics approval notification DO + decision date */
+        String decisionDate = this.getAndCleanValue(lineValues, "Decision date");
+        this.parseDecisionDate(study, decisionDate);
+
+        /* Study start date */
+        String startDate = this.getAndCleanValue(lineValues, "Start date");
+        this.parseStudyStartDate(study, startDate);
+
+        /* Study end date */
+        // End date seems like it is the last end date for countries involved in the trial, other is "official" global end
+        // Example: https://euclinicaltrials.eu/ctis-public/view/2022-503108-26-00?lang=en
+        String endDate = this.getAndCleanValue(lineValues, "End date");
+        String globalEndOfTrial = this.getAndCleanValue(lineValues, "Global end of the trial");
+        this.parseTrialEndDate(study, endDate, globalEndOfTrial);
+        study.setAttributeIfNotNull("testField4", "CTIS_" + endDate);
+        study.setAttributeIfNotNull("testField5", "CTIS_" + globalEndOfTrial);
+
+        // Unused, same as WHO, yes or no value (majority of no)
+        String trialResults = this.getAndCleanValue(lineValues, "Trial results");
+        study.setAttributeIfNotNull("testField6", "CTIS_" + trialResults);
+
+        /* Study organisation: sponsors */
+        String sponsors = this.getAndCleanValue(lineValues, "Sponsor/Co-Sponsors");
+        String sponsorType = this.getAndCleanValue(lineValues, "Sponsor type");
+        this.parseSponsors(study, sponsors, sponsorType);
+        study.setAttributeIfNotNull("testField7", "CTIS_" + sponsors);
+        study.setAttributeIfNotNull("testField8", "CTIS_" + sponsorType);
+
+        /* Trial registry entry DO + instance + last updated date */
+        String lastUpdated = this.getAndCleanValue(lineValues, "Last updated");
+        this.createAndStoreRegistryEntryDO(study, lastUpdated);
+        study.setAttributeIfNotNull("testField9", "CTIS_" + lastUpdated);
+
+        /* Brief description (constructed) */
+        // TODO: missing Main Objective field from CTIS UI
+        ConverterUtils.addToBriefDescription(study, product);
+        ConverterUtils.addToBriefDescription(study, primaryEndpoint);
+
         store(study);
     }
 
@@ -196,7 +245,7 @@ public class CtisConverter extends BaseConverter
             // TODO: Try to get URL from euclinicaltrials.eu/ctis-public/view/[trial ID]? protocol can be in trial documents tab
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getDisplayTitleFromStudy(study);
+            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
             String doDisplayTitle;
             if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
@@ -220,9 +269,7 @@ public class CtisConverter extends BaseConverter
      */
     public void parseStudyStatus(Item study, String overallTrialStatus) {
         // TODO: normalise values
-        if (!ConverterUtils.isNullOrEmptyOrBlank(overallTrialStatus)) {
-            study.setAttribute("studyStatus", overallTrialStatus);
-        }
+        study.setAttributeIfNotNull("studyStatus", overallTrialStatus);
     }
 
     /**
@@ -278,7 +325,6 @@ public class CtisConverter extends BaseConverter
         boolean notEmpty = false;   // Used for setting value if no string couldn't be used but at least one of the string is N/A
         boolean alreadyParsed = false;
         if (!ConverterUtils.isNullOrEmptyOrBlank(ageRangeSecondaryIdentifier)) {
-            study.setAttribute("testField2", "CTIS_" + ageRangeSecondaryIdentifier);
             notEmpty = true;
             Matcher mAgeNASecondary = P_NOT_APPLICABLE.matcher(ageRangeSecondaryIdentifier);
             if (!mAgeNASecondary.matches()) {
@@ -287,7 +333,6 @@ public class CtisConverter extends BaseConverter
             }
         }
         if (!alreadyParsed && !ConverterUtils.isNullOrEmptyOrBlank(ageGroup)) {
-            study.setAttribute("testField1", "CTIS_" + ageGroup);
             notEmpty = true;
             Matcher mAgeNAPrimary = P_NOT_APPLICABLE.matcher(ageGroup);
             if (!mAgeNAPrimary.matches()) {
@@ -296,10 +341,10 @@ public class CtisConverter extends BaseConverter
             }
         }
         if (!alreadyParsed && !notEmpty) {  // None of the two values used for parsing but one or both of the values are N/A
-            study.setAttribute("minAge", ConverterCVT.NOT_APPLICABLE);
-            study.setAttribute("minAgeUnit", ConverterCVT.NOT_APPLICABLE);
-            study.setAttribute("maxAge", ConverterCVT.NOT_APPLICABLE);
-            study.setAttribute("maxAgeUnit", ConverterCVT.NOT_APPLICABLE);
+            study.setAttributeIfNotNull("minAge", ConverterCVT.NOT_APPLICABLE);
+            study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.NOT_APPLICABLE);
+            study.setAttributeIfNotNull("maxAge", ConverterCVT.NOT_APPLICABLE);
+            study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.NOT_APPLICABLE);
         }
     }
 
@@ -436,19 +481,19 @@ public class CtisConverter extends BaseConverter
      */
     public void setAgesAndUnits(Item study, String minAge, String maxAge, String minAgeUnit, String maxAgeUnit) {
         if (minAge != null) {
-            study.setAttribute("minAge", minAge);
+            study.setAttributeIfNotNull("minAge", minAge);
             if (minAgeUnit != null && !minAge.equals(ConverterCVT.AGE_IN_UTERO)) {
-                study.setAttribute("minAgeUnit", minAgeUnit);
+                study.setAttributeIfNotNull("minAgeUnit", minAgeUnit);
             } else {
-                study.setAttribute("minAgeUnit", ConverterCVT.NOT_APPLICABLE);
+                study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.NOT_APPLICABLE);
             }
         }
         if (maxAge != null) {
-            study.setAttribute("maxAge", maxAge);
+            study.setAttributeIfNotNull("maxAge", maxAge);
             if (maxAgeUnit != null && !maxAge.equals(ConverterCVT.NONE)) {
-                study.setAttribute("maxAgeUnit", maxAgeUnit);
+                study.setAttributeIfNotNull("maxAgeUnit", maxAgeUnit);
             } else {
-                study.setAttribute("maxAgeUnit", ConverterCVT.NOT_APPLICABLE);
+                study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.NOT_APPLICABLE);
             }
         }
     }
@@ -461,12 +506,12 @@ public class CtisConverter extends BaseConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(gender)) {
             if (gender.contains(ConverterCVT.GENDER_MEN.toLowerCase())) {
                 if (gender.contains(ConverterCVT.GENDER_WOMEN.toLowerCase())) {
-                    study.setAttribute("studyGenderElig", ConverterCVT.GENDER_ALL);
+                    study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_ALL);
                 } else {
-                    study.setAttribute("studyGenderElig", ConverterCVT.GENDER_MEN);
+                    study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_MEN);
                 }
             } else if (gender.contains(ConverterCVT.GENDER_WOMEN.toLowerCase())) {
-                study.setAttribute("studyGenderElig", ConverterCVT.GENDER_WOMEN);
+                study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_WOMEN);
             } else {
                 this.writeLog("parseGender(): value not empty but contains neither \"female\" nor \"male\"");
             }
@@ -482,7 +527,7 @@ public class CtisConverter extends BaseConverter
             if (Long.valueOf(enrolment) > Integer.MAX_VALUE) {
                 enrolment = String.valueOf((Integer.MAX_VALUE));
             }
-            study.setAttribute("studyEnrolment", enrolment);
+            study.setAttributeIfNotNull("studyEnrolment", enrolment);
         }
     }
 
@@ -553,6 +598,172 @@ public class CtisConverter extends BaseConverter
                 }
             } else {
                 this.writeLog("parseTrialPhase(): couldn't parse trial phase string: " + trialPhase);
+            }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void parseProduct(Item study, String product) throws Exception {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(product)) {
+            // Setting interventions field as well
+            study.setAttribute("interventions", product);
+
+            Matcher mNA = P_NOT_APPLICABLE.matcher(product);
+            // TODO: match with CT
+            if (!mNA.matches() && !product.equals("-")) {
+                 this.createAndStoreClassItem(study, "StudyTopic", 
+                    new String[][]{{"topicType", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT}, {"originalValue", product}});
+            }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void parsePrimaryEndpoint(Item study, String primaryEndpoint) {
+        study.setAttributeIfNotNull("primaryOutcome", primaryEndpoint);
+    }
+
+    /**
+     * TODO
+     */
+    public void parseSecondaryEndpoints(Item study, String secondaryEndpoints) {
+        study.setAttributeIfNotNull("secondaryOutcomes", secondaryEndpoints);
+    }
+
+    /**
+     * TODO
+     */
+    public void parseDecisionDate(Item study, String decisionDateStr) throws Exception {
+        String studyStatus = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
+        
+        // Check study status to add ethics approval notification
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyStatus) 
+                && !studyStatus.toLowerCase().equals("not authorised")
+                && !studyStatus.toLowerCase().equals("revoked")) {
+
+            LocalDate decisionDate = ConverterUtils.getDateFromString(decisionDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+            if (decisionDate != null) {
+                // Display title
+                String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+                String doDisplayTitle;
+                if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                    doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
+                } else {
+                    doDisplayTitle = ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
+                }
+
+                /* Ethics approval notification DO */
+                Item ethicsApprovalDO = this.createAndStoreClassItem(study, "DataObject", 
+                    new String[][]{{"objectType", ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION},
+                                    {"title", ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION}, {"displayTitle", doDisplayTitle}});
+                
+                /* Object date: decision date */
+                this.createAndStoreClassItem(ethicsApprovalDO, "ObjectDate", 
+                    new String[][]{{"dateType", ConverterCVT.DATE_TYPE_ISSUED},
+                                    {"dateAsString", decisionDate.toString()}, {"startDay", String.valueOf(decisionDate.getDayOfMonth())},
+                                    {"startMonth", String.valueOf(decisionDate.getMonthValue())}, {"startYear", String.valueOf(decisionDate.getYear())}});
+            }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void parseStudyStartDate(Item study, String startDateStr) {
+        Matcher mNA = P_NOT_APPLICABLE.matcher(startDateStr);
+        if (!mNA.matches()) {
+            LocalDate startDate = ConverterUtils.getDateFromString(startDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+            if (startDate != null) {
+                study.setAttributeIfNotNull("studyStartYear", String.valueOf(startDate.getYear()));
+                study.setAttributeIfNotNull("studyStartMonth", String.valueOf(startDate.getMonthValue()));
+            }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void parseSponsors(Item study, String sponsors, String sponsorTypes) throws Exception {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(sponsors)) {
+            HashSet seenSponsors = new HashSet<String>();
+            String sponsor;
+            String type;
+
+            String[] separatedSponsors = sponsors.split(", ");
+            String[] separatedTypes = sponsorTypes.split(", ");
+            if (separatedSponsors.length != separatedTypes.length) {
+                this.writeLog("parseSponsors(): numbers of sponsors and sponsorTypes don't match, sponsors: " 
+                                + separatedSponsors + " types: " + separatedTypes);
+            } else {
+                for (int i = 0; i < separatedSponsors.length; i++) {
+                    sponsor = separatedSponsors[i];
+                    type = separatedTypes[i];
+                    if (!seenSponsors.contains(sponsor)) {
+                        // TODO: organisationRor
+                        this.createAndStoreClassItem(study, "StudyOrganisation", 
+                            new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, 
+                                            {"organisationName", sponsor}, {"organisationType", type}});
+                        seenSponsors.add(sponsor);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void createAndStoreRegistryEntryDO(Item study, String lastUpdated) throws Exception {
+        String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+        String doDisplayTitle;
+        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+        } else {
+            doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+        }
+
+        /* Trial registry entry DO */
+        Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
+            new String[][]{{"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
+                            {"title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"displayTitle", doDisplayTitle}});
+
+        /* Registry entry instance */
+        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID)) {
+            // Instance with constructed URL
+            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
+                new String[][]{{"url", REGISTRY_ENTRY_BASE_URL + trialID}, 
+                                {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
+        }
+
+        /* Last update object date */
+        this.createAndStoreObjectDate(doRegistryEntry, lastUpdated, ConverterUtils.P_DATE_D_M_Y_SLASHES, ConverterCVT.DATE_TYPE_UPDATED);
+    }
+
+    /**
+     * TODO
+     */
+    public void parseTrialEndDate(Item study, String endDateStr, String globalEndDateStr) throws Exception {
+        String dateStr = null;
+        // Attempting to use global end date first, end date second
+        Matcher mNA = P_NOT_APPLICABLE.matcher(globalEndDateStr);
+        if (!mNA.matches()) {
+            dateStr = globalEndDateStr;
+        } else {
+            mNA = P_NOT_APPLICABLE.matcher(endDateStr);
+            if (!mNA.matches()) {
+                dateStr = endDateStr;
+            }
+        }
+
+        if (dateStr != null) {
+            LocalDate endDate = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+            if (endDate != null) {
+                study.setAttribute("studyEndYear", String.valueOf(endDate.getYear()));
+                study.setAttribute("studyEndMonth", String.valueOf(endDate.getMonthValue()));
+                study.setAttribute("studyEndDay", String.valueOf(endDate.getDayOfMonth()));
             }
         }
     }
