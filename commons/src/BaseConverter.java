@@ -1,7 +1,7 @@
 package org.intermine.bio.dataconversion;
 
 /*
- * Copyright (C) 2024 MDRMine
+ * Copyright (C) 2024-2025 MDRMine
  *
  * This code may be freely distributed and modified under the
  * terms of the GNU Lesser General Public Licence.  This should
@@ -71,18 +71,10 @@ public abstract class BaseConverter extends BioFileConverter
         Item studyIdentifier = null;
 
         if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
-            studyIdentifier = createItem("StudyIdentifier");
-            studyIdentifier.setAttribute("identifierValue", trialID);
-            if (!ConverterUtils.isNullOrEmptyOrBlank(identifierType)) {
-                studyIdentifier.setAttribute("identifierType", identifierType);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(identifierLink)) {
-                studyIdentifier.setAttribute("identifierLink", identifierLink);
-            }
-            studyIdentifier.setReference("study", study);
-
-            store(studyIdentifier);
-            study.addToCollection("studyIdentifiers", studyIdentifier);
+            this.createAndStoreClassItem(study, "StudyIdentifier", 
+                new String[][]{{"identifierValue", id}, {"identifierType", identifierType},
+                                {"identifierLink", identifierLink}});
+            this.trialID = id;
         }
 
         return studyIdentifier;
@@ -202,16 +194,6 @@ public abstract class BaseConverter extends BioFileConverter
 
         return objectDate;
     }
-
-    /**
-     * Get field value from array of values using a field's position-lookup Map, value is also cleaned.
-     * 
-     * @param lineValues the list of all values for a line in the data file
-     * @param field the name of the field to get the value of
-     * @return the cleaned value of the field
-     * @see #cleanValue()
-     */
-    public abstract String getAndCleanValue(String[] lineValues, String field);
 
     /**
      * Clean a value according to the subclass' logic. Note: method should be static but Java does not allow abstract + static

@@ -9,5 +9,7 @@ include ':bio-source-pubmed'
 project(':bio-source-pubmed').projectDir = new File(settingsDir, './pubmed')
 include ':bio-source-ctis'
 project(':bio-source-ctis').projectDir = new File(settingsDir, './ctis')
+include ':bio-source-euctr'
+project(':bio-source-euctr').projectDir = new File(settingsDir, './euctr')
 include ':commons'
 project(':commons').projectDir = new File(settingsDir, './commons')

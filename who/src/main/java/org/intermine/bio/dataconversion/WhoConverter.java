@@ -1,7 +1,7 @@
 package org.intermine.bio.dataconversion;
 
 /*
- * Copyright (C) 2024 MDRMine
+ * Copyright (C) 2024-2025 MDRMine
  * Modified from 2002-2019 FlyMine 
  *
  * This code may be freely distributed and modified under the
@@ -177,7 +177,6 @@ public class WhoConverter extends BaseConverter
         /* ID and ID URL */
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
         String url = this.getAndCleanValue(lineValues, "url");
-        this.trialID = trialID;
 
         this.createAndStoreStudyIdentifier(study, trialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, url);
 

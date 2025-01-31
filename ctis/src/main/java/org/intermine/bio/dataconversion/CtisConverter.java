@@ -1,7 +1,7 @@
 package org.intermine.bio.dataconversion;
 
 /*
- * Copyright (C) 2024 MDRMine
+ * Copyright (C) 2024-2025 MDRMine
  * Modified from 2002-2019 FlyMine
  *
  * This code may be freely distributed and modified under the
@@ -118,8 +118,6 @@ public class CtisConverter extends BaseConverter
         /* ID */
         String trialID = this.getAndCleanValue(lineValues, "Trial number");
         // TODO: change identifier to add CTIS prefix?
-        this.trialID = trialID;
-
         this.createAndStoreStudyIdentifier(study, trialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, null);
 
         /* Study title (need to get it before protocol DO) */
@@ -640,6 +638,7 @@ public class CtisConverter extends BaseConverter
         String studyStatus = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
         
         // Check study status to add ethics approval notification
+        // TODO: no info of decision date in model if not authorised
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyStatus) 
                 && !studyStatus.toLowerCase().equals("not authorised")
                 && !studyStatus.toLowerCase().equals("revoked")) {
@@ -731,10 +730,10 @@ public class CtisConverter extends BaseConverter
                             {"title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"displayTitle", doDisplayTitle}});
 
         /* Registry entry instance */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(this.trialID)) {
             // Instance with constructed URL
             this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-                new String[][]{{"url", REGISTRY_ENTRY_BASE_URL + trialID}, 
+                new String[][]{{"url", REGISTRY_ENTRY_BASE_URL + this.trialID}, 
                                 {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
         }
 
@@ -781,6 +780,9 @@ public class CtisConverter extends BaseConverter
         return this.cleanValue(lineValues[this.fieldsToInd.get(field)], true);
     }
 
+    /**
+     * TODO
+     */
     public String cleanValue(String s, boolean strip) {
         if (strip) {
             return s.strip();
