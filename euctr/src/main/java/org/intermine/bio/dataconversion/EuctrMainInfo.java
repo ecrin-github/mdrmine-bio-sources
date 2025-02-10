@@ -27,35 +27,62 @@ public class EuctrMainInfo {
     @JacksonXmlProperty(localName = "trial_id")
     private String trialId;
     private String utrn;
-    private String reg_name;
-    private String date_registration;
-    private String primary_sponsor;
+    @JacksonXmlProperty(localName = "reg_name")
+    private String regName;
+    @JacksonXmlProperty(localName = "date_registration")
+    private String dateRegistration;
+    @JacksonXmlProperty(localName = "primary_sponsor")
+    private String primarySponsor;
     @JacksonXmlProperty(localName = "public_title")
     private String publicTitle;
     private String acronym;
-    private String scientific_title;
-    private String scientific_acronym;
-    private String date_enrolment;
-    private String type_enrolment;
-    private String target_size;
-    private String recruitment_status;
+    @JacksonXmlProperty(localName = "scientific_title")
+    private String scientificTitle;
+    @JacksonXmlProperty(localName = "scientific_acronym")
+    private String scientificAcronym;
+    @JacksonXmlProperty(localName = "date_enrolment")
+    private String dateEnrolment;
+    @JacksonXmlProperty(localName = "type_enrolment")
+    private String typeEnrolment;
+    @JacksonXmlProperty(localName = "target_size")
+    private String targetSize;
+    @JacksonXmlProperty(localName = "recruitment_status")
+    private String recruitmentStatus;
+    @JacksonXmlProperty(localName = "url")
     private String url;
-    private String study_type;
-    private String study_design;
+    @JacksonXmlProperty(localName = "study_type")
+    private String studyType;
+    @JacksonXmlProperty(localName = "study_design")
+    private String studyDesign;
     private String phase;
-    private String hc_freetext;
-    private String i_freetext;
-    private String results_actual_enrolment;
-    private String results_date_completed;
-    private String results_url_link;
-    private String results_summary;
-    private String results_date_posted;
-    private String results_date_first_publication;
-    private String results_baseline_char;
-    private String results_participant_flow;
-    private String results_adverse_events;
-    private String results_outcome_measures;
-    private String results_url_protocol;
-    private String results_IPD_plan;
-    private String results_IPD_description;
+    @JacksonXmlProperty(localName = "hc_freetext")
+    private String hcFreetext;
+    @JacksonXmlProperty(localName = "i_freetext")
+    private String iFreetext;
+    @JacksonXmlProperty(localName = "results_actual_enrolment")
+    private String resultsActualEnrolment;
+    @JacksonXmlProperty(localName = "results_date_completed")
+    private String resultsDateCompleted;
+    @JacksonXmlProperty(localName = "results_url_link")
+    private String resultsUrlLink;
+    @JacksonXmlProperty(localName = "results_summary")
+    private String resultsSummary;
+    @JacksonXmlProperty(localName = "results_date_posted")
+    private String resultsDatePosted;
+    @JacksonXmlProperty(localName = "results_date_first_publication")
+    private String resultsDateFirst_Publication;
+    @JacksonXmlProperty(localName = "results_baseline_char")
+    private String resultsBaselineChar;
+    @JacksonXmlProperty(localName = "results_participant_flow")
+    private String resultsParticipantFlow;
+    @JacksonXmlProperty(localName = "results_adverse_events")
+    private String resultsAdverseEvents;
+    @JacksonXmlProperty(localName = "results_outcome_measures")
+    private String resultsOutcomeMeasures;
+    @JacksonXmlProperty(localName = "results_url_protocol")
+    private String resultsUrlProtocol;
+    @JacksonXmlProperty(localName = "results_IPD_plan")
+    private String resultsIPDPlan;
+    @JacksonXmlProperty(localName = "results_IPD_description")
+    private String resultsIPDDescription;
 }

@@ -1,7 +1,7 @@
 package org.intermine.bio.dataconversion;
 
 /*
- * Copyright (C) 2024 MDRMine
+ * Copyright (C) 2024-2025 MDRMine
  *
  * This code may be freely distributed and modified under the
  * terms of the GNU Lesser General Public Licence.  This should
@@ -88,6 +88,16 @@ public class ConverterUtils
     public static String normaliseWord(String w) {
         if (w.length() > 0) {
             w = w.substring(0,1).toUpperCase() + w.substring(1).toLowerCase();
+        }
+        return w;
+    }
+
+    /**
+     * TODO
+     */
+    public static String capitaliseFirstLetter(String w) {
+        if (w.length() > 0) {
+            w = w.substring(0,1).toUpperCase() + w.substring(1);
         }
         return w;
     }
@@ -187,7 +197,7 @@ public class ConverterUtils
      * @return true if string is a positive whole number, false otherwise
      */
     public static boolean isPosWholeNumber(String s) {
-        if (s.length() == 0) { return false; }
+        if (s == null || s.length() == 0) { return false; }
         
         for (int i = 0; i < s.length(); i++) {
             if (Character.isDigit(s.charAt(i))) {

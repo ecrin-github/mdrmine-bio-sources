@@ -43,7 +43,8 @@ public abstract class BaseConverter extends BioFileConverter
 
     private String logDir = "";
     private Writer logWriter = null;
-    protected String trialID = null;
+    protected String currentTrialID = null;
+    protected boolean existingStudy = false;    // Indicates if currently parsing an existing study
 
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
                              String dataSetTitle) {
@@ -74,7 +75,6 @@ public abstract class BaseConverter extends BioFileConverter
             this.createAndStoreClassItem(study, "StudyIdentifier", 
                 new String[][]{{"identifierValue", id}, {"identifierType", identifierType},
                                 {"identifierLink", identifierLink}});
-            this.trialID = id;
         }
 
         return studyIdentifier;
@@ -115,8 +115,8 @@ public abstract class BaseConverter extends BioFileConverter
     public void writeLog(String text) {
         try {
             if (this.logWriter != null) {
-                if (this.trialID != null) {
-                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + this.trialID + " - " + text + "\n");
+                if (this.currentTrialID != null) {
+                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + this.currentTrialID + " - " + text + "\n");
                     this.logWriter.flush();
                 } else {
                     // TODO: temp, modify it to still log but without id?
@@ -186,10 +186,7 @@ public abstract class BaseConverter extends BioFileConverter
         LocalDate date = ConverterUtils.getDateFromString(dateStr, dateFormatter);
         if (date != null) {
             objectDate = this.createAndStoreClassItem(dataObject, "ObjectDate", 
-                new String[][]{{"dateType", dateType}, {"dateAsString", date.toString()}, 
-                                {"startDay", String.valueOf(date.getDayOfMonth())}, 
-                                {"startMonth", String.valueOf(date.getMonthValue())}, 
-                                {"startYear", String.valueOf(date.getYear())}});
+                new String[][]{{"dateType", dateType}, {"startDate", date.toString()}});
         }
 
         return objectDate;

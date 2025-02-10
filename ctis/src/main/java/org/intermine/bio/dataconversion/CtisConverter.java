@@ -119,6 +119,7 @@ public class CtisConverter extends BaseConverter
         String trialID = this.getAndCleanValue(lineValues, "Trial number");
         // TODO: change identifier to add CTIS prefix?
         this.createAndStoreStudyIdentifier(study, trialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, null);
+        this.currentTrialID = trialID;
 
         /* Study title (need to get it before protocol DO) */
         String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
@@ -155,9 +156,9 @@ public class CtisConverter extends BaseConverter
         String gender = this.getAndCleanValue(lineValues, "Gender");
         this.parseGender(study, gender);
 
-        /* Enrolment */
+        /* Planned enrolment */
         String enrolment = this.getAndCleanValue(lineValues, "Number of participants enrolled");
-        this.setStudyEnrolment(study, enrolment);
+        this.setPlannedEnrolment(study, enrolment);
 
         /* Trial region */
         // Unused, this value only says if the region of the trial is in the EEA only, or both in EEA and non-EEA countries (or N/A)
@@ -519,13 +520,9 @@ public class CtisConverter extends BaseConverter
     /**
      * TODO
      */
-    public void setStudyEnrolment(Item study, String enrolment) {
-        if (enrolment != null) {
-            // We have to check that study enrolment does not exceed Integer max value, Long doesn't seem to be properly supported by Intermine
-            if (Long.valueOf(enrolment) > Integer.MAX_VALUE) {
-                enrolment = String.valueOf((Integer.MAX_VALUE));
-            }
-            study.setAttributeIfNotNull("studyEnrolment", enrolment);
+    public void setPlannedEnrolment(Item study, String enrolment) {
+        if (enrolment != null && !(Long.valueOf(enrolment) > Integer.MAX_VALUE)) {
+            study.setAttributeIfNotNull("plannedEnrolment", enrolment);
         }
     }
 
@@ -661,9 +658,7 @@ public class CtisConverter extends BaseConverter
                 
                 /* Object date: decision date */
                 this.createAndStoreClassItem(ethicsApprovalDO, "ObjectDate", 
-                    new String[][]{{"dateType", ConverterCVT.DATE_TYPE_ISSUED},
-                                    {"dateAsString", decisionDate.toString()}, {"startDay", String.valueOf(decisionDate.getDayOfMonth())},
-                                    {"startMonth", String.valueOf(decisionDate.getMonthValue())}, {"startYear", String.valueOf(decisionDate.getYear())}});
+                    new String[][]{{"dateType", ConverterCVT.DATE_TYPE_ISSUED}, {"startDate", decisionDate.toString()}});
             }
         }
     }
@@ -676,8 +671,7 @@ public class CtisConverter extends BaseConverter
         if (!mNA.matches()) {
             LocalDate startDate = ConverterUtils.getDateFromString(startDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
             if (startDate != null) {
-                study.setAttributeIfNotNull("studyStartYear", String.valueOf(startDate.getYear()));
-                study.setAttributeIfNotNull("studyStartMonth", String.valueOf(startDate.getMonthValue()));
+                study.setAttributeIfNotNull("startDate", String.valueOf(startDate.toString()));
             }
         }
     }
@@ -695,7 +689,7 @@ public class CtisConverter extends BaseConverter
             String[] separatedTypes = sponsorTypes.split(", ");
             if (separatedSponsors.length != separatedTypes.length) {
                 this.writeLog("parseSponsors(): numbers of sponsors and sponsorTypes don't match, sponsors: " 
-                                + separatedSponsors + " types: " + separatedTypes);
+                                + separatedSponsors.length + " types: " + separatedTypes.length);
             } else {
                 for (int i = 0; i < separatedSponsors.length; i++) {
                     sponsor = separatedSponsors[i];
@@ -730,10 +724,10 @@ public class CtisConverter extends BaseConverter
                             {"title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"displayTitle", doDisplayTitle}});
 
         /* Registry entry instance */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(this.trialID)) {
+        if (!ConverterUtils.isNullOrEmptyOrBlank(this.currentTrialID)) {
             // Instance with constructed URL
             this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-                new String[][]{{"url", REGISTRY_ENTRY_BASE_URL + this.trialID}, 
+                new String[][]{{"url", REGISTRY_ENTRY_BASE_URL + this.currentTrialID}, 
                                 {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
         }
 
@@ -760,9 +754,7 @@ public class CtisConverter extends BaseConverter
         if (dateStr != null) {
             LocalDate endDate = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
             if (endDate != null) {
-                study.setAttribute("studyEndYear", String.valueOf(endDate.getYear()));
-                study.setAttribute("studyEndMonth", String.valueOf(endDate.getMonthValue()));
-                study.setAttribute("studyEndDay", String.valueOf(endDate.getDayOfMonth()));
+                study.setAttribute("endDate", endDate.toString());
             }
         }
     }

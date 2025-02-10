@@ -1,7 +1,7 @@
 package org.intermine.bio.dataconversion;
 
 /*
- * Copyright (C) 2024 MDRMine
+ * Copyright (C) 2024-2025 MDRMine
  *
  * This code may be freely distributed and modified under the
  * terms of the GNU Lesser General Public Licence.  This should
@@ -55,6 +55,8 @@ public class ConverterCVT
     public static final String O_RESOURCE_TYPE_WEB_TEXT = "Web text";
     public static final String O_TITLE_RESULTS_SUMMARY = "Results summary";
     public static final String O_TITLE_REGISTRY_ENTRY = "Registry web page";
+    public static final String CONTRIBUTOR_TYPE_PUBLIC_CONTACT = "Public contact";
+    public static final String CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT = "Scientific contact";
     public static final String CONTRIBUTOR_TYPE_SPONSOR = "Sponsor";
     public static final String CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT = "Scientific support organisation";
     public static final String DATE_TYPE_AVAILABLE = "Available";
