@@ -21,14 +21,15 @@ import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
-
+import java.util.Properties;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
 import org.intermine.metadata.Model;
 import org.intermine.metadata.ReferenceDescriptor ;
+import org.intermine.objectstore.ObjectStore;
+import org.intermine.objectstore.ObjectStoreFactory;
+import org.intermine.util.PropertiesUtil;
 import org.intermine.xml.full.Item;
 
 
@@ -45,24 +46,46 @@ public abstract class BaseConverter extends BioFileConverter
     private Writer logWriter = null;
     protected String currentTrialID = null;
     protected boolean existingStudy = false;    // Indicates if currently parsing an existing study
+    protected ObjectStore os = null;
 
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
                              String dataSetTitle) {
         super(writer, model, dataSourceName, dataSetTitle);
+        this.initObjectStore();
     }
-
+    
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
-                             String dataSetTitle, String licence) {
+    String dataSetTitle, String licence) {
         super(writer, model, dataSourceName, dataSetTitle, licence);
+        this.initObjectStore();
     }
-
+    
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
-            String dataSetTitle, String licence, boolean storeOntology) {
+    String dataSetTitle, String licence, boolean storeOntology) {
         super(writer, model, dataSourceName, dataSetTitle, licence, storeOntology);
+        this.initObjectStore();
     }
-
+    
     public BaseConverter(ItemWriter writer, Model model) {
         super(writer, model);
+        this.initObjectStore();
+    }
+
+    /**
+     * TODO
+     */
+    public void initObjectStore() {
+        try {
+            String alias = "osw.production";
+            Properties intermineProps = PropertiesUtil.getProperties();
+            Properties noPrefixProps = PropertiesUtil.stripStart(alias, intermineProps);
+            String osAlias = noPrefixProps.getProperty("os");
+    
+            this.os = ObjectStoreFactory.getObjectStore(osAlias);
+        } catch(Exception e) {
+            // TODO
+            ;
+        }
     }
 
     /**
@@ -158,21 +181,41 @@ public abstract class BaseConverter extends BioFileConverter
         ReferenceDescriptor[] rdArr = cd.getReferenceDescriptors().toArray(ReferenceDescriptor[]::new);
 
         // Get reference field of class (either "study" or "linkedStudy" for data objects)
-        String referencedClass = rdArr[0].getName();
-        // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
-        String reverseReferencedClass = rdArr[0].getReverseReferenceFieldName();
 
-        // Set class values from fieldName - value pairs passed as argument
-        for (int i = 0; i < kv.length; i++) {
-            if (kv[i].length != 2) {
-                throw new Exception("Key value tuple is not of length == 2");
+        // Find index of reference to non-CV class
+        String referenceName = null;
+        int i = 0;
+        boolean found = false;
+        while (!found && i < rdArr.length) {
+            referenceName = rdArr[i].getName();
+
+            if (referenceName.equalsIgnoreCase("study") || referenceName.equalsIgnoreCase("dataObject") || referenceName.equalsIgnoreCase("linkedStudy")) {
+                found = true;
             }
-            classItem.setAttributeIfNotNull(kv[i][0], kv[i][1]);
+
+            if (!found) {
+                i++;
+            }
         }
 
-        classItem.setReference(referencedClass, mainClassItem);
-        store(classItem);
-        mainClassItem.addToCollection(reverseReferencedClass, classItem);
+        if (!found) {
+            this.writeLog("createAndStoreClassItem(): couldn't find a known referenceName (study or dataobject) in class " + className);
+        } else {
+            // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
+            String reverseReferenceName = rdArr[i].getReverseReferenceFieldName();
+    
+            // Set class values from fieldName - value pairs passed as argument
+            for (int j = 0; j < kv.length; j++) {
+                if (kv[j].length != 2) {
+                    throw new Exception("Key value tuple is not of length == 2");
+                }
+                classItem.setAttributeIfNotNull(kv[j][0], kv[j][1]);
+            }
+    
+            classItem.setReference(referenceName, mainClassItem);
+            store(classItem);
+            mainClassItem.addToCollection(reverseReferenceName, classItem);
+        }
 
         return classItem;
     }

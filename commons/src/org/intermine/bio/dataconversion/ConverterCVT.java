@@ -19,6 +19,9 @@ package org.intermine.bio.dataconversion;
  */
 public class ConverterCVT
 {
+    /* Registries */
+    public static final String R_EUCTR = "EUCTR";
+
     /* Studies */
     public static final String NOT_APPLICABLE = "N/A";
     public static final String UNKNOWN = "Unknown";
