@@ -11,12 +11,22 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.nio.charset.StandardCharsets;
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
+import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 import java.io.File;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -24,24 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.objectstore.intermine.ObjectStoreInterMineImpl;
-import org.intermine.objectstore.intermine.ObjectStoreWriterInterMineImpl;
-import org.intermine.objectstore.query.QueryCreator; 
-import org.intermine.objectstore.query.Query; 
-import org.intermine.xml.full.Item;
-import org.intermine.xml.full.Attribute;
-
-import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.commons.text.WordUtils;
-
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
-
 
 
 /**
