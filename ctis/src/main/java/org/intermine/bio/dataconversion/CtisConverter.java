@@ -211,19 +211,18 @@ public class CtisConverter extends BaseConverter
 
         // Unused, same as WHO, yes or no value (majority of no)
         String trialResults = this.getAndCleanValue(lineValues, "Trial results");
-        study.setAttributeIfNotNull("testField6", "CTIS_" + trialResults);
 
         /* Study organisation: sponsors */
         String sponsors = this.getAndCleanValue(lineValues, "Sponsor/Co-Sponsors");
         String sponsorType = this.getAndCleanValue(lineValues, "Sponsor type");
         this.parseSponsors(study, sponsors, sponsorType);
-        study.setAttributeIfNotNull("testField7", "CTIS_" + sponsors);
-        study.setAttributeIfNotNull("testField8", "CTIS_" + sponsorType);
+        study.setAttributeIfNotNull("testField6", "CTIS_" + sponsors);
+        study.setAttributeIfNotNull("testField7", "CTIS_" + sponsorType);
 
         /* Trial registry entry DO + instance + last updated date */
         String lastUpdated = this.getAndCleanValue(lineValues, "Last updated");
         this.createAndStoreRegistryEntryDO(study, lastUpdated);
-        study.setAttributeIfNotNull("testField9", "CTIS_" + lastUpdated);
+        study.setAttributeIfNotNull("testField8", "CTIS_" + lastUpdated);
 
         /* Brief description (constructed) */
         // TODO: missing Main Objective field from CTIS UI

@@ -45,7 +45,7 @@ public abstract class BaseConverter extends BioFileConverter
     private String logDir = "";
     private Writer logWriter = null;
     protected String currentTrialID = null;
-    protected boolean existingStudy = false;    // Indicates if currently parsing an existing study
+    protected Item existingStudy = null;    // Indicates if currently parsing an existing study (if not null)
     protected ObjectStore os = null;
 
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
@@ -69,6 +69,13 @@ public abstract class BaseConverter extends BioFileConverter
     public BaseConverter(ItemWriter writer, Model model) {
         super(writer, model);
         this.initObjectStore();
+    }
+
+    /**
+     * 
+     */
+    public boolean existingStudy() {
+        return this.existingStudy != null;
     }
 
     /**
@@ -174,35 +181,33 @@ public abstract class BaseConverter extends BioFileConverter
      * @return the created item
      */
     public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
+        Item item = this.createClassItem(mainClassItem, className, kv);
+        if (item != null) {
+            store(item);
+        }
+        return item;
+    }
+
+    /**
+     * Create item (instance) of a class. Works for all classes except the Study class.
+     * 
+     * @param mainClassItem the already created item of the main class to reference (Study)
+     * @param className the name of the class to create an item of
+     * @param kv array of field name - field value pairs to set class item attribute values
+     * @return the created item
+     */
+    public Item createClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
         Item classItem = createItem(className);
 
-        // Get class descriptor to get reference field
-        ClassDescriptor cd = this.getModel().getClassDescriptorByName(className);
-        ReferenceDescriptor[] rdArr = cd.getReferenceDescriptors().toArray(ReferenceDescriptor[]::new);
-
         // Get reference field of class (either "study" or "linkedStudy" for data objects)
+        ReferenceDescriptor reference = this.getReferenceDescriptorOfClass(className);
+        String referenceName = reference.getName();
 
-        // Find index of reference to non-CV class
-        String referenceName = null;
-        int i = 0;
-        boolean found = false;
-        while (!found && i < rdArr.length) {
-            referenceName = rdArr[i].getName();
-
-            if (referenceName.equalsIgnoreCase("study") || referenceName.equalsIgnoreCase("dataObject") || referenceName.equalsIgnoreCase("linkedStudy")) {
-                found = true;
-            }
-
-            if (!found) {
-                i++;
-            }
-        }
-
-        if (!found) {
+        if (reference == null) {
             this.writeLog("createAndStoreClassItem(): couldn't find a known referenceName (study or dataobject) in class " + className);
         } else {
             // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
-            String reverseReferenceName = rdArr[i].getReverseReferenceFieldName();
+            String reverseReferenceName = reference.getReverseReferenceFieldName();
     
             // Set class values from fieldName - value pairs passed as argument
             for (int j = 0; j < kv.length; j++) {
@@ -213,11 +218,53 @@ public abstract class BaseConverter extends BioFileConverter
             }
     
             classItem.setReference(referenceName, mainClassItem);
-            store(classItem);
             mainClassItem.addToCollection(reverseReferenceName, classItem);
         }
 
         return classItem;
+    }
+
+    /**
+     * TODO
+     * only for classes that have 1 ref
+     */
+    public ReferenceDescriptor getReferenceDescriptorOfClass(String className) {
+        ReferenceDescriptor rd = null;
+
+        // Get class descriptor to get reference field
+        ClassDescriptor cd = this.getModel().getClassDescriptorByName(className);
+        ReferenceDescriptor[] rdArr = cd.getReferenceDescriptors().toArray(ReferenceDescriptor[]::new);
+
+        // Find index of reference to non-CV class
+        String refName = null;
+        int i = 0;
+        boolean found = false;
+        while (!found && i < rdArr.length) {
+            refName = rdArr[i].getName();
+
+            if (refName.equalsIgnoreCase("study") || refName.equalsIgnoreCase("dataObject") || refName.equalsIgnoreCase("linkedStudy")) {
+                found = true;
+                rd = rdArr[i];
+            }
+
+            i++;
+        }
+
+        return rd;
+    }
+
+    /**
+     * TODO
+     */
+    public String getReverseReferenceNameOfClass(String className) {
+        String revRef = null;
+
+        ReferenceDescriptor rd = this.getReferenceDescriptorOfClass(className);
+        if (rd != null) {
+            revRef = rd.getReverseReferenceFieldName();
+        }
+
+        return revRef;
     }
 
     /**

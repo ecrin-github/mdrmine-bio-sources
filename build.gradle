@@ -49,6 +49,7 @@ subprojects {
         compile group: 'com.fasterxml.woodstox', name: 'woodstox-core', version: '7.1.0'
         compile group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-xml', version: '2.18.2'
         compileOnly group: 'org.projectlombok', name: 'lombok', version: '1.18.36'
+        annotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.36'
         testCompile group: 'junit', name: 'junit', version: '4.8.2'
         testCompile group: "org.intermine", name: "intermine-integrate", version: imVersion, classifier: "testClasses"
         testCompile group: 'xmlunit', name: 'xmlunit', version: '1.0'
@@ -68,7 +69,8 @@ subprojects {
 // 
    bioSourceDBModelConfig {
     // file should be in the root of your mine-bio-sources directory
-    // globalAdditionsFile = "mdrmine_additions.xml"
+    // TODO: hacky
+    globalAdditionsFile = "../mdrmine/dbmodel/resources/mdr.xml"
    }
 
     task copyMineProperties() {

@@ -115,9 +115,6 @@ public class EuctrConverter extends BaseConverter
             String scientificTitle = this.getAndCleanValue(mainInfo, "scientificTitle");
             String scientificAcronym = this.getAndCleanValue(mainInfo, "scientificAcronym");
             this.parseTitles(study, publicTitle, scientificTitle, scientificAcronym);
-            study.setAttributeIfNotNull("testField1", publicTitle);
-            study.setAttributeIfNotNull("testField2", "EUCTR_" + scientificTitle);
-            study.setAttributeIfNotNull("testField3", "EUCTR_" + scientificAcronym);
 
             /* WHO universal trial number */
             String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
@@ -144,7 +141,7 @@ public class EuctrConverter extends BaseConverter
 
             // d m y
             String dateEnrolment = this.getAndCleanValue(mainInfo, "dateEnrolment");
-            study.setAttributeIfNotNull("testField4", "EUCTR_" + dateEnrolment);
+            study.setAttributeIfNotNull("testField1", "EUCTR_" + dateEnrolment);
             if (!ConverterUtils.isNullOrEmptyOrBlank(dateEnrolment)) {
                 LocalDate dateDate = ConverterUtils.getDateFromString(dateEnrolment, ConverterUtils.P_DATE_D_M_Y_SLASHES);
                 study.setAttributeIfNotNull("startDate", dateDate.toString());
@@ -152,22 +149,22 @@ public class EuctrConverter extends BaseConverter
 
             // "Date trial authorised"
             String typeEnrolment = this.getAndCleanValue(mainInfo, "typeEnrolment");
-            study.setAttributeIfNotNull("testField5", "EUCTR_" + typeEnrolment);
+            study.setAttributeIfNotNull("testField2", "EUCTR_" + typeEnrolment);
 
             // TODO: unused? appropriate for study enrolment?
             String targetSize = this.getAndCleanValue(mainInfo, "targetSize");
-            study.setAttributeIfNotNull("testField6", "EUCTR_" + targetSize);
+            study.setAttributeIfNotNull("testField3", "EUCTR_" + targetSize);
 
             // "Not Recruiting" or "Authorised-recruitment may be ongoing or finished" or NA
             String recruitmentStatus = this.getAndCleanValue(mainInfo, "recruitmentStatus");
-            study.setAttributeIfNotNull("testField7", "EUCTR_" + recruitmentStatus);
+            study.setAttributeIfNotNull("testField4", "EUCTR_" + recruitmentStatus);
 
             // "Interventional clinical trial of medicinal product"
             String studyType = this.getAndCleanValue(mainInfo, "studyType");
-            study.setAttributeIfNotNull("testField8", "EUCTR_" + studyType);
+            study.setAttributeIfNotNull("testField5", "EUCTR_" + studyType);
 
             String studyDesign = this.getAndCleanValue(mainInfo, "studyDesign");
-            study.setAttributeIfNotNull("testField9", "EUCTR_" + studyDesign);
+            study.setAttributeIfNotNull("testField6", "EUCTR_" + studyDesign);
 
 
             /*

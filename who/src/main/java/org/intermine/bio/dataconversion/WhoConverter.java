@@ -1557,7 +1557,12 @@ public class WhoConverter extends BaseConverter
         // Storing items
         this.writeLog("storeEuctrItems()");
         // TODO:
-        List<Map<String, List<Item>>> itemMaps = Arrays.asList(studyConditions, studyCountries);
+        List<Map<String, List<Item>>> itemMaps = Arrays.asList(
+            studyConditions, studyCountries, studyFeatures, studyICDs, studyIdentifiers, studyLocations, 
+            studyOrganisations, studyPeople, studyRelationships, studyTitles, studyTopics, studyObjects, 
+            objectDates, objectDescriptions, objectIdentifiers, objectInstances, objectOrganisations, 
+            objectPeople, objectRelationships, objectTitles, objectTopics
+        );
         for (Map<String, List<Item>> itemMap: itemMaps) {
             for (List<Item> items: itemMap.values()) {
                 for (Item item: items) {
@@ -1656,7 +1661,7 @@ public class WhoConverter extends BaseConverter
                 String mapName = this.getReverseReferenceNameOfClass(className);
                 Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getDeclaredField(mapName).get(this);
                 if (itemMap != null) {
-                    this.saveToStudyItemMap(mainClassItem, itemMap, item);
+                    this.saveToItemMap(mainClassItem, itemMap, item);
                 } else {
                     this.writeLog("Couldn't save EUCTR item to map, class name: " + className);
                 }
@@ -1672,15 +1677,15 @@ public class WhoConverter extends BaseConverter
     /**
      * TODO
      */
-    public void saveToStudyItemMap(Item study, Map<String, List<Item>> itemMap, Item itemToAdd) {
-        String studyId = study.getIdentifier();
+    public void saveToItemMap(Item mainClassItem, Map<String, List<Item>> itemMap, Item itemToAdd) {
+        String mainClassItemId = mainClassItem.getIdentifier();
         List<Item> itemList;
 
-        if (!itemMap.containsKey(studyId)) {
-            itemMap.put(studyId, new ArrayList<Item>());
+        if (!itemMap.containsKey(mainClassItemId)) {
+            itemMap.put(mainClassItemId, new ArrayList<Item>());
         }
 
-        itemList = itemMap.get(studyId);
+        itemList = itemMap.get(mainClassItemId);
         itemList.add(itemToAdd);
     }
 

@@ -21,9 +21,7 @@ import org.intermine.xml.full.Item;
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderHeaderAwareBuilder;
 import com.opencsv.CSVReaderBuilder;
-import com.opencsv.ICSVWriter;
 import com.opencsv.exceptions.CsvMalformedLineException;
 
 
@@ -130,8 +128,8 @@ public class CtgConverter extends BioFileConverter
         // TODO: add study gender elig id
 
         // Study collections
-        study.addToCollection("studySources", studySource);
         study.addToCollection("studyIdentifiers", studyIdentifier);
+        study.addToCollection("studySources", studySource);
         store(study);
     }
 
