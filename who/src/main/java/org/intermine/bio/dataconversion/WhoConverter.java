@@ -11,20 +11,13 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.nio.charset.StandardCharsets;
-import java.io.File;
-import java.io.Reader;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
+import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
 import org.intermine.metadata.ConstraintOp;
@@ -45,16 +38,21 @@ import org.intermine.objectstore.query.Query;
 import org.intermine.objectstore.query.QueryClass;
 import org.intermine.xml.full.Item;
 
-import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.commons.text.WordUtils;
-
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
-
-
+import java.io.File;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**
@@ -119,9 +117,9 @@ public class WhoConverter extends BaseConverter
     private Country currentCountry;
     private String dbId;
 
-    /* Saving EUCTR item for later modification  */
+    /* Saving all EUCTR items for later modification and saving at the end  */
     // Cache of studies, key is primary identifier (not Item or DB id)
-    private Map<String, SavedStudy> savedStudies = new HashMap<String, SavedStudy>();
+    private Map<String, Item> studies = new HashMap<String, Item>();
     // Study-related classes
     private Map<String, List<Item>> studyConditions = new HashMap<String, List<Item>>();
     private Map<String, List<Item>> studyCountries = new HashMap<String, List<Item>>();
@@ -205,6 +203,8 @@ public class WhoConverter extends BaseConverter
             }
         }
 
+        this.storeEuctrItems();
+
         this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
@@ -229,9 +229,9 @@ public class WhoConverter extends BaseConverter
             cleanedID = trialID.substring(0, 19);
             String countryCode = trialID.substring(20, 22);
             
-            if (this.savedStudies.containsKey(cleanedID)) {   // Adding country-specific info to existing trial
-                this.existingStudy = this.savedStudies.get(cleanedID);
-                study = this.existingStudy.getStudy();
+            if (this.studies.containsKey(cleanedID)) {   // Adding country-specific info to existing trial
+                this.existingStudy = this.studies.get(cleanedID);
+                study = this.existingStudy;
                 this.writeLog("Add country info, trial ID: " + cleanedID);
             } else {
                 this.cache = true;
@@ -319,8 +319,8 @@ public class WhoConverter extends BaseConverter
         // Results date posted also used later
         String resultsDatePosted = this.getAndCleanValue(lineValues, "results_date_posted");
         String publicationYear = ConverterUtils.getYearFromISODateString(resultsDatePosted);
-        study.setAttributeIfNotNull("testField13", lastUpdate);
-        study.setAttributeIfNotNull("testField14", registrationDate);
+        study.setAttributeIfNotNull("testField1", lastUpdate);
+        study.setAttributeIfNotNull("testField2", registrationDate);
 
         // TODO EUCTR: replace updated date + registration date + publication year if existing study + more recent
         this.createAndStoreRegistryEntryDO(study, url, lastUpdate, registrationDate, publicationYear);
@@ -424,16 +424,11 @@ public class WhoConverter extends BaseConverter
         String bridgingFlag = this.getAndCleanValue(lineValues, "Bridging_flag");
         String bridgedType = this.getAndCleanValue(lineValues, "Bridged_type");
         String childs = this.getAndCleanValue(lineValues, "Childs");
-        
-        study.setAttributeIfNotNull("testField1", bridgingFlag);
-        study.setAttributeIfNotNull("testField2", bridgedType);
-        study.setAttributeIfNotNull("testField3", childs);
 
         // TODO: unused? seems to be somewhat overlapping with study status, 
         // most of the time value is anticipated when status is pending and actual when status is recruiting
         // In MDR WHO model but unused
         String typeEnrolment = this.getAndCleanValue(lineValues, "type_enrolment");
-        study.setAttributeIfNotNull("testField4", typeEnrolment);
 
         // Note: retrospective studies are, at the same proportion as non-retrospective studies, interventional (= the majority) -> seems wrong?
         String retrospectiveFlag = this.getAndCleanValue(lineValues, "Retrospective_flag");
@@ -459,10 +454,6 @@ public class WhoConverter extends BaseConverter
         // Not in MDR, outcome measures text, unused or add somehow to both primary and secondary outcomes
         String resultsOutcomeMeasures = this.getAndCleanValue(lineValues, "results_outcome_measures");
 
-        study.setAttributeIfNotNull("testField5", resultsBaselineChar);
-        study.setAttributeIfNotNull("testField6", resultsParticipantFlow);
-        study.setAttributeIfNotNull("testField7", resultsOutcomeMeasures);
-
         /* Protocol DO */
         String resultsUrlProtocol = this.getAndCleanValue(lineValues, "results_url_protocol");
         this.createAndStoreProtocolDO(study, resultsUrlProtocol, publicationYear);
@@ -476,8 +467,6 @@ public class WhoConverter extends BaseConverter
         // In MDR WHO model but unused, 9% of yes, 91% of empty values
         String resultsYesNo = this.getAndCleanValue(lineValues, "results_yes_no");
 
-        study.setAttributeIfNotNull("testField8", resultsYesNo);
-
         /* Ethics */
         // Not in MDR, ethics approval status, can have a list of values
         String ethicsStatus = this.getAndCleanValue(lineValues, "Ethics_Status");
@@ -490,17 +479,11 @@ public class WhoConverter extends BaseConverter
         // Not in MDR, name of ethics committee (not exactly address)
         String ethicsContactAddress = this.getAndCleanValue(lineValues, "Ethics_Contact_Address");
 
-        study.setAttributeIfNotNull("testField9", ethicsStatus);
-        study.setAttributeIfNotNull("testField10", ethicsApprovalDate);
-        study.setAttributeIfNotNull("testField11", ethicsContactName);
-        study.setAttributeIfNotNull("testField12", ethicsContactAddress);
-
         if (!this.existingStudy()) {
-            int dbId = store(study);
-            this.writeLog("stored study with dbID: " + dbId);
-
             if (cache) {
-                this.savedStudies.put(this.currentTrialID, new SavedStudy(study, dbId));
+                this.studies.put(this.currentTrialID, study);
+            } else {
+                store(study);
             }
         }
 
@@ -874,14 +857,8 @@ public class WhoConverter extends BaseConverter
                 }
             }
 
-            Item studyFeature = this.createAndStoreClassItem(study, "StudyFeature", 
+            this.createAndStoreClassItem(study, "StudyFeature", 
                 new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", featureValue}});
-
-            // Saving the item if EUCTR
-            if (this.registry.equals(ConverterCVT.R_EUCTR)) {
-                this.saveToStudyItemMap(study, this.studyFeatures, studyFeature);
-            }
-
         }
     }
 
@@ -928,7 +905,7 @@ public class WhoConverter extends BaseConverter
      */
     public void parseDateEnrolment(Item study, String dateEnrolment) {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(dateEnrolment)) {
-            study.setAttributeIfNotNull("testField15", dateEnrolment);
+            study.setAttributeIfNotNull("testField3", dateEnrolment);
             LocalDate parsedDate = null;
 
             // TODO: refactor
@@ -1036,8 +1013,6 @@ public class WhoConverter extends BaseConverter
          */
         String status = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
 
-        this.writeLog("os type: ");
-        
         if (!this.existingStudy()) {
             if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
                 if (countriesStr.contains(";")) {
@@ -1057,16 +1032,16 @@ public class WhoConverter extends BaseConverter
             // <attribute name="compAuthorityDecisionDate" type="java.util.Date"/>
             // <attribute name="ethicsCommitteeDecisionDate" type="java.util.Date"/>
             // TODO stopped here
-            StudyCountry sc = (StudyCountry) this.getStudyCollectionObject(study, "StudyCountry", "countryName", this.currentCountry.getName());
+            // StudyCountry sc = (StudyCountry) this.getStudyCollectionObject(study, "StudyCountry", "countryName", this.currentCountry.getName());
             // Item studyCountry = this.getItemFromStudyItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
-            if (sc != null) {
-                this.writeLog("Found StudyCountry with this current country: \"" + this.currentCountry);
-                sc.setStatus(status);
+            // if (sc != null) {
+                // this.writeLog("Found StudyCountry with this current country: \"" + this.currentCountry);
+                // sc.setStatus(status);
                 // Update StudyCountry
                 // store(studyCountry);
-            } else {
-                this.writeLog("Couldn't find StudyCountry with this current country: \"" + this.currentCountry);
-            }
+            // } else {
+            //     this.writeLog("Couldn't find StudyCountry with this current country: \"" + this.currentCountry);
+            // }
         }
     }
 
@@ -1077,13 +1052,13 @@ public class WhoConverter extends BaseConverter
 
         Country c = this.getCountryFromField("name", countryStr);
         if (c != null) {
-            studyCountry.setReference("country", String.valueOf(c.getId()));
+            // TODO: error
+            // studyCountry.setReference("country", String.valueOf(c.getId()));
+            ;
         } else {
             this.writeLog("Couldn't match country string \"" + countryStr + "\" with an existing country");
         }
 
-        this.saveToStudyItemMap(study, this.studyCountries, studyCountry);
-        
         return studyCountry;
     }
 
@@ -1092,6 +1067,7 @@ public class WhoConverter extends BaseConverter
      */
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         if (!this.existingStudy()) {
+            this.writeLog("parseConditions(): <- check trialId ");
             // TODO: match values with CT codes/ICD Codes
             if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
                 if (conditionsStr.contains(";")) {
@@ -1475,17 +1451,17 @@ public class WhoConverter extends BaseConverter
             if (countryCD == null) {
                 throw new RuntimeException("This model does not contain a Country class");
             }
-
+            
             Query q = new Query();
             QueryClass countryClass = new QueryClass(countryCD.getType());
             q.addFrom(countryClass);
             q.addToSelect(countryClass);
-
+            
             QueryField qf = new QueryField(countryClass, field);
             q.setConstraint(new SimpleConstraint(qf, ConstraintOp.EQUALS, new QueryValue(value)));
-
+            
             Results res = this.os.execute(q);
-
+            
             Iterator<?> resIter = res.iterator();
             try {
                 ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
@@ -1505,76 +1481,95 @@ public class WhoConverter extends BaseConverter
      * @param field field of Object to test
      * @param value value of field to match
      */
-    public InterMineObject getStudyCollectionObject(Item study, String className, String field, String value) throws Exception {
-        try {
-            ClassDescriptor studyCD = this.getModel().getClassDescriptorByName(study.getClassName());
-            Query sq = new Query();
-            QueryClass studyClass = new QueryClass(studyCD.getType());
-            sq.addFrom(studyClass);
-            sq.addToSelect(studyClass);
+    // public InterMineObject getStudyCollectionObject(Item study, String className, String field, String value) throws Exception {
+    //     try {
+    //         ClassDescriptor studyCD = this.getModel().getClassDescriptorByName(study.getClassName());
+    //         Query sq = new Query();
+    //         QueryClass studyClass = new QueryClass(studyCD.getType());
+    //         sq.addFrom(studyClass);
+    //         sq.addToSelect(studyClass);
 
-            Results sRes = this.os.execute(sq);
+    //         Results sRes = this.os.execute(sq);
             
-            for (Iterator<?> iter = sRes.iterator(); iter.hasNext();) {
-                ResultsRow<?> row = (ResultsRow<?>) iter.next();
-                Study s = (Study) row.get(0);
-                this.writeLog("queried study: " + s);
-            }
-            this.writeLog("nothing?");
-        } catch(Exception e) {
-            this.writeLog("test failed: " + e);
-        }
+    //         for (Iterator<?> iter = sRes.iterator(); iter.hasNext();) {
+    //             ResultsRow<?> row = (ResultsRow<?>) iter.next();
+    //             Study s = (Study) row.get(0);
+    //             this.writeLog("queried study: " + s);
+    //         }
+    //         this.writeLog("nothing?");
+    //     } catch(Exception e) {
+    //         this.writeLog("test failed: " + e);
+    //     }
 
-        InterMineObject imObj = null;
+    //     InterMineObject imObj = null;
 
-        ClassDescriptor studyCD = this.getModel().getClassDescriptorByName(study.getClassName());
-        ClassDescriptor itemCD = this.getModel().getClassDescriptorByName(className);
+    //     ClassDescriptor studyCD = this.getModel().getClassDescriptorByName(study.getClassName());
+    //     ClassDescriptor itemCD = this.getModel().getClassDescriptorByName(className);
 
-        Query sq = new Query();
-        QueryClass studyClass = new QueryClass(studyCD.getType());
-        sq.addFrom(studyClass);
-        sq.addToSelect(studyClass);
-        QueryField qfS = new QueryField(studyClass, "id");
-        sq.setConstraint(new SimpleConstraint(qfS, ConstraintOp.EQUALS, new QueryValue(this.existingStudy.getDbId())));
+    //     Query sq = new Query();
+    //     QueryClass studyClass = new QueryClass(studyCD.getType());
+    //     sq.addFrom(studyClass);
+    //     sq.addToSelect(studyClass);
+    //     QueryField qfS = new QueryField(studyClass, "id");
+    //     sq.setConstraint(new SimpleConstraint(qfS, ConstraintOp.EQUALS, new QueryValue(this.existingStudy.getDbId())));
         
-        Results sRes = this.os.execute(sq);
-        Iterator<?> sResIter = sRes.iterator();
-        try {
-            ResultsRow<?> sRr = (ResultsRow<?>) sResIter.next();
-            Study s = (Study) sRr.get(0);
+    //     Results sRes = this.os.execute(sq);
+    //     Iterator<?> sResIter = sRes.iterator();
+    //     try {
+    //         ResultsRow<?> sRr = (ResultsRow<?>) sResIter.next();
+    //         Study s = (Study) sRr.get(0);
 
-            // StudyCountry query
-            Query q = new Query();
-            QueryClass itemClass = new QueryClass(itemCD.getType());
-            q.addFrom(itemClass);
-            q.addToSelect(itemClass);
+    //         // StudyCountry query
+    //         Query q = new Query();
+    //         QueryClass itemClass = new QueryClass(itemCD.getType());
+    //         q.addFrom(itemClass);
+    //         q.addToSelect(itemClass);
     
-            ConstraintSet cs = new ConstraintSet(ConstraintOp.AND);
+    //         ConstraintSet cs = new ConstraintSet(ConstraintOp.AND);
 
-            // TODO: what does this do?
-            QueryObjectReference studyField = new QueryObjectReference(itemClass, "study");
-            cs.addConstraint(new ContainsConstraint(studyField, ConstraintOp.CONTAINS, s));
+    //         // TODO: what does this do?
+    //         QueryObjectReference studyField = new QueryObjectReference(itemClass, "study");
+    //         cs.addConstraint(new ContainsConstraint(studyField, ConstraintOp.CONTAINS, s));
 
-            QueryField qfItem = new QueryField(itemClass, field);
+    //         QueryField qfItem = new QueryField(itemClass, field);
 
-            cs.addConstraint(new SimpleConstraint(qfItem, ConstraintOp.EQUALS, new QueryValue(value)));
-            q.setConstraint(cs);
+    //         cs.addConstraint(new SimpleConstraint(qfItem, ConstraintOp.EQUALS, new QueryValue(value)));
+    //         q.setConstraint(cs);
     
-            Results res = this.os.execute(q);
-            Iterator<?> resIter = res.iterator();
+    //         Results res = this.os.execute(q);
+    //         Iterator<?> resIter = res.iterator();
 
-            try {
-                ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-                this.writeLog("intermine object: " + rr.get(0));
-                imObj = (InterMineObject) rr.get(0);
-            } catch (NoSuchElementException e) {
-                this.writeLog("getStudyCollectionObject(): couldn't find StudyCollectionObject using field \"" + field + "\" and value \"" + value + "\"");
+    //         try {
+    //             ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
+    //             this.writeLog("intermine object: " + rr.get(0));
+    //             imObj = (InterMineObject) rr.get(0);
+    //         } catch (NoSuchElementException e) {
+    //             this.writeLog("getStudyCollectionObject(): couldn't find StudyCollectionObject using field \"" + field + "\" and value \"" + value + "\"");
+    //         }
+    //     } catch (NoSuchElementException e) {
+    //         this.writeLog("getStudyCollectionObject(): couldn't find Study with id " + this.existingStudy.getDbId() + " in Database: " + e.toString());
+    //     }
+    
+    //     return imObj;
+    // }
+
+    public void storeEuctrItems() throws Exception {
+        // Storing items
+        this.writeLog("storeEuctrItems()");
+        // TODO:
+        List<Map<String, List<Item>>> itemMaps = Arrays.asList(studyConditions, studyCountries);
+        for (Map<String, List<Item>> itemMap: itemMaps) {
+            for (List<Item> items: itemMap.values()) {
+                for (Item item: items) {
+                    this.writeLog("storeEuctrItems(): " + item.getClassName());
+                    store(item);
+                }
             }
-        } catch (NoSuchElementException e) {
-            this.writeLog("getStudyCollectionObject(): couldn't find Study with id " + this.existingStudy.getDbId() + " in Database: " + e.toString());
         }
-    
-        return imObj;
+
+        for (Item study: this.studies.values()) {
+            store(study);
+        }
     }
 
     // /**
@@ -1650,7 +1645,32 @@ public class WhoConverter extends BaseConverter
     // }
 
     /**
-     * 
+     * TODO
+     */
+    public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
+        Item item = this.createClassItem(mainClassItem, className, kv);
+
+        if (item != null) {
+            if (this.isEuctr()) {
+                // TODO: for objects
+                String mapName = this.getReverseReferenceNameOfClass(className);
+                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getDeclaredField(mapName).get(this);
+                if (itemMap != null) {
+                    this.saveToStudyItemMap(mainClassItem, itemMap, item);
+                } else {
+                    this.writeLog("Couldn't save EUCTR item to map, class name: " + className);
+                }
+            } else {
+                this.writeLog("createAndStoreClassItem, className: " + className);
+                store(item);
+            }
+        }
+
+        return item;
+    }
+
+    /**
+     * TODO
      */
     public void saveToStudyItemMap(Item study, Map<String, List<Item>> itemMap, Item itemToAdd) {
         String studyId = study.getIdentifier();
@@ -1662,6 +1682,10 @@ public class WhoConverter extends BaseConverter
 
         itemList = itemMap.get(studyId);
         itemList.add(itemToAdd);
+    }
+
+    public boolean isEuctr() {
+        return this.registry.equals(ConverterCVT.R_EUCTR);
     }
 
     /**
