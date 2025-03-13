@@ -14,25 +14,16 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           java-version: '11'
           distribution: 'temurin'
-      - name: step1
-        run: curl https://raw.githubusercontent.com/ecrin-github/mdrmine/main/dbmodel/resources/mdr.xml > mdr.xml && sed -i 's/globalAdditionsFile.*$/globalAdditionsFile = ".\/mdr.xml"/' ./build.gradle
-      - name: step2
-        run: ./gradlew clean && ./gradlew install --stacktrace
-      - name: step3
-        if: always()
-        run: ls -R biolincc/build
-      - name: step4
-        if: always()
-        run: ls -R who/build
-      # - run: mkdir jar_folders && cp -r ~/.m2/repository/org/intermine/bio* jar_folders && cp -r ~/.m2/repository/org/intermine/commons jar_folders
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: sources_jars
-      #     path: jar_folders
+      - run: curl https://raw.githubusercontent.com/ecrin-github/mdrmine/main/dbmodel/resources/mdr.xml > mdr.xml && sed -i 's/globalAdditionsFile.*$/globalAdditionsFile = ".\/mdr.xml"/' ./build.gradle
+      - run: ./gradlew clean && ./gradlew install --stacktrace
+      - run: mkdir jar_folders && cp -r ~/.m2/repository/org/intermine/bio* jar_folders && cp -r ~/.m2/repository/org/intermine/commons jar_folders
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sources_jars
+          path: jar_folders
