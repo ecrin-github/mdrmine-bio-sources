@@ -22,18 +22,12 @@ jobs:
           java-version: '11'
           distribution: 'temurin'
       - name: step1
-        run: curl https://raw.githubusercontent.com/ecrin-github/mdrmine/main/dbmodel/resources/mdr.xml > mdr.xml && sed -i 's/globalAdditionsFile.*$/globalAdditionsFile = ".\/mdr.xml"/' ./build.gradle && ls && cat build.gradle
+        run: ./gradlew clean
       - name: step2
-        run: ./gradlew clean && ./gradlew install
+        run: curl https://raw.githubusercontent.com/ecrin-github/mdrmine/main/dbmodel/resources/mdr.xml > mdr.xml && sed -i 's/globalAdditionsFile.*$/globalAdditionsFile = ".\/mdr.xml"/' ./build.gradle && ./gradlew install
       - name: step3
         if: always()
         run: ls -R who/build
-      - name: step4
-        if: always()
-        run: ls who/build/classes/java/main/org/intermine/model/bio/
-      - name: step5
-        if: always()
-        run: ls who/build/classes/java/main/org/intermine/model/bio/
       # - run: mkdir jar_folders && cp -r ~/.m2/repository/org/intermine/bio* jar_folders && cp -r ~/.m2/repository/org/intermine/commons jar_folders
       # - uses: actions/upload-artifact@v4
       #   with:
