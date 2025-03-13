@@ -26,8 +26,12 @@ jobs:
       - name: step2
         run: ./gradlew clean && ./gradlew install
       - name: step3
-        run: ls who/build/classes/java/main/org/intermine/model/bio/
+        if: always()
+        run: ls && ls who
       - name: step4
+        if: always()
+        run: ls who/build/classes/java/main/org/intermine/model/bio/
+      - name: step5
         if: always()
         run: ls who/build/classes/java/main/org/intermine/model/bio/
       # - run: mkdir jar_folders && cp -r ~/.m2/repository/org/intermine/bio* jar_folders && cp -r ~/.m2/repository/org/intermine/commons jar_folders
