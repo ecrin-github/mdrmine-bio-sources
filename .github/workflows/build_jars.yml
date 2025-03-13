@@ -27,7 +27,7 @@ jobs:
         run: ./gradlew clean && ./gradlew install
       - name: step3
         if: always()
-        run: ls && ls who
+        run: ls who/build && echo "--------" && ls who/build/classes && echo "--------" && ls who/build/classes/java && echo "--------" && ls who/build/classes/java/main && echo "--------" && ls who/build/classes/java/main/org && echo "--------" && who/build/classes/java/main/org/intermine && echo "--------" && ls who/build/classes/org/intermine/model
       - name: step4
         if: always()
         run: ls who/build/classes/java/main/org/intermine/model/bio/
