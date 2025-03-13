@@ -115,7 +115,6 @@ public class WhoConverter extends BaseConverter
     private String registry;
     private boolean cache;
     private Country currentCountry;
-    private String dbId;
 
     /* Saving all EUCTR items for later modification and saving at the end  */
     // Cache of studies, key is primary identifier (not Item or DB id)
@@ -216,7 +215,7 @@ public class WhoConverter extends BaseConverter
      */
     public void parseAndStoreValues(String[] lineValues) throws Exception {
         Item study = null;
-        this.registry = null;
+        this.registry = "";
         this.cache = false;
         this.existingStudy = null;
         this.currentCountry = null;
