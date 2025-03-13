@@ -21,7 +21,7 @@ jobs:
           java-version: '11'
           distribution: 'temurin'
       - run: curl https://raw.githubusercontent.com/ecrin-github/mdrmine/main/dbmodel/resources/mdr.xml > mdr.xml && sed -i 's/globalAdditionsFile.*$/globalAdditionsFile = ".\/mdr.xml"/' ./build.gradle && ls && cat build.gradle
-      - run: ./gradlew install
+      - run: ./gradlew clean && ./gradlew install
       - run: mkdir jar_folders && cp -r ~/.m2/repository/org/intermine/bio* jar_folders && cp -r ~/.m2/repository/org/intermine/commons jar_folders
       - uses: actions/upload-artifact@v4
         with:
