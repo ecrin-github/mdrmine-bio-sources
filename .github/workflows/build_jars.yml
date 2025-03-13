@@ -23,8 +23,9 @@ jobs:
           distribution: 'temurin'
       - run: curl https://raw.githubusercontent.com/ecrin-github/mdrmine/main/dbmodel/resources/mdr.xml > mdr.xml && sed -i 's/globalAdditionsFile.*$/globalAdditionsFile = ".\/mdr.xml"/' ./build.gradle && ls && cat build.gradle
       - run: ./gradlew clean && ./gradlew install
-      - run: ls who/build/classes/java/main/org/intermine/model/bio/
-      - run: ls who/build/gen/org/intermine/model/bio/
+      step2:
+        run: ls who/build/classes/java/main/org/intermine/model/bio/
+        run: ls who/build/gen/org/intermine/model/bio/
       # - run: mkdir jar_folders && cp -r ~/.m2/repository/org/intermine/bio* jar_folders && cp -r ~/.m2/repository/org/intermine/commons jar_folders
       # - uses: actions/upload-artifact@v4
       #   with:
