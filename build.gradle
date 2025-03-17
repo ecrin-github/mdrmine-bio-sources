@@ -70,6 +70,7 @@ subprojects {
    bioSourceDBModelConfig {
     // file should be in the root of your mine-bio-sources directory
     // TODO: hacky
+    // Note: if the source doesn't have an additions file (even empty), these classes don't get added
     globalAdditionsFile = "../mdrmine/dbmodel/resources/mdr.xml"
    }
 
