@@ -128,7 +128,8 @@ public class EuctrConverter extends BaseConverter
             // which is the export with the same trial but in multiple countries (e.g. 2004-000023-15) (ethics review approval date in xml data, could use the local one?)
 
             // "Date on which this record was first entered in the EudraCT database" (from trials-full.txt dat format)
-            String dateRegistration = this.getAndCleanValue(mainInfo, "dateRegistration");
+            String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
+            LocalDate dateRegistration = this.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
             /* Trial registry entry DO */
             this.createAndStoreRegistryEntryDO(study, dateRegistration, trialUrl);
@@ -232,7 +233,7 @@ public class EuctrConverter extends BaseConverter
     /**
      * TODO
      */
-    public void createAndStoreRegistryEntryDO(Item study, String creationDateStr, String url) throws Exception {
+    public void createAndStoreRegistryEntryDO(Item study, LocalDate creationDate, String url) throws Exception {
 
         String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
         String doDisplayTitle;
@@ -255,7 +256,7 @@ public class EuctrConverter extends BaseConverter
 
         /* Last update object date */
         // TODO: available?
-        this.createAndStoreObjectDate(doRegistryEntry, creationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES, ConverterCVT.DATE_TYPE_CREATED);
+        this.createAndStoreObjectDate(doRegistryEntry, creationDate, ConverterCVT.DATE_TYPE_CREATED);
     }
 
     /**

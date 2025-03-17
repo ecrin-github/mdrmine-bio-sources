@@ -270,16 +270,39 @@ public abstract class BaseConverter extends BioFileConverter
     /**
      * TODO
      */
-    public Item createAndStoreObjectDate(Item dataObject, String dateStr, DateTimeFormatter dateFormatter, String dateType) throws Exception {
+    public Item createAndStoreObjectDate(Item dataObject, LocalDate date, String dateType) throws Exception {
         Item objectDate = null;
 
-        LocalDate date = ConverterUtils.getDateFromString(dateStr, dateFormatter);
-        if (date != null) {
-            objectDate = this.createAndStoreClassItem(dataObject, "ObjectDate", 
-                new String[][]{{"dateType", dateType}, {"startDate", date.toString()}});
-        }
+        objectDate = this.createAndStoreClassItem(dataObject, "ObjectDate", 
+            new String[][]{{"dateType", dateType}, {"startDate", date != null ? date.toString() : null}});
 
         return objectDate;
+    }
+
+    /**
+     * TODO
+     */
+    public LocalDate parseDate(String dateStr, DateTimeFormatter df) {
+        LocalDate date = null;
+        if (!ConverterUtils.isNullOrEmptyOrBlank(dateStr)) {
+            if (df != null) {
+                date = ConverterUtils.getDateFromString(dateStr, df);
+            }
+            if (date == null) { // ISO format
+                date = ConverterUtils.getDateFromString(dateStr, null);
+                if (date == null) {   // d(d)/m(m)/yyyy
+                    date = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+                    if (date == null) {   // dd month(word) yyyy
+                        date = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
+                        if (date == null) {
+                            this.writeLog("parseDate(): couldn't parse date: " + dateStr);
+                        }
+                    }
+                }
+            }
+        }
+
+        return date;
     }
 
     /**

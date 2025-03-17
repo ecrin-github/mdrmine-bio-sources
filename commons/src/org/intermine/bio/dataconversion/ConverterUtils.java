@@ -40,6 +40,7 @@ public class ConverterUtils
     );
     public static final DateTimeFormatter P_DATE_D_M_Y_SLASHES = DateTimeFormatter.ofPattern("d/M/uuuu");
     public static final DateTimeFormatter P_DATE_D_MWORD_Y_SPACES = DateTimeFormatter.ofPattern("d MMMM uuuu");
+    public static final DateTimeFormatter P_DATE_MWORD_D_Y_HOUR = DateTimeFormatter.ofPattern("MMM d uuuu hh:mma");
 
     /**
      * Check if a string is null, empty, only contains whitespaces, or is equal to "NULL".

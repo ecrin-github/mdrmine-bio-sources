@@ -22,18 +22,12 @@ import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
 import org.intermine.metadata.ConstraintOp;
 import org.intermine.metadata.Model;
-import org.intermine.model.InterMineObject;
 import org.intermine.model.bio.Country;
-import org.intermine.model.bio.Study;
-import org.intermine.model.bio.StudyCountry;
 import org.intermine.objectstore.query.QueryField;
-import org.intermine.objectstore.query.QueryObjectReference;
 import org.intermine.objectstore.query.QueryValue;
 import org.intermine.objectstore.query.Results;
 import org.intermine.objectstore.query.ResultsRow;
 import org.intermine.objectstore.query.SimpleConstraint;
-import org.intermine.objectstore.query.ConstraintSet;
-import org.intermine.objectstore.query.ContainsConstraint;
 import org.intermine.objectstore.query.Query;
 import org.intermine.objectstore.query.QueryClass;
 import org.intermine.xml.full.Item;
@@ -112,9 +106,10 @@ public class WhoConverter extends BaseConverter
 
     private String headersFilePath = "";
     private Map<String, Integer> fieldsToInd;
-    private String registry;
-    private boolean cache;
-    private Country currentCountry;
+    private String registry;    // Registry name
+    private boolean cache;  // Caching if new EUCTR study
+    private boolean newerLastUpdate; // When parsing existing EUCTR study, true if last update date more recent than current one
+    private Country currentCountry; // When parsing existing EUCTR study, country associated with country code
 
     /* Saving all EUCTR items for later modification and saving at the end  */
     // Cache of studies, key is primary identifier (not Item or DB id)
@@ -217,6 +212,7 @@ public class WhoConverter extends BaseConverter
         Item study = null;
         this.registry = "";
         this.cache = false;
+        this.newerLastUpdate = false;
         this.existingStudy = null;
         this.currentCountry = null;
         
@@ -239,6 +235,9 @@ public class WhoConverter extends BaseConverter
             this.currentTrialID = cleanedID;
             if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
                 this.currentCountry = this.getCountryFromField("isoAlpha2", countryCode);
+                if (this.currentCountry == null) {
+                    this.writeLog("Couldn't find country from country code: " + countryCode);
+                }
             }
         } else {
             this.currentTrialID = trialID;
@@ -251,7 +250,8 @@ public class WhoConverter extends BaseConverter
 
         // TODO: study end date? -> results posted date?
         // Used for registry entry DO
-        String lastUpdate = this.getAndCleanValue(lineValues, "last_update");
+        String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
+        LocalDate lastUpdate = this.parseDate(lastUpdateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
         // TODO: skip creating study if ID is missing?
 
         /* ID and ID URL */
@@ -307,41 +307,49 @@ public class WhoConverter extends BaseConverter
 
         /* Registry entry DO */
         // "Date on which this record was first entered in the EudraCT database:" in EUCTR
-        String registrationDate = this.getAndCleanValue(lineValues, "Date_registration");
+        String registrationDateStr = this.getAndCleanValue(lineValues, "Date_registration");
+        LocalDate registrationDate = this.parseDate(registrationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
         /* Date enrolment */
         // "Date of Competent Authority Decision" in EUCTR
-        // TODO EUCTR: <attribute name="compAuthorityDecisionDate" type="java.util.Date"/>
-        String dateEnrolment = this.getAndCleanValue(lineValues, "Date_enrollement");
-        this.parseDateEnrolment(study, dateEnrolment);
+        String dateEnrolmentStr = this.getAndCleanValue(lineValues, "Date_enrollement");
+        study.setAttributeIfNotNull("testField3", dateEnrolmentStr);
+        LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, null);
+        this.setStudyStartDate(study, dateEnrolment);
 
         // Results date posted also used later
-        String resultsDatePosted = this.getAndCleanValue(lineValues, "results_date_posted");
-        String publicationYear = ConverterUtils.getYearFromISODateString(resultsDatePosted);
-        study.setAttributeIfNotNull("testField1", lastUpdate);
-        study.setAttributeIfNotNull("testField2", registrationDate);
+        String resultsDatePostedStr = this.getAndCleanValue(lineValues, "results_date_posted");
+        LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, null);
+        String publicationYear = resultsDatePosted != null ? String.valueOf(resultsDatePosted.getYear()) : "";
+        study.setAttributeIfNotNull("testField1", lastUpdate != null ? lastUpdate.toString() : null);
+        study.setAttributeIfNotNull("testField2", registrationDate != null ? registrationDate.toString() : null);
 
-        // TODO EUCTR: replace updated date + registration date + publication year if existing study + more recent
+        // TODO EUCTR: replace updated date + registration date + publication year if existing study + start date more recent
         this.createAndStoreRegistryEntryDO(study, url, lastUpdate, registrationDate, publicationYear);
 
         /* Study planned enrolment */
+        // In EUCTR: for the whole clinical trial
         // TODO: handle "verbose" values, example study: SLCTR/2017/032
-        // TODO EUCTR: replace value if later date (which one?)
         String targetSize = this.getAndCleanValue(lineValues, "Target_size");
         if (ConverterUtils.isPosWholeNumber(targetSize) && !(Long.valueOf(targetSize) > Integer.MAX_VALUE)) {
-            study.setAttributeIfNotNull("plannedEnrolment", targetSize);
+            study.setAttributeIfNotNull("testField5", targetSize);
+            if (this.newerLastUpdate) { // Updating planned enrolment for more recent last update date
+                study.setAttributeIfNotNull("plannedEnrolment", targetSize);
+            }
         }
-
+        
         /* Study actual enrolment */
-        // TODO EUCTR: replace value if later date (which one?)
-        String resultsActualEnrollment = this.getAndCleanValue(lineValues, "results_actual_enrollment");
-        if (ConverterUtils.isPosWholeNumber(resultsActualEnrollment) && !(Long.valueOf(resultsActualEnrollment) > Integer.MAX_VALUE)) {
-            study.setAttributeIfNotNull("actualEnrolment", resultsActualEnrollment);
+        String resultsActualEnrolment = this.getAndCleanValue(lineValues, "results_actual_enrollment");
+        if (ConverterUtils.isPosWholeNumber(resultsActualEnrolment) && !(Long.valueOf(resultsActualEnrolment) > Integer.MAX_VALUE)) {
+            study.setAttributeIfNotNull("testField6", resultsActualEnrolment);
+            if (this.newerLastUpdate) { // Updating actual enrolment for more recent last update date
+                study.setAttributeIfNotNull("actualEnrolment", resultsActualEnrolment);
+            }
         }
 
         /* Study status */
         // TODO: normalise values
-        // TODO: EUCTR REPLACE IF MORE RECENT STATUS
+        // TODO EUCTR: logically replace values (e.g. recruiting instead of recruitment ended) 
         String studyStatus = this.getAndCleanValue(lineValues, "Recruitment_status");
         if (!this.existingStudy()) {
             study.setAttributeIfNotNull("studyStatus", studyStatus);
@@ -365,9 +373,13 @@ public class WhoConverter extends BaseConverter
             }
         }
 
+        /* Ethics decision date, can be a semi colon list  */
+        String ethicsApprovalDateStr = this.getAndCleanValue(lineValues, "Ethics_Approval_Date");
+        study.setAttributeIfNotNull("testField4", ethicsApprovalDateStr);
+
         /* Study countries */
         String countries = this.getAndCleanValue(lineValues, "Countries");
-        this.parseCountries(study, countries);
+        this.parseCountries(study, countries, targetSize, dateEnrolment, ethicsApprovalDateStr);
 
         /* Study conditions */
         String conditions = this.getAndCleanValue(lineValues, "Conditions");
@@ -440,7 +452,8 @@ public class WhoConverter extends BaseConverter
         String resultsDateFirstPublication = this.getAndCleanValue(lineValues, "results_date_first_publication");
         // "Date of the global end of the trial" in EUCTR
         // TODO: update dates if existing study and later dates
-        String resultsDateCompleted = this.getAndCleanValue(lineValues, "results_date_completed");
+        String resultsDateCompletedStr = this.getAndCleanValue(lineValues, "results_date_completed");
+        LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr, null);
         this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsSummary, resultsDatePosted, resultsDateCompleted);
 
         /* Results */
@@ -469,10 +482,7 @@ public class WhoConverter extends BaseConverter
         /* Ethics */
         // Not in MDR, ethics approval status, can have a list of values
         String ethicsStatus = this.getAndCleanValue(lineValues, "Ethics_Status");
-        // Not in MDR, date of ethics approval status, can also be a list
-        // "Date of Ethics Committee Opinion" in EUCTR
-        // TODO: <attribute name="ethicsCommitteeDecisionDate" type="java.util.Date"/> for EUCTR
-        String ethicsApprovalDate = this.getAndCleanValue(lineValues, "Ethics_Approval_Date");
+        // Ethics_Approval_Date used earlier
         // Not in MDR, email, can be a list of emails
         String ethicsContactName = this.getAndCleanValue(lineValues, "Ethics_Contact_Name");
         // Not in MDR, name of ethics committee (not exactly address)
@@ -865,7 +875,7 @@ public class WhoConverter extends BaseConverter
      * TODO
      */
     public boolean hasPhaseFeature(Item study) {
-        return this.getItemFromStudyItemMap(study, this.studyFeatures, "featureType", ConverterCVT.FEATURE_PHASE) != null;
+        return this.getItemFromItemMap(study, this.studyFeatures, "featureType", ConverterCVT.FEATURE_PHASE) != null;
     }
 
     /**
@@ -902,38 +912,20 @@ public class WhoConverter extends BaseConverter
     /**
      * TODO
      */
-    public void parseDateEnrolment(Item study, String dateEnrolment) {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(dateEnrolment)) {
-            study.setAttributeIfNotNull("testField3", dateEnrolment);
-            LocalDate parsedDate = null;
-
-            // TODO: refactor
-            // ISO format
-            parsedDate = ConverterUtils.getDateFromString(dateEnrolment, null);
-            if (parsedDate == null) {   // d(d)/m(m)/yyyy
-                parsedDate = ConverterUtils.getDateFromString(dateEnrolment, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-                if (parsedDate == null) {   // dd month(word) yyyy
-                    parsedDate = ConverterUtils.getDateFromString(dateEnrolment, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
-                    if (parsedDate == null) {
-                        this.writeLog("parseDateEnrolment(): couldn't parse date: " + dateEnrolment);
-                    }
+    public void setStudyStartDate(Item study, LocalDate startDate) {
+        if (startDate != null) {
+            boolean setDate = false;
+            if (!this.existingStudy()) {  // If not parsing an already existing study
+                setDate = true;
+            } else {    // Checking if the parsed start date is later than the already set one (if it exists)
+                String existingDateStr = ConverterUtils.getValueOfItemAttribute(study, "startDate");
+                if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                    && startDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
+                    setDate = true;
                 }
             }
-
-            if (parsedDate != null) {
-                boolean setDate = false;
-                if (!this.existingStudy()) {  // If not parsing an already existing study
-                    setDate = true;
-                } else {    // Checking if the parsed start date is later than the already set one (if it exists)
-                    String existingDateStr = ConverterUtils.getValueOfItemAttribute(study, "startDate");
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
-                        && parsedDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
-                        setDate = true;
-                    }
-                }
-                if (setDate) {
-                    study.setAttributeIfNotNull("startDate", parsedDate.toString());
-                }
+            if (setDate) {
+                study.setAttributeIfNotNull("startDate", startDate.toString());
             }
         }
     }
@@ -941,7 +933,7 @@ public class WhoConverter extends BaseConverter
     /**
      * TODO
      */
-    public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String resultsAdverseEvents, String resultsDatePosted) {
+    public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String resultsAdverseEvents, LocalDate resultsDatePosted) {
         if (!this.existingStudy()) {
             StringBuilder constructedSecondaryOutcomes = new StringBuilder();
             if (!ConverterUtils.isNullOrEmptyOrBlank(secondaryOutcomes)) {
@@ -950,7 +942,7 @@ public class WhoConverter extends BaseConverter
             // TODO: check that resultsDatePosted date is valid
             // Filtering out placeholder links (drks.de)
             if (!ConverterUtils.isNullOrEmptyOrBlank(resultsAdverseEvents) 
-                && !(resultsAdverseEvents.contains("drks.de") && ConverterUtils.isNullOrEmptyOrBlank(resultsDatePosted))) {
+                && !(resultsAdverseEvents.contains("drks.de") && resultsDatePosted != null)) {
                 if (secondaryOutcomes.length() > 0) {
                     if (!secondaryOutcomes.endsWith(".")) {
                         constructedSecondaryOutcomes.append(".");
@@ -973,7 +965,6 @@ public class WhoConverter extends BaseConverter
      */
     public void createAndStoreStudyOrg(Item study, String studyOrgStr, String contribType) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyOrgStr)) {
-            boolean store = true;
             // TODO: setting studyOrganisation object for now, need logic to distinguish people from orgs
             Item studyPeople = createItem("StudyPeople");
             studyPeople.setAttributeIfNotNull("contribType", contribType);
@@ -1002,56 +993,67 @@ public class WhoConverter extends BaseConverter
 
     /**
      * TODO
+     * @param cadDateStr raw date string of competent authority decision
+     * @param ecdDateStr raw date(s) string of ethics committee decision
      */
-    public void parseCountries(Item study, String countriesStr) throws Exception {
-        // TODO EUCTR: log countries to see if the actual enrolment results is used
+    public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate, String ecdDatesStr) throws Exception {
+        // TODO: only restrict date fields + enrolment to EUCTR?
         // TODO: try to normalise values
         // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
-        /*
-         * TODO: need the id of the StudyCountry DB element -> either locally store it when storing the objects or query DB
-         */
         String status = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
 
         if (!this.existingStudy()) {
+            // TODO: parse edcDates
+            // TODO: don't add duplicates (EUCTR2008-007326-19)
             if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
                 if (countriesStr.contains(";")) {
                     String[] countriesList = countriesStr.split(";");
                     for (String countryStr: countriesList) {
                         if (!ConverterUtils.isNullOrEmptyOrBlank(countryStr)) {
-                            this.createAndStoreStudyCountry(study, countryStr, status);
+                            this.createAndStoreStudyCountry(study, countryStr, status, plannedEnrolment, cadDate, null);
                         }
                     }
                 } else {
-                    this.createAndStoreStudyCountry(study, countriesStr, status);
+                    this.createAndStoreStudyCountry(study, countriesStr, status, plannedEnrolment, cadDate, null);
                 }
             }
-        } else {    // Updating an existing study
-            // <attribute name="status" type="java.lang.String"/>
-            // <attribute name="plannedEnrolment" type="java.lang.Integer"/>
-            // <attribute name="compAuthorityDecisionDate" type="java.util.Date"/>
-            // <attribute name="ethicsCommitteeDecisionDate" type="java.util.Date"/>
-            // TODO stopped here
-            // StudyCountry sc = (StudyCountry) this.getStudyCollectionObject(study, "StudyCountry", "countryName", this.currentCountry.getName());
-            // Item studyCountry = this.getItemFromStudyItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
-            // if (sc != null) {
-                // this.writeLog("Found StudyCountry with this current country: \"" + this.currentCountry);
-                // sc.setStatus(status);
-                // Update StudyCountry
-                // store(studyCountry);
-            // } else {
-            //     this.writeLog("Couldn't find StudyCountry with this current country: \"" + this.currentCountry);
-            // }
+        } else if (this.currentCountry != null) {    // Updating an existing study
+            LocalDate ecdDate = this.parseDate(ecdDatesStr, ConverterUtils.P_DATE_MWORD_D_Y_HOUR);
+
+            Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
+            if (studyCountry != null) {
+                studyCountry.setAttributeIfNotNull("status", status);
+                studyCountry.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
+                
+                // "dateEnrolment" is "Date of Competent Authority Decision" in EUCTR
+                if (cadDate != null) {
+                    studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate", cadDate.toString());
+                }
+                // "Date of Ethics Committee Opinion" in EUCTR
+
+                if (ecdDate != null) {
+                    studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
+                }
+
+            } else {
+                this.writeLog("Couldn't find StudyCountry with this current country (creating it): \"" + this.currentCountry);
+                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, ecdDate);
+            }
         }
     }
 
-    public Item createAndStoreStudyCountry(Item study, String countryStr, String status) throws Exception {
+    public Item createAndStoreStudyCountry(Item study, String countryStr, String status, 
+        String plannedEnrolment, LocalDate cadDate, LocalDate ecdDate) throws Exception {
+
         Item studyCountry = this.createAndStoreClassItem(study, "StudyCountry", 
             new String[][]{{"countryName", WordUtils.capitalizeFully(countryStr, ' ', '-')},
-                            {"status", status}});
+                            {"status", status}, {"plannedEnrolment", plannedEnrolment},
+                            {"compAuthorityDecisionDate", cadDate != null ? cadDate.toString() : null},
+                            {"ethicsCommitteeDecisionDate", ecdDate != null ? ecdDate.toString() : null}});
 
         Country c = this.getCountryFromField("name", countryStr);
         if (c != null) {
-            // TODO: error
+            // TODO: figure out a way to make this work
             // studyCountry.setReference("country", String.valueOf(c.getId()));
             ;
         } else {
@@ -1066,7 +1068,6 @@ public class WhoConverter extends BaseConverter
      */
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         if (!this.existingStudy()) {
-            this.writeLog("parseConditions(): <- check trialId ");
             // TODO: match values with CT codes/ICD Codes
             if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
                 if (conditionsStr.contains(";")) {
@@ -1105,12 +1106,12 @@ public class WhoConverter extends BaseConverter
      * TODO: should return created DO
      */
     public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, String resultsSummary, 
-                                                  String resultsDatePosted, String resultsDateCompleted) throws Exception {
+                                                  LocalDate resultsDatePosted, LocalDate resultsDateCompleted) throws Exception {
         // TODO: filter out non-urls
         // Note: current MDR avoids duplicate with registry entry url, but maybe it makes sense to have duplicate
         // Filtering out drks.de URL with no date posted (they are placeholders)
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink) 
-            && !resultsUrlLink.contains("drks.de") && !ConverterUtils.isNullOrEmptyOrBlank(resultsDatePosted)) {
+            && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
             // Display title
             String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
             String doDisplayTitle;
@@ -1131,13 +1132,13 @@ public class WhoConverter extends BaseConverter
                                         new String[][]{{"url", resultsUrlLink}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
             
             // Results completed date
-            this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, null, ConverterCVT.DATE_TYPE_CREATED);
+            this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED);
 
             // Results posted date
-            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsDatePosted)) {
-                this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, null, ConverterCVT.DATE_TYPE_AVAILABLE);
+            if (resultsDatePosted != null) {
+                this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
                 // Publication year
-                String publicationYear = ConverterUtils.getYearFromISODateString(resultsDatePosted);
+                String publicationYear = String.valueOf(resultsDatePosted.getYear());
                 if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
                     resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
                 }
@@ -1195,7 +1196,7 @@ public class WhoConverter extends BaseConverter
     /**
      * TODO
      */
-    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, String lastUpdate, String registrationDate, String publicationYear) throws Exception {
+    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate lastUpdate, LocalDate registrationDate, String publicationYear) throws Exception {
         if (!this.existingStudy()) {
             // Display title
             String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
@@ -1218,10 +1219,26 @@ public class WhoConverter extends BaseConverter
 
             // Registry entry created date
             // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
-            this.createAndStoreObjectDate(doRegistryEntry, registrationDate, ConverterUtils.P_DATE_D_M_Y_SLASHES, ConverterCVT.DATE_TYPE_CREATED);
+            this.createAndStoreObjectDate(doRegistryEntry, registrationDate, ConverterCVT.DATE_TYPE_CREATED);
 
             // Last update
-            this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterUtils.P_DATE_D_MWORD_Y_SPACES, ConverterCVT.DATE_TYPE_UPDATED);
+            this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
+        } else {
+            if (lastUpdate != null) {
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.studyObjects, "objectType",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                if (doRegistryEntry != null) {
+                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",  ConverterCVT.DATE_TYPE_UPDATED);
+                    if (lastUpdateOD != null) {
+                        String existingDateStr = ConverterUtils.getValueOfItemAttribute(lastUpdateOD, "startDate");
+                        if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                            && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
+                                lastUpdateOD.setAttribute("startDate", lastUpdate.toString());
+                            this.newerLastUpdate = true;
+                            this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1421,12 +1438,12 @@ public class WhoConverter extends BaseConverter
      * @param field name of field for comparison to find the item
      * @param value value for comparison to find the item, should be unique!
      */
-    public Item getItemFromStudyItemMap(Item study, Map<String, List<Item>> itemMap, String field, String value) {
+    public Item getItemFromItemMap(Item parentItem, Map<String, List<Item>> itemMap, String field, String value) {
         Item searchedItem = null;
 
-        String studyId = study.getIdentifier();
-        if (itemMap.containsKey(studyId)) {
-            List<Item> items = itemMap.get(studyId);
+        String parentId = parentItem.getIdentifier();
+        if (itemMap.containsKey(parentId)) {
+            List<Item> items = itemMap.get(parentId);
             for (Item item: items) {
                 if (value.equals(ConverterUtils.getValueOfItemAttribute(item, field))) {
                     searchedItem = item;
@@ -1464,7 +1481,6 @@ public class WhoConverter extends BaseConverter
             Iterator<?> resIter = res.iterator();
             try {
                 ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-                this.writeLog("country: " + rr.get(0));
                 c = (Country) rr.get(0);
             } catch (NoSuchElementException e) {
                 this.writeLog("getCountryFromField(): couldn't find country with field \"" + field + "\" and value \"" + value + "\"");
@@ -1473,99 +1489,18 @@ public class WhoConverter extends BaseConverter
         return c;
     }
 
-    /**
-     * TODO
-     * 
-     * from OS
-     * @param field field of Object to test
-     * @param value value of field to match
-     */
-    // public InterMineObject getStudyCollectionObject(Item study, String className, String field, String value) throws Exception {
-    //     try {
-    //         ClassDescriptor studyCD = this.getModel().getClassDescriptorByName(study.getClassName());
-    //         Query sq = new Query();
-    //         QueryClass studyClass = new QueryClass(studyCD.getType());
-    //         sq.addFrom(studyClass);
-    //         sq.addToSelect(studyClass);
-
-    //         Results sRes = this.os.execute(sq);
-            
-    //         for (Iterator<?> iter = sRes.iterator(); iter.hasNext();) {
-    //             ResultsRow<?> row = (ResultsRow<?>) iter.next();
-    //             Study s = (Study) row.get(0);
-    //             this.writeLog("queried study: " + s);
-    //         }
-    //         this.writeLog("nothing?");
-    //     } catch(Exception e) {
-    //         this.writeLog("test failed: " + e);
-    //     }
-
-    //     InterMineObject imObj = null;
-
-    //     ClassDescriptor studyCD = this.getModel().getClassDescriptorByName(study.getClassName());
-    //     ClassDescriptor itemCD = this.getModel().getClassDescriptorByName(className);
-
-    //     Query sq = new Query();
-    //     QueryClass studyClass = new QueryClass(studyCD.getType());
-    //     sq.addFrom(studyClass);
-    //     sq.addToSelect(studyClass);
-    //     QueryField qfS = new QueryField(studyClass, "id");
-    //     sq.setConstraint(new SimpleConstraint(qfS, ConstraintOp.EQUALS, new QueryValue(this.existingStudy.getDbId())));
-        
-    //     Results sRes = this.os.execute(sq);
-    //     Iterator<?> sResIter = sRes.iterator();
-    //     try {
-    //         ResultsRow<?> sRr = (ResultsRow<?>) sResIter.next();
-    //         Study s = (Study) sRr.get(0);
-
-    //         // StudyCountry query
-    //         Query q = new Query();
-    //         QueryClass itemClass = new QueryClass(itemCD.getType());
-    //         q.addFrom(itemClass);
-    //         q.addToSelect(itemClass);
-    
-    //         ConstraintSet cs = new ConstraintSet(ConstraintOp.AND);
-
-    //         // TODO: what does this do?
-    //         QueryObjectReference studyField = new QueryObjectReference(itemClass, "study");
-    //         cs.addConstraint(new ContainsConstraint(studyField, ConstraintOp.CONTAINS, s));
-
-    //         QueryField qfItem = new QueryField(itemClass, field);
-
-    //         cs.addConstraint(new SimpleConstraint(qfItem, ConstraintOp.EQUALS, new QueryValue(value)));
-    //         q.setConstraint(cs);
-    
-    //         Results res = this.os.execute(q);
-    //         Iterator<?> resIter = res.iterator();
-
-    //         try {
-    //             ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-    //             this.writeLog("intermine object: " + rr.get(0));
-    //             imObj = (InterMineObject) rr.get(0);
-    //         } catch (NoSuchElementException e) {
-    //             this.writeLog("getStudyCollectionObject(): couldn't find StudyCollectionObject using field \"" + field + "\" and value \"" + value + "\"");
-    //         }
-    //     } catch (NoSuchElementException e) {
-    //         this.writeLog("getStudyCollectionObject(): couldn't find Study with id " + this.existingStudy.getDbId() + " in Database: " + e.toString());
-    //     }
-    
-    //     return imObj;
-    // }
-
     public void storeEuctrItems() throws Exception {
-        // Storing items
-        this.writeLog("storeEuctrItems()");
-        // TODO:
+        // Storing all EUCTR items
         List<Map<String, List<Item>>> itemMaps = Arrays.asList(
             studyConditions, studyCountries, studyFeatures, studyICDs, studyIdentifiers, studyLocations, 
             studyOrganisations, studyPeople, studyRelationships, studyTitles, studyTopics, studyObjects, 
             objectDates, objectDescriptions, objectIdentifiers, objectInstances, objectOrganisations, 
             objectPeople, objectRelationships, objectTitles, objectTopics
         );
+
         for (Map<String, List<Item>> itemMap: itemMaps) {
             for (List<Item> items: itemMap.values()) {
                 for (Item item: items) {
-                    this.writeLog("storeEuctrItems(): " + item.getClassName());
                     store(item);
                 }
             }
@@ -1576,78 +1511,6 @@ public class WhoConverter extends BaseConverter
         }
     }
 
-    // /**
-    //  * TODO
-    //  * @return
-    //  * @throws Exception
-    //  */
-    // public StudyCountry getStudyCountryFromCountry(Item study, Country country) {
-    //     StudyCountry sc = null;
-    //     if (country != null) {
-    //         ClassDescriptor countryCD = this.getModel().getClassDescriptorByName("StudyCountry");
-    //         ClassDescriptor studyCD = this.getModel().getClassDescriptorByName(study.getClassName());
-
-    //         Query sq = new Query();
-    //         QueryClass studyClass = new QueryClass(studyCD.getType());
-    //         sq.addFrom(studyClass);
-    //         sq.addToSelect(studyClass);
-    //         QueryField idField = new QueryField(studyClass, "id");
-    //         sq.setConstraint(new SimpleConstraint(idField, ConstraintOp.EQUALS, new QueryValue(study.getIdentifier())));
-            
-    //         Results sRes = this.os.execute(sq);
-    //         Iterator<?> sResIter = sRes.iterator();
-    //         try {
-    //             ResultsRow<?> sRr = (ResultsRow<?>) sResIter.next();
-    //             Study s = (Study) sRr.get(0);
-
-    //             // StudyCountry query
-    //             Query q = new Query();
-    //             QueryClass scClass = new QueryClass(countryCD.getType());
-    //             q.addFrom(scClass);
-    //             q.addToSelect(scClass);
-        
-    //             ConstraintSet cs = new ConstraintSet(ConstraintOp.AND);
-    
-    //             // TODO: need to cast study (Item) to Study class somehow?
-    //             // TODO: or query DB to get Study instance?
-    //             QueryObjectReference studyField = new QueryObjectReference(scClass, "study");
-    //             // cs.addConstraint(new ContainsConstraint(studyField, ConstraintOp.CONTAINS, study));
-    //             // TODO: what does this do?
-    //             cs.addConstraint(new ContainsConstraint(studyField, ConstraintOp.CONTAINS, s));
-    //             // cs.addConstraint(new ContainsConstraint(studyField, ConstraintOp.CONTAINS, studyField));
-        
-    //             /*
-    //                 Error here: Caused by: java.lang.IllegalArgumentException: 
-    //                 Invalid constraint: QueryField(org.intermine.model.bio.Study, id) (a java.lang.Integer) = java.lang.String: "3_1" (a java.lang.String)
-
-    //                 Note: this is supposed to return an int, not a string
-    //              */
-    //             QueryObjectReference countryField = new QueryObjectReference(scClass, "country");
-    //             // QueryField countryField = new QueryField(scClass, "country");
-    //             // cs.addConstraint(new SimpleConstraint(countryField, ConstraintOp.EQUALS, new QueryValue(country.getId())));
-    //             cs.addConstraint(new ContainsConstraint(countryField, ConstraintOp.EQUALS, country));
-        
-    //             q.setConstraint(cs);
-        
-    //             Results res = this.os.execute(q);
-        
-    //             Iterator<?> resIter = res.iterator();
-    
-    //             try {
-    //                 ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-    //                 this.writeLog("studycountry: " + rr.get(0));
-    //                 sc = (StudyCountry) rr.get(0);
-    //             } catch (NoSuchElementException e) {
-    //                 this.writeLog("getStudyCountryFromCountry(): couldn't find StudyCountry from Country \"" + country + "\"");
-    //             }
-    //         } catch (NoSuchElementException e) {
-    //             this.writeLog("getStudyCountryFromCountry(): couldn't find Study in Database");
-    //         }
-    
-    //     }
-    //     return sc;
-    // }
-
     /**
      * TODO
      */
@@ -1656,7 +1519,6 @@ public class WhoConverter extends BaseConverter
 
         if (item != null) {
             if (this.isEuctr()) {
-                // TODO: for objects
                 String mapName = this.getReverseReferenceNameOfClass(className);
                 Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getDeclaredField(mapName).get(this);
                 if (itemMap != null) {
@@ -1665,7 +1527,6 @@ public class WhoConverter extends BaseConverter
                     this.writeLog("Couldn't save EUCTR item to map, class name: " + className);
                 }
             } else {
-                this.writeLog("createAndStoreClassItem, className: " + className);
                 store(item);
             }
         }

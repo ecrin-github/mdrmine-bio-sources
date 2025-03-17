@@ -220,7 +220,8 @@ public class CtisConverter extends BaseConverter
         study.setAttributeIfNotNull("testField7", "CTIS_" + sponsorType);
 
         /* Trial registry entry DO + instance + last updated date */
-        String lastUpdated = this.getAndCleanValue(lineValues, "Last updated");
+        String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
+        LocalDate lastUpdated = this.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
         this.createAndStoreRegistryEntryDO(study, lastUpdated);
         study.setAttributeIfNotNull("testField8", "CTIS_" + lastUpdated);
 
@@ -708,7 +709,7 @@ public class CtisConverter extends BaseConverter
     /**
      * TODO
      */
-    public void createAndStoreRegistryEntryDO(Item study, String lastUpdated) throws Exception {
+    public void createAndStoreRegistryEntryDO(Item study, LocalDate lastUpdated) throws Exception {
         String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
         String doDisplayTitle;
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
@@ -731,7 +732,7 @@ public class CtisConverter extends BaseConverter
         }
 
         /* Last update object date */
-        this.createAndStoreObjectDate(doRegistryEntry, lastUpdated, ConverterUtils.P_DATE_D_M_Y_SLASHES, ConverterCVT.DATE_TYPE_UPDATED);
+        this.createAndStoreObjectDate(doRegistryEntry, lastUpdated, ConverterCVT.DATE_TYPE_UPDATED);
     }
 
     /**
