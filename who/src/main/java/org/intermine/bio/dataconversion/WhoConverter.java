@@ -53,7 +53,7 @@ import java.util.regex.Pattern;
  * Class to parse values from a WHO data file and store them as MDRMine items
  * @author ECRIN
  */
-public class WhoConverter extends BaseConverter
+public class WhoConverter extends CacheConverter
 {
     /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
     // TODO: "-"/"--" are none or unknown?
@@ -108,36 +108,6 @@ public class WhoConverter extends BaseConverter
     private Map<String, Integer> fieldsToInd;
     private String registry;    // Registry name
     private boolean cache;  // Caching if new EUCTR study
-    private boolean newerLastUpdate; // When parsing existing EUCTR study, true if last update date more recent than current one
-    private Country currentCountry; // When parsing existing EUCTR study, country associated with country code
-
-    /* Saving all EUCTR items for later modification and saving at the end  */
-    // Cache of studies, key is primary identifier (not Item or DB id)
-    private Map<String, Item> studies = new HashMap<String, Item>();
-    // Study-related classes
-    private Map<String, List<Item>> studyConditions = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyCountries = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyICDs = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyLocations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyOrganisations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyPeople = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyRelationships = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyTitles = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyTopics = new HashMap<String, List<Item>>();
-    // DOs
-    private Map<String, List<Item>> studyObjects = new HashMap<String, List<Item>>();
-    // DO-related subclasses
-    private Map<String, List<Item>> objectDates = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectDescriptions = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectIdentifiers = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectInstances = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectOrganisations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectPeople = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectRelationships = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectTitles = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectTopics = new HashMap<String, List<Item>>();
 
     /**
      * Constructor
@@ -197,7 +167,7 @@ public class WhoConverter extends BaseConverter
             }
         }
 
-        this.storeEuctrItems();
+        this.storeAllItems();
 
         this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
@@ -257,7 +227,9 @@ public class WhoConverter extends BaseConverter
         /* ID and ID URL */
         String url = this.getAndCleanValue(lineValues, "url");
 
+        // TODO EUCTR: add ID with suffix as well?
         if (!this.existingStudy()) {
+            // TODO: fix duplicate studyIdentifier error
             this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, url);
         }
 
@@ -310,7 +282,7 @@ public class WhoConverter extends BaseConverter
         String registrationDateStr = this.getAndCleanValue(lineValues, "Date_registration");
         LocalDate registrationDate = this.parseDate(registrationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
-        /* Date enrolment */
+        /* Date enrolment (start date) */
         // "Date of Competent Authority Decision" in EUCTR
         String dateEnrolmentStr = this.getAndCleanValue(lineValues, "Date_enrollement");
         study.setAttributeIfNotNull("testField3", dateEnrolmentStr);
@@ -912,27 +884,6 @@ public class WhoConverter extends BaseConverter
     /**
      * TODO
      */
-    public void setStudyStartDate(Item study, LocalDate startDate) {
-        if (startDate != null) {
-            boolean setDate = false;
-            if (!this.existingStudy()) {  // If not parsing an already existing study
-                setDate = true;
-            } else {    // Checking if the parsed start date is later than the already set one (if it exists)
-                String existingDateStr = ConverterUtils.getValueOfItemAttribute(study, "startDate");
-                if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
-                    && startDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
-                    setDate = true;
-                }
-            }
-            if (setDate) {
-                study.setAttributeIfNotNull("startDate", startDate.toString());
-            }
-        }
-    }
-
-    /**
-     * TODO
-     */
     public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String resultsAdverseEvents, LocalDate resultsDatePosted) {
         if (!this.existingStudy()) {
             StringBuilder constructedSecondaryOutcomes = new StringBuilder();
@@ -1224,10 +1175,28 @@ public class WhoConverter extends BaseConverter
             // Last update
             this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
         } else {
-            if (lastUpdate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.studyObjects, "objectType",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+            // Update DO creation date
+            if (registrationDate != null) {
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.studyObjects, "objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
-                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",  ConverterCVT.DATE_TYPE_UPDATED);
+                    Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_CREATED);
+                    if (creationOD != null) {
+                        String existingDateStr = ConverterUtils.getValueOfItemAttribute(creationOD, "startDate");
+                        // Updating creation date if older than known creation date
+                        if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                            && registrationDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
+                                creationOD.setAttribute("startDate", registrationDate.toString());
+                            this.writeLog("older creation date: " + registrationDate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
+                        }
+                    }
+                }
+            }
+
+            // Update DO last update date
+            if (lastUpdate != null) {
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.studyObjects, "objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                if (doRegistryEntry != null) {
+                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_UPDATED);
                     if (lastUpdateOD != null) {
                         String existingDateStr = ConverterUtils.getValueOfItemAttribute(lastUpdateOD, "startDate");
                         if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
@@ -1433,82 +1402,8 @@ public class WhoConverter extends BaseConverter
         return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s));
     }
 
-    /**
-     * TODO
-     * @param field name of field for comparison to find the item
-     * @param value value for comparison to find the item, should be unique!
-     */
-    public Item getItemFromItemMap(Item parentItem, Map<String, List<Item>> itemMap, String field, String value) {
-        Item searchedItem = null;
-
-        String parentId = parentItem.getIdentifier();
-        if (itemMap.containsKey(parentId)) {
-            List<Item> items = itemMap.get(parentId);
-            for (Item item: items) {
-                if (value.equals(ConverterUtils.getValueOfItemAttribute(item, field))) {
-                    searchedItem = item;
-                    break;
-                }
-            }
-        }
-
-        return searchedItem;
-    }
-
-    /**
-     * TODO
-     * 
-     * 2-letter ISO code
-     */
-    public Country getCountryFromField(String field, String value) throws Exception {
-        Country c = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(value)) {
-            ClassDescriptor countryCD = this.getModel().getClassDescriptorByName("Country");
-            if (countryCD == null) {
-                throw new RuntimeException("This model does not contain a Country class");
-            }
-            
-            Query q = new Query();
-            QueryClass countryClass = new QueryClass(countryCD.getType());
-            q.addFrom(countryClass);
-            q.addToSelect(countryClass);
-            
-            QueryField qf = new QueryField(countryClass, field);
-            q.setConstraint(new SimpleConstraint(qf, ConstraintOp.EQUALS, new QueryValue(value)));
-            
-            Results res = this.os.execute(q);
-            
-            Iterator<?> resIter = res.iterator();
-            try {
-                ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-                c = (Country) rr.get(0);
-            } catch (NoSuchElementException e) {
-                this.writeLog("getCountryFromField(): couldn't find country with field \"" + field + "\" and value \"" + value + "\"");
-            }
-        }
-        return c;
-    }
-
-    public void storeEuctrItems() throws Exception {
-        // Storing all EUCTR items
-        List<Map<String, List<Item>>> itemMaps = Arrays.asList(
-            studyConditions, studyCountries, studyFeatures, studyICDs, studyIdentifiers, studyLocations, 
-            studyOrganisations, studyPeople, studyRelationships, studyTitles, studyTopics, studyObjects, 
-            objectDates, objectDescriptions, objectIdentifiers, objectInstances, objectOrganisations, 
-            objectPeople, objectRelationships, objectTitles, objectTopics
-        );
-
-        for (Map<String, List<Item>> itemMap: itemMaps) {
-            for (List<Item> items: itemMap.values()) {
-                for (Item item: items) {
-                    store(item);
-                }
-            }
-        }
-
-        for (Item study: this.studies.values()) {
-            store(study);
-        }
+    public boolean isEuctr() {
+        return this.registry.equals(ConverterCVT.R_EUCTR);
     }
 
     /**
@@ -1520,7 +1415,7 @@ public class WhoConverter extends BaseConverter
         if (item != null) {
             if (this.isEuctr()) {
                 String mapName = this.getReverseReferenceNameOfClass(className);
-                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getDeclaredField(mapName).get(this);
+                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getSuperclass().getDeclaredField(mapName).get(this);
                 if (itemMap != null) {
                     this.saveToItemMap(mainClassItem, itemMap, item);
                 } else {
@@ -1532,25 +1427,6 @@ public class WhoConverter extends BaseConverter
         }
 
         return item;
-    }
-
-    /**
-     * TODO
-     */
-    public void saveToItemMap(Item mainClassItem, Map<String, List<Item>> itemMap, Item itemToAdd) {
-        String mainClassItemId = mainClassItem.getIdentifier();
-        List<Item> itemList;
-
-        if (!itemMap.containsKey(mainClassItemId)) {
-            itemMap.put(mainClassItemId, new ArrayList<Item>());
-        }
-
-        itemList = itemMap.get(mainClassItemId);
-        itemList.add(itemToAdd);
-    }
-
-    public boolean isEuctr() {
-        return this.registry.equals(ConverterCVT.R_EUCTR);
     }
 
     /**

@@ -542,7 +542,7 @@ public class CtisConverter extends BaseConverter
      * TODO
      */
     public void parseStudyTopics(Item study, String studyTopics) throws Exception {
-        HashSet addedCodes = new HashSet<String>();
+        HashSet<String> addedCodes = new HashSet<String>();
 
         String[] separatedTopics = studyTopics.split("\",\"");
         for (String topicPair: separatedTopics) {
@@ -681,7 +681,7 @@ public class CtisConverter extends BaseConverter
      */
     public void parseSponsors(Item study, String sponsors, String sponsorTypes) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(sponsors)) {
-            HashSet seenSponsors = new HashSet<String>();
+            HashSet<String> seenSponsors = new HashSet<String>();
             String sponsor;
             String type;
 

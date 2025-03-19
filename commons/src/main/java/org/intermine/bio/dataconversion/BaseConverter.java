@@ -21,14 +21,25 @@ import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Iterator;
+import java.util.NoSuchElementException;
 import java.util.Properties;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
+import org.intermine.metadata.ConstraintOp;
 import org.intermine.metadata.Model;
-import org.intermine.metadata.ReferenceDescriptor ;
+import org.intermine.metadata.ReferenceDescriptor;
+import org.intermine.model.bio.Country;
 import org.intermine.objectstore.ObjectStore;
 import org.intermine.objectstore.ObjectStoreFactory;
+import org.intermine.objectstore.query.Query;
+import org.intermine.objectstore.query.QueryClass;
+import org.intermine.objectstore.query.QueryField;
+import org.intermine.objectstore.query.QueryValue;
+import org.intermine.objectstore.query.Results;
+import org.intermine.objectstore.query.ResultsRow;
+import org.intermine.objectstore.query.SimpleConstraint;
 import org.intermine.util.PropertiesUtil;
 import org.intermine.xml.full.Item;
 
@@ -45,7 +56,6 @@ public abstract class BaseConverter extends BioFileConverter
     private String logDir = "";
     private Writer logWriter = null;
     protected String currentTrialID = null;
-    protected Item existingStudy = null;    // Indicates if currently parsing an existing study (if not null)
     protected ObjectStore os = null;
 
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
@@ -69,13 +79,6 @@ public abstract class BaseConverter extends BioFileConverter
     public BaseConverter(ItemWriter writer, Model model) {
         super(writer, model);
         this.initObjectStore();
-    }
-
-    /**
-     * 
-     */
-    public boolean existingStudy() {
-        return this.existingStudy != null;
     }
 
     /**
@@ -108,6 +111,40 @@ public abstract class BaseConverter extends BioFileConverter
         }
 
         return studyIdentifier;
+    }
+
+    /**
+     * TODO
+     * 
+     * 2-letter ISO code
+     */
+    public Country getCountryFromField(String field, String value) throws Exception {
+        Country c = null;
+        if (!ConverterUtils.isNullOrEmptyOrBlank(value)) {
+            ClassDescriptor countryCD = this.getModel().getClassDescriptorByName("Country");
+            if (countryCD == null) {
+                throw new RuntimeException("This model does not contain a Country class");
+            }
+            
+            Query q = new Query();
+            QueryClass countryClass = new QueryClass(countryCD.getType());
+            q.addFrom(countryClass);
+            q.addToSelect(countryClass);
+            
+            QueryField qf = new QueryField(countryClass, field);
+            q.setConstraint(new SimpleConstraint(qf, ConstraintOp.EQUALS, new QueryValue(value)));
+            
+            Results res = this.os.execute(q);
+            
+            Iterator<?> resIter = res.iterator();
+            try {
+                ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
+                c = (Country) rr.get(0);
+            } catch (NoSuchElementException e) {
+                this.writeLog("getCountryFromField(): couldn't find country with field \"" + field + "\" and value \"" + value + "\"");
+            }
+        }
+        return c;
     }
 
     /**
