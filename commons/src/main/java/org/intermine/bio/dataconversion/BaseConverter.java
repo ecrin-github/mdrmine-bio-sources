@@ -25,6 +25,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 import java.util.Properties;
 
+import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
 import org.intermine.metadata.ConstraintOp;
@@ -238,11 +239,9 @@ public abstract class BaseConverter extends BioFileConverter
 
         // Get reference field of class (either "study" or "linkedStudy" for data objects)
         ReferenceDescriptor reference = this.getReferenceDescriptorOfClass(className);
-        String referenceName = reference.getName();
-
-        if (reference == null) {
-            this.writeLog("createAndStoreClassItem(): couldn't find a known referenceName (study or dataobject) in class " + className);
-        } else {
+        
+        if (reference != null) {
+            String referenceName = reference.getName();
             // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
             String reverseReferenceName = reference.getReverseReferenceFieldName();
     
@@ -256,6 +255,8 @@ public abstract class BaseConverter extends BioFileConverter
     
             classItem.setReference(referenceName, mainClassItem);
             mainClassItem.addToCollection(reverseReferenceName, classItem);
+        } else {    // TODO: Collection
+            this.writeLog("createAndStoreClassItem(): couldn't find a known referenceName (study or dataobject) in class " + className);
         }
 
         return classItem;
@@ -263,7 +264,7 @@ public abstract class BaseConverter extends BioFileConverter
 
     /**
      * TODO
-     * only for classes that have 1 ref
+     * only for classes that have 1 non-cv ref
      */
     public ReferenceDescriptor getReferenceDescriptorOfClass(String className) {
         ReferenceDescriptor rd = null;
@@ -314,6 +315,30 @@ public abstract class BaseConverter extends BioFileConverter
             new String[][]{{"dateType", dateType}, {"startDate", date != null ? date.toString() : null}});
 
         return objectDate;
+    }
+
+    /*
+     * TODO
+     */
+    public Item createAndStoreStudyCountry(Item study, String countryStr, String status, 
+        String plannedEnrolment, LocalDate cadDate, LocalDate ecdDate) throws Exception {
+
+        Item studyCountry = this.createAndStoreClassItem(study, "StudyCountry", 
+            new String[][]{{"countryName", WordUtils.capitalizeFully(countryStr, ' ', '-')},
+                            {"status", status}, {"plannedEnrolment", plannedEnrolment},
+                            {"compAuthorityDecisionDate", cadDate != null ? cadDate.toString() : null},
+                            {"ethicsCommitteeDecisionDate", ecdDate != null ? ecdDate.toString() : null}});
+
+        Country c = this.getCountryFromField("name", countryStr);
+        if (c != null) {
+            // TODO: figure out a way to make this work
+            // studyCountry.setReference("country", String.valueOf(c.getId()));
+            ;
+        } else {
+            this.writeLog("Couldn't match country string \"" + countryStr + "\" with an existing country");
+        }
+
+        return studyCountry;
     }
 
     /**

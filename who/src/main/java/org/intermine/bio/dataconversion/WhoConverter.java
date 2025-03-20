@@ -19,17 +19,7 @@ import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.ClassDescriptor;
-import org.intermine.metadata.ConstraintOp;
 import org.intermine.metadata.Model;
-import org.intermine.model.bio.Country;
-import org.intermine.objectstore.query.QueryField;
-import org.intermine.objectstore.query.QueryValue;
-import org.intermine.objectstore.query.Results;
-import org.intermine.objectstore.query.ResultsRow;
-import org.intermine.objectstore.query.SimpleConstraint;
-import org.intermine.objectstore.query.Query;
-import org.intermine.objectstore.query.QueryClass;
 import org.intermine.xml.full.Item;
 
 import java.io.File;
@@ -39,12 +29,10 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Iterator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -187,10 +175,12 @@ public class WhoConverter extends CacheConverter
         this.currentCountry = null;
         
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
-
         String cleanedID = null;
+
+        // Handling EUCTR trials
         if (trialID.startsWith("EUCTR")) {
             this.registry = ConverterCVT.R_EUCTR;
+            // ID without country code suffix
             cleanedID = trialID.substring(0, 19);
             String countryCode = trialID.substring(20, 22);
             
@@ -202,7 +192,10 @@ public class WhoConverter extends CacheConverter
                 this.cache = true;
             }
 
+            // Using ID without country code suffix
             this.currentTrialID = cleanedID;
+
+            // Getting country from ID country code
             if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
                 this.currentCountry = this.getCountryFromField("isoAlpha2", countryCode);
                 if (this.currentCountry == null) {
@@ -214,7 +207,6 @@ public class WhoConverter extends CacheConverter
         }
 
         if (!this.existingStudy()) {    // Regular parsing
-            this.writeLog("Regular parsing: " + cleanedID);
             study = createItem("Study");
         }
 
@@ -235,8 +227,9 @@ public class WhoConverter extends CacheConverter
 
         /* Secondary IDs */
         // TODO EUCTR: check for additional IDs with existing study
+        // Secondary IDs can also include project IDs (e.g. P30CA015704) and therefore appear multiple times, not parsing them for now
         String secondaryIDs = this.getAndCleanValue(lineValues, "SecondaryIDs");
-        this.parseSecondaryIDs(study, secondaryIDs);
+        // this.parseSecondaryIDs(study, secondaryIDs);
 
         // TODO EUCTR: check for additional titles with existing study
         /* Public title */
@@ -305,12 +298,13 @@ public class WhoConverter extends CacheConverter
         String targetSize = this.getAndCleanValue(lineValues, "Target_size");
         if (ConverterUtils.isPosWholeNumber(targetSize) && !(Long.valueOf(targetSize) > Integer.MAX_VALUE)) {
             study.setAttributeIfNotNull("testField5", targetSize);
-            if (this.newerLastUpdate) { // Updating planned enrolment for more recent last update date
+            if (!this.existingStudy() || this.newerLastUpdate) {    // Updating planned enrolment for more recent last update date
                 study.setAttributeIfNotNull("plannedEnrolment", targetSize);
             }
         }
         
         /* Study actual enrolment */
+        // In EUCTR: for the whole clinical trial
         String resultsActualEnrolment = this.getAndCleanValue(lineValues, "results_actual_enrollment");
         if (ConverterUtils.isPosWholeNumber(resultsActualEnrolment) && !(Long.valueOf(resultsActualEnrolment) > Integer.MAX_VALUE)) {
             study.setAttributeIfNotNull("testField6", resultsActualEnrolment);
@@ -346,6 +340,7 @@ public class WhoConverter extends CacheConverter
         }
 
         /* Ethics decision date, can be a semi colon list  */
+        // TODO
         String ethicsApprovalDateStr = this.getAndCleanValue(lineValues, "Ethics_Approval_Date");
         study.setAttributeIfNotNull("testField4", ethicsApprovalDateStr);
 
@@ -479,11 +474,14 @@ public class WhoConverter extends CacheConverter
      */
     public void parseSecondaryIDs(Item study, String secIDsStr) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(secIDsStr)) {
+            HashSet<String> seenIds = new HashSet<String>();
+
             String[] ids = secIDsStr.split(";");
             for (String id: ids) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(id) && !seenIds.contains(id)) {
                     this.createAndStoreClassItem(study, "StudyIdentifier", 
                         new String[][]{{"identifierValue", id}});
+                    seenIds.add(id);
                 }
                 // TODO: identifier type
                 // TODO: identifier link
@@ -946,7 +944,7 @@ public class WhoConverter extends CacheConverter
 
     /**
      * TODO
-     * @param cadDateStr raw date string of competent authority decision
+     * @param cadDate date of competent authority decision
      * @param ecdDateStr raw date(s) string of ethics committee decision
      */
     public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate, String ecdDatesStr) throws Exception {
@@ -955,23 +953,39 @@ public class WhoConverter extends CacheConverter
         // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
         String status = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
 
+        if (!ConverterUtils.isPosWholeNumber(plannedEnrolment) || Long.valueOf(plannedEnrolment) > Integer.MAX_VALUE) {
+            plannedEnrolment = null;
+        }
+
         if (!this.existingStudy()) {
             // TODO: parse edcDates
             // TODO: don't add duplicates (EUCTR2008-007326-19)
             if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
                 if (countriesStr.contains(";")) {
+                    boolean foundCurrentCountry = false;
+
                     String[] countriesList = countriesStr.split(";");
                     for (String countryStr: countriesList) {
                         if (!ConverterUtils.isNullOrEmptyOrBlank(countryStr)) {
-                            this.createAndStoreStudyCountry(study, countryStr, status, plannedEnrolment, cadDate, null);
+                            if (this.currentCountry != null && countryStr.equalsIgnoreCase(this.currentCountry.getName())) {    // Setting more info for current country
+                                this.createAndStoreStudyCountry(study, countryStr, status, plannedEnrolment, cadDate, null);
+                                foundCurrentCountry = true;
+                            } else {    // Regular parsing
+                                this.createAndStoreStudyCountry(study, countryStr, null, null, null, null);
+                            }
                         }
+                    }
+
+                    // Creating country if currentCountry is set but couldn't match it with a country in the country list
+                    if (this.currentCountry != null && !foundCurrentCountry) {
+                        this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
                     }
                 } else {
                     this.createAndStoreStudyCountry(study, countriesStr, status, plannedEnrolment, cadDate, null);
                 }
             }
         } else if (this.currentCountry != null) {    // Updating an existing study
-            LocalDate ecdDate = this.parseDate(ecdDatesStr, ConverterUtils.P_DATE_MWORD_D_Y_HOUR);
+            // LocalDate ecdDate = this.parseDate(ecdDatesStr, ConverterUtils.P_DATE_MWORD_D_Y_HOUR);
 
             Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
             if (studyCountry != null) {
@@ -982,38 +996,16 @@ public class WhoConverter extends CacheConverter
                 if (cadDate != null) {
                     studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate", cadDate.toString());
                 }
+                
                 // "Date of Ethics Committee Opinion" in EUCTR
-
-                if (ecdDate != null) {
-                    studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
-                }
-
+                // if (ecdDate != null) {
+                //     studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
+                // }
             } else {
                 this.writeLog("Couldn't find StudyCountry with this current country (creating it): \"" + this.currentCountry);
-                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, ecdDate);
+                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
             }
         }
-    }
-
-    public Item createAndStoreStudyCountry(Item study, String countryStr, String status, 
-        String plannedEnrolment, LocalDate cadDate, LocalDate ecdDate) throws Exception {
-
-        Item studyCountry = this.createAndStoreClassItem(study, "StudyCountry", 
-            new String[][]{{"countryName", WordUtils.capitalizeFully(countryStr, ' ', '-')},
-                            {"status", status}, {"plannedEnrolment", plannedEnrolment},
-                            {"compAuthorityDecisionDate", cadDate != null ? cadDate.toString() : null},
-                            {"ethicsCommitteeDecisionDate", ecdDate != null ? ecdDate.toString() : null}});
-
-        Country c = this.getCountryFromField("name", countryStr);
-        if (c != null) {
-            // TODO: figure out a way to make this work
-            // studyCountry.setReference("country", String.valueOf(c.getId()));
-            ;
-        } else {
-            this.writeLog("Couldn't match country string \"" + countryStr + "\" with an existing country");
-        }
-
-        return studyCountry;
     }
 
     /**
@@ -1204,6 +1196,7 @@ public class WhoConverter extends CacheConverter
                         if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
                             && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
                                 lastUpdateOD.setAttribute("startDate", lastUpdate.toString());
+                            // TODO: newerLastUpdate logic in separate function?
                             this.newerLastUpdate = true;
                             this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
                         }
