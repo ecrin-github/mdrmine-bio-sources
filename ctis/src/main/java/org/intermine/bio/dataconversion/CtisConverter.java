@@ -586,10 +586,10 @@ public class CtisConverter extends BaseConverter
                 String p2 = mPhases.group(2);
                 if (p2 == null) {   // One phase number
                     this.createAndStoreClassItem(study, "StudyFeature", 
-                        new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", ConverterUtils.convertPhaseNumber(p1)}});
+                        new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", ConverterUtils.convertPhaseNumber(p1)}});
                 } else {    // Two phase numbers
                     this.createAndStoreClassItem(study, "StudyFeature", 
-                        new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", ConverterUtils.constructMultiplePhasesString(p1, p2)}});
+                        new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", ConverterUtils.constructMultiplePhasesString(p1, p2)}});
                 }
             } else {
                 this.writeLog("parseTrialPhase(): couldn't parse trial phase string: " + trialPhase);

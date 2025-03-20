@@ -838,8 +838,10 @@ public class WhoConverter extends CacheConverter
                 }
             }
 
-            this.createAndStoreClassItem(study, "StudyFeature", 
-                new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", featureValue}});
+            if (!ConverterUtils.isNullOrEmptyOrBlank(featureValue)) {
+                this.createAndStoreClassItem(study, "StudyFeature", 
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", featureValue}});
+            }
         }
     }
 
@@ -847,7 +849,7 @@ public class WhoConverter extends CacheConverter
      * TODO
      */
     public boolean hasPhaseFeature(Item study) {
-        return this.getItemFromItemMap(study, this.studyFeatures, "featureType", ConverterCVT.FEATURE_PHASE) != null;
+        return this.getItemFromItemMap(study, this.studyFeatures, "featureType", ConverterCVT.FEATURE_T_PHASE) != null;
     }
 
     /**
@@ -867,13 +869,13 @@ public class WhoConverter extends CacheConverter
                 String masking = mFeatureInterventional.group(9);
 
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_ALLOCATION}, {"featureValue", allocation}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_ALLOCATION}, {"featureValue", allocation}});
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_INTERVENTION_MODEL}, {"featureValue", model}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL}, {"featureValue", model}});
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_PRIMARY_PURPOSE}, {"featureValue", purpose}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE}, {"featureValue", purpose}});
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_MASKING}, {"featureValue", masking}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_MASKING}, {"featureValue", masking}});
             } else {    // Using raw value
                 this.createAndStoreClassItem(study, "StudyFeature", 
                     new String[][]{{"featureValue", featuresStr}});
@@ -1044,8 +1046,8 @@ public class WhoConverter extends CacheConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(retrospectiveFlag) && !this.existingStudy()) {
             if (retrospectiveFlag.equalsIgnoreCase("1")) {
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_TIME_PERSPECTIVE},
-                                    {"featureValue", ConverterCVT.FEATURE_RETROSPECTIVE}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE},
+                                    {"featureValue", ConverterCVT.FEATURE_V_RETROSPECTIVE}});
             } else {
                 this.writeLog("Retrospective flag: value is not empty but not equal to 1: " + retrospectiveFlag);
             }
