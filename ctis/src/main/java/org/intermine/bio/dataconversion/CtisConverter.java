@@ -693,13 +693,13 @@ public class CtisConverter extends BaseConverter
                 for (int i = 0; i < separatedSponsors.length; i++) {
                     sponsor = separatedSponsors[i];
                     type = separatedTypes[i];
-//                    if (!seenSponsors.contains(sponsor)) {
-//                        // TODO: organisationRor
-//                        this.createAndStoreClassItem(study, "Organisation",
-//                            new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR},
-//                                            {"organisationName", sponsor}, {"organisationType", type}});
-//                        seenSponsors.add(sponsor);
-//                    }
+                    if (!seenSponsors.contains(sponsor)) {
+                        // TODO: organisationRor
+                        this.createAndStoreClassItem(study, "Organisation",
+                            new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR},
+                                            {"organisationName", sponsor}, {"organisationType", type}});
+                        seenSponsors.add(sponsor);
+                    }
                 }
             }
         }
