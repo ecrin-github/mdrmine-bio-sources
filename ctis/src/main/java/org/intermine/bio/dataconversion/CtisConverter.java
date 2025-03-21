@@ -11,6 +11,15 @@ package org.intermine.bio.dataconversion;
  *
  */
 
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 import java.io.Reader;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -18,16 +27,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
 
 
 /**
@@ -125,8 +124,8 @@ public class CtisConverter extends BaseConverter
         String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
         if (!ConverterUtils.isNullOrEmptyOrBlank(trialTitle)) {
             study.setAttributeIfNotNull("displayTitle", trialTitle);
-            this.createAndStoreClassItem(study, "StudyTitle", 
-                new String[][]{{"titleText", trialTitle}, {"titleType", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
+            this.createAndStoreClassItem(study, "Title",
+                new String[][]{{"text", trialTitle}, {"type", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
         } else {
             study.setAttributeIfNotNull("displayTitle", "Unknown study title");
         }
@@ -268,7 +267,7 @@ public class CtisConverter extends BaseConverter
      */
     public void parseStudyStatus(Item study, String overallTrialStatus) {
         // TODO: normalise values
-        study.setAttributeIfNotNull("studyStatus", overallTrialStatus);
+        study.setAttributeIfNotNull("status", overallTrialStatus);
     }
 
     /**
@@ -505,12 +504,12 @@ public class CtisConverter extends BaseConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(gender)) {
             if (gender.contains(ConverterCVT.GENDER_MEN.toLowerCase())) {
                 if (gender.contains(ConverterCVT.GENDER_WOMEN.toLowerCase())) {
-                    study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_ALL);
+                    study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
                 } else {
-                    study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_MEN);
+                    study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_MEN);
                 }
             } else if (gender.contains(ConverterCVT.GENDER_WOMEN.toLowerCase())) {
-                study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_WOMEN);
+                study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_WOMEN);
             } else {
                 this.writeLog("parseGender(): value not empty but contains neither \"female\" nor \"male\"");
             }
@@ -557,15 +556,15 @@ public class CtisConverter extends BaseConverter
                         // TODO: topic type
                         // TODO: matching with mesh code and value
                         // Note: these seem to be MeSH Tree codes but couldn't find the version of the vocabulary, C13 in dataset is C12.050 in MeSH
-                        this.createAndStoreClassItem(study, "StudyTopic", 
-                            new String[][]{{"originalValue", t1}, {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", c1}});
+                        this.createAndStoreClassItem(study, "Topic",
+                            new String[][]{{"value", t1}, {"ctType", ConverterCVT.CV_MESH_TREE}, {"ctCode", c1}});
                         addedCodes.add(c1);
                     }
                     if (!addedCodes.contains(c2)) { // In theory only the first (parent) topic can appear multiple times, but we check for the child topic anyway
                         // TODO: topic type
                         // TODO: matching with mesh code and value
-                        this.createAndStoreClassItem(study, "StudyTopic", 
-                            new String[][]{{"originalValue", t2}, {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", c2}});
+                        this.createAndStoreClassItem(study, "Topic",
+                            new String[][]{{"value", t2}, {"ctType", ConverterCVT.CV_MESH_TREE}, {"ctCode", c2}});
                         addedCodes.add(c2);
                     }
                 }   // else, "not possible to specify" matched
@@ -608,8 +607,8 @@ public class CtisConverter extends BaseConverter
             Matcher mNA = P_NOT_APPLICABLE.matcher(product);
             // TODO: match with CT
             if (!mNA.matches() && !product.equals("-")) {
-                 this.createAndStoreClassItem(study, "StudyTopic", 
-                    new String[][]{{"topicType", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT}, {"originalValue", product}});
+                 this.createAndStoreClassItem(study, "Topic",
+                    new String[][]{{"type", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT}, {"value", product}});
             }
         }
     }
@@ -632,7 +631,7 @@ public class CtisConverter extends BaseConverter
      * TODO
      */
     public void parseDecisionDate(Item study, String decisionDateStr) throws Exception {
-        String studyStatus = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
+        String studyStatus = ConverterUtils.getValueOfItemAttribute(study, "status");
         
         // Check study status to add ethics approval notification
         // TODO: no info of decision date in model if not authorised
@@ -694,13 +693,13 @@ public class CtisConverter extends BaseConverter
                 for (int i = 0; i < separatedSponsors.length; i++) {
                     sponsor = separatedSponsors[i];
                     type = separatedTypes[i];
-                    if (!seenSponsors.contains(sponsor)) {
-                        // TODO: organisationRor
-                        this.createAndStoreClassItem(study, "StudyOrganisation", 
-                            new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, 
-                                            {"organisationName", sponsor}, {"organisationType", type}});
-                        seenSponsors.add(sponsor);
-                    }
+//                    if (!seenSponsors.contains(sponsor)) {
+//                        // TODO: organisationRor
+//                        this.createAndStoreClassItem(study, "Organisation",
+//                            new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR},
+//                                            {"organisationName", sponsor}, {"organisationType", type}});
+//                        seenSponsors.add(sponsor);
+//                    }
                 }
             }
         }
@@ -765,7 +764,7 @@ public class CtisConverter extends BaseConverter
      * @param lineValues the list of all values for a line in the data file
      * @param field the name of the field to get the value of
      * @return the cleaned value of the field
-     * @see #cleanValue()
+     * @see //#cleanValue()
      */
     public String getAndCleanValue(String[] lineValues, String field) {
         // TODO: handle errors

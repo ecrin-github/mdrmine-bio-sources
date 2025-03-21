@@ -18,18 +18,13 @@ import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.text.WordUtils;
+import org.apache.log4j.Logger;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
 import org.intermine.metadata.ConstraintOp;
 import org.intermine.metadata.Model;
 import org.intermine.model.bio.Country;
-import org.intermine.objectstore.query.QueryField;
-import org.intermine.objectstore.query.QueryValue;
-import org.intermine.objectstore.query.Results;
-import org.intermine.objectstore.query.ResultsRow;
-import org.intermine.objectstore.query.SimpleConstraint;
-import org.intermine.objectstore.query.Query;
-import org.intermine.objectstore.query.QueryClass;
+import org.intermine.objectstore.query.*;
 import org.intermine.xml.full.Item;
 
 import java.io.File;
@@ -38,13 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -120,24 +109,27 @@ public class WhoConverter extends BaseConverter
     private Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
     private Map<String, List<Item>> studyICDs = new HashMap<String, List<Item>>();
     private Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyLocations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyOrganisations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyPeople = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyRelationships = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyTitles = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyTopics = new HashMap<String, List<Item>>();
+    private Map<String, List<Item>> locations = new HashMap<String, List<Item>>();
+    private Map<String, List<Item>> organisations = new HashMap<String, List<Item>>();
+    private Map<String, List<Item>> people = new HashMap<String, List<Item>>();
+    private Map<String, List<Item>> relationships = new HashMap<String, List<Item>>();
+    private Map<String, List<Item>> titles = new HashMap<String, List<Item>>();
+    private Map<String, List<Item>> topics = new HashMap<String, List<Item>>();
     // DOs
-    private Map<String, List<Item>> studyObjects = new HashMap<String, List<Item>>();
+    private Map<String, List<Item>> objects = new HashMap<String, List<Item>>();
     // DO-related subclasses
     private Map<String, List<Item>> objectDates = new HashMap<String, List<Item>>();
     private Map<String, List<Item>> objectDescriptions = new HashMap<String, List<Item>>();
     private Map<String, List<Item>> objectIdentifiers = new HashMap<String, List<Item>>();
     private Map<String, List<Item>> objectInstances = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectOrganisations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectPeople = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectRelationships = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectTitles = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectTopics = new HashMap<String, List<Item>>();
+    //private Map<String, List<Item>> objectOrganisations = new HashMap<String, List<Item>>();
+    //private Map<String, List<Item>> objectPeople = new HashMap<String, List<Item>>();
+    //private Map<String, List<Item>> objectRelationships = new HashMap<String, List<Item>>();
+    //private Map<String, List<Item>> objectTitles = new HashMap<String, List<Item>>();
+    //private Map<String, List<Item>> objectTopics = new HashMap<String, List<Item>>();
+
+    private static final Logger LOG = Logger.getLogger(WhoConverter.class);
+
 
     /**
      * Constructor
@@ -352,7 +344,7 @@ public class WhoConverter extends BaseConverter
         // TODO EUCTR: logically replace values (e.g. recruiting instead of recruitment ended) 
         String studyStatus = this.getAndCleanValue(lineValues, "Recruitment_status");
         if (!this.existingStudy()) {
-            study.setAttributeIfNotNull("studyStatus", studyStatus);
+            study.setAttributeIfNotNull("status", studyStatus);
         }
 
         /* Study people: sponsors */
@@ -524,8 +516,8 @@ public class WhoConverter extends BaseConverter
      */
     public void parseTitle(Item study, String title, String titleType) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(title) && !title.equals("-") && !title.equals("_") && !title.equals(".")) {
-            this.createAndStoreClassItem(study, "StudyTitle", 
-                new String[][]{{"titleText", title}, {"titleType", titleType}});
+            this.createAndStoreClassItem(study, "Title",
+                new String[][]{{"text", title}, {"type", titleType}});
             
             if (!study.hasAttribute("displayTitle")) {
                 study.setAttributeIfNotNull("displayTitle", title);
@@ -644,7 +636,7 @@ public class WhoConverter extends BaseConverter
         // TODO: attempt at separating first name/last name if one of firstName/lastName is empty?
         // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
 
-        Item studyPeople = createItem("StudyPeople");
+        Item studyPeople = createItem("Person");
         String givenName = null;
         String familyName = null;
         String fullName = null;
@@ -664,12 +656,13 @@ public class WhoConverter extends BaseConverter
             contribType = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
         } else {
             // Exception already thrown earlier so value can't be anything other than "scientific"
-            contribType = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
+            //contribType = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
         }
 
-        this.createAndStoreClassItem(study, "StudyPeople", 
-            new String[][]{{"personGivenName", givenName}, {"personFamilyName", familyName},
-                            {"personFullName", fullName}, {"personAffiliation", affiliation}, {"contribType", contribType}});
+        LOG.info("STUDY " + givenName + "|" + familyName +"|" + affiliation +"|"+ contribType);
+//        this.createAndStoreClassItem(study, "Person",
+//            new String[][]{{"givenName", givenName}, {"familyName", familyName},
+//                            {"fullName", fullName}, {"affiliation", affiliation}, {"contribType", contribType}});
     }
 
     /**
@@ -759,32 +752,32 @@ public class WhoConverter extends BaseConverter
      */
     public void parseStudyType(Item study, String studyTypeStr) {
 
-        if ((!this.existingStudy() || !study.hasAttribute("studyType")) && !ConverterUtils.isNullOrEmptyOrBlank(studyTypeStr)) {
+        if ((!this.existingStudy() || !study.hasAttribute("type")) && !ConverterUtils.isNullOrEmptyOrBlank(studyTypeStr)) {
             Matcher mTypeInterventional = P_TYPE_INTERVENTIONAL.matcher(studyTypeStr);
             if (mTypeInterventional.matches()) {    // Interventional
-                study.setAttributeIfNotNull("studyType", ConverterCVT.TYPE_INTERVENTIONAL);
+                study.setAttributeIfNotNull("type", ConverterCVT.TYPE_INTERVENTIONAL);
             } else {    // Observational
                 Matcher mTypeObservational = P_TYPE_OBSERVATIONAL.matcher(studyTypeStr);
                 if (mTypeObservational.matches()) {
-                    study.setAttributeIfNotNull("studyType", ConverterCVT.TYPE_OBSERVATIONAL);
+                    study.setAttributeIfNotNull("type", ConverterCVT.TYPE_OBSERVATIONAL);
                 } else {    // Other
                     Matcher mTypeOther = P_TYPE_OTHER.matcher(studyTypeStr);
                     if (mTypeOther.matches()) {
-                        study.setAttributeIfNotNull("studyType", ConverterCVT.TYPE_OTHER);
+                        study.setAttributeIfNotNull("type", ConverterCVT.TYPE_OTHER);
                     } else {    // Basic science
                         Matcher mTypeBasicScience = P_TYPE_BASIC_SCIENCE.matcher(studyTypeStr);
                         if (mTypeBasicScience.matches()) {
-                            study.setAttributeIfNotNull("studyType", ConverterCVT.TYPE_BASIC_SCIENCE);
+                            study.setAttributeIfNotNull("type", ConverterCVT.TYPE_BASIC_SCIENCE);
                         } else {    // N/A
                             Matcher mTypeNA = P_NOT_APPLICABLE.matcher(studyTypeStr);
                             if (mTypeNA.matches()) {
-                                study.setAttributeIfNotNull("studyType", ConverterCVT.NOT_APPLICABLE);
+                                study.setAttributeIfNotNull("type", ConverterCVT.NOT_APPLICABLE);
                             } else {    // Expanded access
                                 Matcher mTypeExpandedAcess = P_TYPE_EXPANDED_ACCESS.matcher(studyTypeStr);
                                 if (mTypeExpandedAcess.matches()) {
-                                    study.setAttributeIfNotNull("studyType", ConverterCVT.TYPE_EXPANDED_ACCESS);
+                                    study.setAttributeIfNotNull("type", ConverterCVT.TYPE_EXPANDED_ACCESS);
                                 } else {    // Unknown
-                                    study.setAttributeIfNotNull("studyType", ConverterCVT.UNKNOWN);
+                                    study.setAttributeIfNotNull("type", ConverterCVT.UNKNOWN);
                                 }
                             }
                         }
@@ -966,41 +959,45 @@ public class WhoConverter extends BaseConverter
     public void createAndStoreStudyOrg(Item study, String studyOrgStr, String contribType) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyOrgStr)) {
             // TODO: setting studyOrganisation object for now, need logic to distinguish people from orgs
-            Item studyPeople = createItem("StudyPeople");
+            Item studyPeople = createItem("Person");
             studyPeople.setAttributeIfNotNull("contribType", contribType);
+
+            /*
+            //createAndStoreClassItem needs to deal with many2many as well
 
             Matcher mNA = P_NOT_APPLICABLE.matcher(studyOrgStr);
             if (mNA.matches()) {    // N/A
-                this.createAndStoreClassItem(study, "StudyOrganisation", 
+                this.createAndStoreClassItem(study, "Organisation",
                     new String[][]{{"contribType", contribType}, 
-                                    {"organisationName", ConverterCVT.NOT_APPLICABLE}});
+                                    {"name", ConverterCVT.NOT_APPLICABLE}});
             } else {
                 Matcher mNone = P_NONE.matcher(studyOrgStr);
                 if (mNone.matches()) {   // No sponsor
                     if (contribType.equals(ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR)) {
-                        this.createAndStoreClassItem(study, "StudyOrganisation", 
+                        this.createAndStoreClassItem(study, "Organisation",
                             new String[][]{{"contribType", contribType}, 
-                                            {"organisationName", ConverterCVT.SPONSOR_NONE}});
+                                            {"name", ConverterCVT.SPONSOR_NONE}});
                     }
                 } else {    // Using raw value
-                    this.createAndStoreClassItem(study, "StudyOrganisation", 
+                    this.createAndStoreClassItem(study, "Organisation",
                         new String[][]{{"contribType", contribType}, 
-                                        {"organisationName", studyOrgStr}});
+                                        {"name", studyOrgStr}});
                 }
             }
+            */
         }
     }
 
     /**
      * TODO
-     * @param cadDateStr raw date string of competent authority decision
-     * @param ecdDateStr raw date(s) string of ethics committee decision
+     * //@param cadDateStr raw date string of competent authority decision
+     * //@param ecdDateStr raw date(s) string of ethics committee decision
      */
     public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate, String ecdDatesStr) throws Exception {
         // TODO: only restrict date fields + enrolment to EUCTR?
         // TODO: try to normalise values
         // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
-        String status = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
+        String status = ConverterUtils.getValueOfItemAttribute(study, "status");
 
         if (!this.existingStudy()) {
             // TODO: parse edcDates
@@ -1225,7 +1222,7 @@ public class WhoConverter extends BaseConverter
             this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
         } else {
             if (lastUpdate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.studyObjects, "objectType",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "objectType",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
                     Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",  ConverterCVT.DATE_TYPE_UPDATED);
                     if (lastUpdateOD != null) {
@@ -1296,11 +1293,11 @@ public class WhoConverter extends BaseConverter
         String g1 = m.group(2);
         String g2 = m.group(4);
         if (g1 != null && g2 != null && (!structured || (g1.equalsIgnoreCase("yes") && g2.equalsIgnoreCase("yes")))) {
-            study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_ALL);
+            study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
         } else if (g1 != null && (!structured || g1.equalsIgnoreCase("yes"))) {
-            study.setAttributeIfNotNull("studyGenderElig", gender1);
+            study.setAttributeIfNotNull("genderElig", gender1);
         } else if (g2 != null && (!structured || g2.equalsIgnoreCase("yes"))) {
-            study.setAttributeIfNotNull("studyGenderElig", gender2);
+            study.setAttributeIfNotNull("genderElig", gender2);
         } else {
             this.writeLog("Match for study gender (structured regex) but no gender found, string: " + genderStr);
         }
@@ -1398,7 +1395,7 @@ public class WhoConverter extends BaseConverter
      * @param lineValues the list of all values for a line in the data file
      * @param field the name of the field to get the value of
      * @return the cleaned value of the field
-     * @see #cleanValue()
+     * //@see cleanValue()
      */
     public String getAndCleanValue(String[] lineValues, String field) {
         // TODO: handle errors
@@ -1411,7 +1408,7 @@ public class WhoConverter extends BaseConverter
      * @param lineValues the list of all values for a line in the data file
      * @param field the name of the field to get the value of
      * @return the cleaned value of the field
-     * @see #cleanValue()
+     * //@see #cleanValue()
      */
     public String getAndCleanValueNoStrip(String[] lineValues, String field) {
         // TODO: handle errors
@@ -1423,8 +1420,8 @@ public class WhoConverter extends BaseConverter
      * 
      * @param s the value to clean
      * @return the cleaned value
-     * @see #unescapeHtml()
-     * @see #removeQuotes()
+     * //@see #unescapeHtml()
+     * //@see #removeQuotes()
      */
     public String cleanValue(String s, boolean strip) {
         if (strip) {
@@ -1492,10 +1489,11 @@ public class WhoConverter extends BaseConverter
     public void storeEuctrItems() throws Exception {
         // Storing all EUCTR items
         List<Map<String, List<Item>>> itemMaps = Arrays.asList(
-            studyConditions, studyCountries, studyFeatures, studyICDs, studyIdentifiers, studyLocations, 
-            studyOrganisations, studyPeople, studyRelationships, studyTitles, studyTopics, studyObjects, 
-            objectDates, objectDescriptions, objectIdentifiers, objectInstances, objectOrganisations, 
-            objectPeople, objectRelationships, objectTitles, objectTopics
+            studyConditions, studyCountries, studyFeatures, studyICDs, studyIdentifiers, locations,
+            organisations, people, relationships, titles, topics, objects,
+            objectDates, objectDescriptions, objectIdentifiers, objectInstances
+           //     , objectOrganisations,
+           // objectPeople, objectRelationships, objectTitles, objectTopics
         );
 
         for (Map<String, List<Item>> itemMap: itemMaps) {

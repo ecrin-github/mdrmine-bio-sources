@@ -11,22 +11,19 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.io.FileReader;
-import java.io.Reader;
-import java.lang.reflect.Method;
-import java.time.LocalDate;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import javax.xml.stream.events.XMLEvent;
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamReader;
-
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
+
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.events.XMLEvent;
+import java.io.Reader;
+import java.lang.reflect.Method;
+import java.time.LocalDate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 
@@ -208,8 +205,8 @@ public class EuctrConverter extends BaseConverter
                 study.setAttributeIfNotNull("displayTitle", scientificTitle);
                 displayTitleSet = true;
             }
-            this.createAndStoreClassItem(study, "StudyTitle", 
-                new String[][]{{"titleText", scientificTitle}, {"titleType", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
+            this.createAndStoreClassItem(study, "Title",
+                new String[][]{{"text", scientificTitle}, {"type", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
         }
 
         if (!displayTitleSet) {
@@ -225,7 +222,7 @@ public class EuctrConverter extends BaseConverter
      * TODO
      */
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
-        this.createAndStoreClassItem(study, "StudyOrganisation", 
+        this.createAndStoreClassItem(study, "Organisation",
             new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, 
                             {"organisationName", primarySponsor}});
     }
