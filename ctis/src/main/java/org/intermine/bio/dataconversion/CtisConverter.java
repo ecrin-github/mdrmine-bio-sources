@@ -11,15 +11,6 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
 import java.io.Reader;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -27,6 +18,17 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
+
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 
 
 /**
@@ -541,7 +543,7 @@ public class CtisConverter extends BaseConverter
      * TODO
      */
     public void parseStudyTopics(Item study, String studyTopics) throws Exception {
-        HashSet addedCodes = new HashSet<String>();
+        HashSet<String> addedCodes = new HashSet<String>();
 
         String[] separatedTopics = studyTopics.split("\",\"");
         for (String topicPair: separatedTopics) {
@@ -585,10 +587,10 @@ public class CtisConverter extends BaseConverter
                 String p2 = mPhases.group(2);
                 if (p2 == null) {   // One phase number
                     this.createAndStoreClassItem(study, "StudyFeature", 
-                        new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", ConverterUtils.convertPhaseNumber(p1)}});
+                        new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", ConverterUtils.convertPhaseNumber(p1)}});
                 } else {    // Two phase numbers
                     this.createAndStoreClassItem(study, "StudyFeature", 
-                        new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", ConverterUtils.constructMultiplePhasesString(p1, p2)}});
+                        new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", ConverterUtils.constructMultiplePhasesString(p1, p2)}});
                 }
             } else {
                 this.writeLog("parseTrialPhase(): couldn't parse trial phase string: " + trialPhase);
@@ -680,7 +682,7 @@ public class CtisConverter extends BaseConverter
      */
     public void parseSponsors(Item study, String sponsors, String sponsorTypes) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(sponsors)) {
-            HashSet seenSponsors = new HashSet<String>();
+            HashSet<String> seenSponsors = new HashSet<String>();
             String sponsor;
             String type;
 
@@ -697,7 +699,7 @@ public class CtisConverter extends BaseConverter
                         // TODO: organisationRor
                         this.createAndStoreClassItem(study, "Organisation",
                             new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR},
-                                            {"organisationName", sponsor}, {"organisationType", type}});
+                                            {"name", sponsor}, {"type", type}});
                         seenSponsors.add(sponsor);
                     }
                 }

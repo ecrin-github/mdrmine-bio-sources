@@ -11,7 +11,6 @@ package org.intermine.bio.dataconversion;
  */
 
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -70,7 +69,7 @@ public class EuctrMainInfo {
     @JacksonXmlProperty(localName = "results_date_posted")
     private String resultsDatePosted;
     @JacksonXmlProperty(localName = "results_date_first_publication")
-    private String resultsDateFirst_Publication;
+    private String resultsDateFirstPublication;
     @JacksonXmlProperty(localName = "results_baseline_char")
     private String resultsBaselineChar;
     @JacksonXmlProperty(localName = "results_participant_flow")

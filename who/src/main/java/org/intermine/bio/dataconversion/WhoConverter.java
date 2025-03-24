@@ -11,38 +11,39 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
-import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.commons.text.WordUtils;
-import org.apache.log4j.Logger;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.ClassDescriptor;
-import org.intermine.metadata.ConstraintOp;
-import org.intermine.metadata.Model;
-import org.intermine.model.bio.Country;
-import org.intermine.objectstore.query.*;
-import org.intermine.xml.full.Item;
-
 import java.io.File;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+
+import com.opencsv.exceptions.CsvMalformedLineException;
+import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 
 
 /**
  * Class to parse values from a WHO data file and store them as MDRMine items
  * @author ECRIN
  */
-public class WhoConverter extends BaseConverter
+public class WhoConverter extends CacheConverter
 {
     /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
     // TODO: "-"/"--" are none or unknown?
@@ -97,39 +98,6 @@ public class WhoConverter extends BaseConverter
     private Map<String, Integer> fieldsToInd;
     private String registry;    // Registry name
     private boolean cache;  // Caching if new EUCTR study
-    private boolean newerLastUpdate; // When parsing existing EUCTR study, true if last update date more recent than current one
-    private Country currentCountry; // When parsing existing EUCTR study, country associated with country code
-
-    /* Saving all EUCTR items for later modification and saving at the end  */
-    // Cache of studies, key is primary identifier (not Item or DB id)
-    private Map<String, Item> studies = new HashMap<String, Item>();
-    // Study-related classes
-    private Map<String, List<Item>> studyConditions = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyCountries = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyICDs = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> locations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> organisations = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> people = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> relationships = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> titles = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> topics = new HashMap<String, List<Item>>();
-    // DOs
-    private Map<String, List<Item>> objects = new HashMap<String, List<Item>>();
-    // DO-related subclasses
-    private Map<String, List<Item>> objectDates = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectDescriptions = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectIdentifiers = new HashMap<String, List<Item>>();
-    private Map<String, List<Item>> objectInstances = new HashMap<String, List<Item>>();
-    //private Map<String, List<Item>> objectOrganisations = new HashMap<String, List<Item>>();
-    //private Map<String, List<Item>> objectPeople = new HashMap<String, List<Item>>();
-    //private Map<String, List<Item>> objectRelationships = new HashMap<String, List<Item>>();
-    //private Map<String, List<Item>> objectTitles = new HashMap<String, List<Item>>();
-    //private Map<String, List<Item>> objectTopics = new HashMap<String, List<Item>>();
-
-    private static final Logger LOG = Logger.getLogger(WhoConverter.class);
-
 
     /**
      * Constructor
@@ -189,7 +157,7 @@ public class WhoConverter extends BaseConverter
             }
         }
 
-        this.storeEuctrItems();
+        this.storeAllItems();
 
         this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
@@ -209,10 +177,12 @@ public class WhoConverter extends BaseConverter
         this.currentCountry = null;
         
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
-
         String cleanedID = null;
+
+        // Handling EUCTR trials
         if (trialID.startsWith("EUCTR")) {
             this.registry = ConverterCVT.R_EUCTR;
+            // ID without country code suffix
             cleanedID = trialID.substring(0, 19);
             String countryCode = trialID.substring(20, 22);
             
@@ -224,7 +194,10 @@ public class WhoConverter extends BaseConverter
                 this.cache = true;
             }
 
+            // Using ID without country code suffix
             this.currentTrialID = cleanedID;
+
+            // Getting country from ID country code
             if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
                 this.currentCountry = this.getCountryFromField("isoAlpha2", countryCode);
                 if (this.currentCountry == null) {
@@ -236,7 +209,6 @@ public class WhoConverter extends BaseConverter
         }
 
         if (!this.existingStudy()) {    // Regular parsing
-            this.writeLog("Regular parsing: " + cleanedID);
             study = createItem("Study");
         }
 
@@ -249,14 +221,17 @@ public class WhoConverter extends BaseConverter
         /* ID and ID URL */
         String url = this.getAndCleanValue(lineValues, "url");
 
+        // TODO EUCTR: add ID with suffix as well?
         if (!this.existingStudy()) {
+            // TODO: fix duplicate studyIdentifier error
             this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, url);
         }
 
         /* Secondary IDs */
         // TODO EUCTR: check for additional IDs with existing study
+        // Secondary IDs can also include project IDs (e.g. P30CA015704) and therefore appear multiple times, not parsing them for now
         String secondaryIDs = this.getAndCleanValue(lineValues, "SecondaryIDs");
-        this.parseSecondaryIDs(study, secondaryIDs);
+        // this.parseSecondaryIDs(study, secondaryIDs);
 
         // TODO EUCTR: check for additional titles with existing study
         /* Public title */
@@ -302,7 +277,7 @@ public class WhoConverter extends BaseConverter
         String registrationDateStr = this.getAndCleanValue(lineValues, "Date_registration");
         LocalDate registrationDate = this.parseDate(registrationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
-        /* Date enrolment */
+        /* Date enrolment (start date) */
         // "Date of Competent Authority Decision" in EUCTR
         String dateEnrolmentStr = this.getAndCleanValue(lineValues, "Date_enrollement");
         study.setAttributeIfNotNull("testField3", dateEnrolmentStr);
@@ -325,12 +300,13 @@ public class WhoConverter extends BaseConverter
         String targetSize = this.getAndCleanValue(lineValues, "Target_size");
         if (ConverterUtils.isPosWholeNumber(targetSize) && !(Long.valueOf(targetSize) > Integer.MAX_VALUE)) {
             study.setAttributeIfNotNull("testField5", targetSize);
-            if (this.newerLastUpdate) { // Updating planned enrolment for more recent last update date
+            if (!this.existingStudy() || this.newerLastUpdate) {    // Updating planned enrolment for more recent last update date
                 study.setAttributeIfNotNull("plannedEnrolment", targetSize);
             }
         }
         
         /* Study actual enrolment */
+        // In EUCTR: for the whole clinical trial
         String resultsActualEnrolment = this.getAndCleanValue(lineValues, "results_actual_enrollment");
         if (ConverterUtils.isPosWholeNumber(resultsActualEnrolment) && !(Long.valueOf(resultsActualEnrolment) > Integer.MAX_VALUE)) {
             study.setAttributeIfNotNull("testField6", resultsActualEnrolment);
@@ -366,6 +342,7 @@ public class WhoConverter extends BaseConverter
         }
 
         /* Ethics decision date, can be a semi colon list  */
+        // TODO
         String ethicsApprovalDateStr = this.getAndCleanValue(lineValues, "Ethics_Approval_Date");
         study.setAttributeIfNotNull("testField4", ethicsApprovalDateStr);
 
@@ -499,11 +476,14 @@ public class WhoConverter extends BaseConverter
      */
     public void parseSecondaryIDs(Item study, String secIDsStr) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(secIDsStr)) {
+            HashSet<String> seenIds = new HashSet<String>();
+
             String[] ids = secIDsStr.split(";");
             for (String id: ids) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(id) && !seenIds.contains(id)) {
                     this.createAndStoreClassItem(study, "StudyIdentifier", 
                         new String[][]{{"identifierValue", id}});
+                    seenIds.add(id);
                 }
                 // TODO: identifier type
                 // TODO: identifier link
@@ -636,7 +616,6 @@ public class WhoConverter extends BaseConverter
         // TODO: attempt at separating first name/last name if one of firstName/lastName is empty?
         // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
 
-        Item studyPeople = createItem("Person");
         String givenName = null;
         String familyName = null;
         String fullName = null;
@@ -656,13 +635,13 @@ public class WhoConverter extends BaseConverter
             contribType = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
         } else {
             // Exception already thrown earlier so value can't be anything other than "scientific"
-            //contribType = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
+            contribType = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
         }
 
-        LOG.info("STUDY " + givenName + "|" + familyName +"|" + affiliation +"|"+ contribType);
-//        this.createAndStoreClassItem(study, "Person",
-//            new String[][]{{"givenName", givenName}, {"familyName", familyName},
-//                            {"fullName", fullName}, {"affiliation", affiliation}, {"contribType", contribType}});
+        // TODO: fix affiliation
+        this.createAndStoreClassItem(study, "Person",
+            new String[][]{{"givenName", givenName}, {"familyName", familyName},
+                            {"fullName", fullName}, {"affiliation", affiliation}, {"contribType", contribType}});
     }
 
     /**
@@ -859,8 +838,10 @@ public class WhoConverter extends BaseConverter
                 }
             }
 
-            this.createAndStoreClassItem(study, "StudyFeature", 
-                new String[][]{{"featureType", ConverterCVT.FEATURE_PHASE}, {"featureValue", featureValue}});
+            if (!ConverterUtils.isNullOrEmptyOrBlank(featureValue)) {
+                this.createAndStoreClassItem(study, "StudyFeature", 
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", featureValue}});
+            }
         }
     }
 
@@ -868,7 +849,7 @@ public class WhoConverter extends BaseConverter
      * TODO
      */
     public boolean hasPhaseFeature(Item study) {
-        return this.getItemFromItemMap(study, this.studyFeatures, "featureType", ConverterCVT.FEATURE_PHASE) != null;
+        return this.getItemFromItemMap(study, this.studyFeatures, "featureType", ConverterCVT.FEATURE_T_PHASE) != null;
     }
 
     /**
@@ -888,37 +869,16 @@ public class WhoConverter extends BaseConverter
                 String masking = mFeatureInterventional.group(9);
 
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_ALLOCATION}, {"featureValue", allocation}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_ALLOCATION}, {"featureValue", allocation}});
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_INTERVENTION_MODEL}, {"featureValue", model}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL}, {"featureValue", model}});
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_PRIMARY_PURPOSE}, {"featureValue", purpose}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE}, {"featureValue", purpose}});
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_MASKING}, {"featureValue", masking}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_MASKING}, {"featureValue", masking}});
             } else {    // Using raw value
                 this.createAndStoreClassItem(study, "StudyFeature", 
                     new String[][]{{"featureValue", featuresStr}});
-            }
-        }
-    }
-
-    /**
-     * TODO
-     */
-    public void setStudyStartDate(Item study, LocalDate startDate) {
-        if (startDate != null) {
-            boolean setDate = false;
-            if (!this.existingStudy()) {  // If not parsing an already existing study
-                setDate = true;
-            } else {    // Checking if the parsed start date is later than the already set one (if it exists)
-                String existingDateStr = ConverterUtils.getValueOfItemAttribute(study, "startDate");
-                if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
-                    && startDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
-                    setDate = true;
-                }
-            }
-            if (setDate) {
-                study.setAttributeIfNotNull("startDate", startDate.toString());
             }
         }
     }
@@ -959,11 +919,8 @@ public class WhoConverter extends BaseConverter
     public void createAndStoreStudyOrg(Item study, String studyOrgStr, String contribType) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyOrgStr)) {
             // TODO: setting studyOrganisation object for now, need logic to distinguish people from orgs
-            Item studyPeople = createItem("Person");
-            studyPeople.setAttributeIfNotNull("contribType", contribType);
 
-            /*
-            //createAndStoreClassItem needs to deal with many2many as well
+            // TODO: createAndStoreClassItem needs to deal with many2many as well
 
             Matcher mNA = P_NOT_APPLICABLE.matcher(studyOrgStr);
             if (mNA.matches()) {    // N/A
@@ -984,14 +941,13 @@ public class WhoConverter extends BaseConverter
                                         {"name", studyOrgStr}});
                 }
             }
-            */
         }
     }
 
     /**
      * TODO
-     * //@param cadDateStr raw date string of competent authority decision
-     * //@param ecdDateStr raw date(s) string of ethics committee decision
+     * @param cadDate date of competent authority decision
+     * @param ecdDateStr raw date(s) string of ethics committee decision
      */
     public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate, String ecdDatesStr) throws Exception {
         // TODO: only restrict date fields + enrolment to EUCTR?
@@ -999,23 +955,39 @@ public class WhoConverter extends BaseConverter
         // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
         String status = ConverterUtils.getValueOfItemAttribute(study, "status");
 
+        if (!ConverterUtils.isPosWholeNumber(plannedEnrolment) || Long.valueOf(plannedEnrolment) > Integer.MAX_VALUE) {
+            plannedEnrolment = null;
+        }
+
         if (!this.existingStudy()) {
             // TODO: parse edcDates
             // TODO: don't add duplicates (EUCTR2008-007326-19)
             if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
                 if (countriesStr.contains(";")) {
+                    boolean foundCurrentCountry = false;
+
                     String[] countriesList = countriesStr.split(";");
                     for (String countryStr: countriesList) {
                         if (!ConverterUtils.isNullOrEmptyOrBlank(countryStr)) {
-                            this.createAndStoreStudyCountry(study, countryStr, status, plannedEnrolment, cadDate, null);
+                            if (this.currentCountry != null && countryStr.equalsIgnoreCase(this.currentCountry.getName())) {    // Setting more info for current country
+                                this.createAndStoreStudyCountry(study, countryStr, status, plannedEnrolment, cadDate, null);
+                                foundCurrentCountry = true;
+                            } else {    // Regular parsing
+                                this.createAndStoreStudyCountry(study, countryStr, null, null, null, null);
+                            }
                         }
+                    }
+
+                    // Creating country if currentCountry is set but couldn't match it with a country in the country list
+                    if (this.currentCountry != null && !foundCurrentCountry) {
+                        this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
                     }
                 } else {
                     this.createAndStoreStudyCountry(study, countriesStr, status, plannedEnrolment, cadDate, null);
                 }
             }
         } else if (this.currentCountry != null) {    // Updating an existing study
-            LocalDate ecdDate = this.parseDate(ecdDatesStr, ConverterUtils.P_DATE_MWORD_D_Y_HOUR);
+            // LocalDate ecdDate = this.parseDate(ecdDatesStr, ConverterUtils.P_DATE_MWORD_D_Y_HOUR);
 
             Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
             if (studyCountry != null) {
@@ -1026,38 +998,16 @@ public class WhoConverter extends BaseConverter
                 if (cadDate != null) {
                     studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate", cadDate.toString());
                 }
+                
                 // "Date of Ethics Committee Opinion" in EUCTR
-
-                if (ecdDate != null) {
-                    studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
-                }
-
+                // if (ecdDate != null) {
+                //     studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
+                // }
             } else {
                 this.writeLog("Couldn't find StudyCountry with this current country (creating it): \"" + this.currentCountry);
-                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, ecdDate);
+                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
             }
         }
-    }
-
-    public Item createAndStoreStudyCountry(Item study, String countryStr, String status, 
-        String plannedEnrolment, LocalDate cadDate, LocalDate ecdDate) throws Exception {
-
-        Item studyCountry = this.createAndStoreClassItem(study, "StudyCountry", 
-            new String[][]{{"countryName", WordUtils.capitalizeFully(countryStr, ' ', '-')},
-                            {"status", status}, {"plannedEnrolment", plannedEnrolment},
-                            {"compAuthorityDecisionDate", cadDate != null ? cadDate.toString() : null},
-                            {"ethicsCommitteeDecisionDate", ecdDate != null ? ecdDate.toString() : null}});
-
-        Country c = this.getCountryFromField("name", countryStr);
-        if (c != null) {
-            // TODO: figure out a way to make this work
-            // studyCountry.setReference("country", String.valueOf(c.getId()));
-            ;
-        } else {
-            this.writeLog("Couldn't match country string \"" + countryStr + "\" with an existing country");
-        }
-
-        return studyCountry;
     }
 
     /**
@@ -1090,8 +1040,8 @@ public class WhoConverter extends BaseConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(retrospectiveFlag) && !this.existingStudy()) {
             if (retrospectiveFlag.equalsIgnoreCase("1")) {
                 this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_TIME_PERSPECTIVE},
-                                    {"featureValue", ConverterCVT.FEATURE_RETROSPECTIVE}});
+                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE},
+                                    {"featureValue", ConverterCVT.FEATURE_V_RETROSPECTIVE}});
             } else {
                 this.writeLog("Retrospective flag: value is not empty but not equal to 1: " + retrospectiveFlag);
             }
@@ -1221,15 +1171,34 @@ public class WhoConverter extends BaseConverter
             // Last update
             this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
         } else {
+            // Update DO creation date
+            if (registrationDate != null) {
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                if (doRegistryEntry != null) {
+                    Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_CREATED);
+                    if (creationOD != null) {
+                        String existingDateStr = ConverterUtils.getValueOfItemAttribute(creationOD, "startDate");
+                        // Updating creation date if older than known creation date
+                        if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                            && registrationDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
+                                creationOD.setAttribute("startDate", registrationDate.toString());
+                            this.writeLog("older creation date: " + registrationDate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
+                        }
+                    }
+                }
+            }
+
+            // Update DO last update date
             if (lastUpdate != null) {
                 Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "objectType",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
-                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",  ConverterCVT.DATE_TYPE_UPDATED);
+                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_UPDATED);
                     if (lastUpdateOD != null) {
                         String existingDateStr = ConverterUtils.getValueOfItemAttribute(lastUpdateOD, "startDate");
                         if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
                             && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
                                 lastUpdateOD.setAttribute("startDate", lastUpdate.toString());
+                            // TODO: newerLastUpdate logic in separate function?
                             this.newerLastUpdate = true;
                             this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
                         }
@@ -1430,83 +1399,8 @@ public class WhoConverter extends BaseConverter
         return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s));
     }
 
-    /**
-     * TODO
-     * @param field name of field for comparison to find the item
-     * @param value value for comparison to find the item, should be unique!
-     */
-    public Item getItemFromItemMap(Item parentItem, Map<String, List<Item>> itemMap, String field, String value) {
-        Item searchedItem = null;
-
-        String parentId = parentItem.getIdentifier();
-        if (itemMap.containsKey(parentId)) {
-            List<Item> items = itemMap.get(parentId);
-            for (Item item: items) {
-                if (value.equals(ConverterUtils.getValueOfItemAttribute(item, field))) {
-                    searchedItem = item;
-                    break;
-                }
-            }
-        }
-
-        return searchedItem;
-    }
-
-    /**
-     * TODO
-     * 
-     * 2-letter ISO code
-     */
-    public Country getCountryFromField(String field, String value) throws Exception {
-        Country c = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(value)) {
-            ClassDescriptor countryCD = this.getModel().getClassDescriptorByName("Country");
-            if (countryCD == null) {
-                throw new RuntimeException("This model does not contain a Country class");
-            }
-            
-            Query q = new Query();
-            QueryClass countryClass = new QueryClass(countryCD.getType());
-            q.addFrom(countryClass);
-            q.addToSelect(countryClass);
-            
-            QueryField qf = new QueryField(countryClass, field);
-            q.setConstraint(new SimpleConstraint(qf, ConstraintOp.EQUALS, new QueryValue(value)));
-            
-            Results res = this.os.execute(q);
-            
-            Iterator<?> resIter = res.iterator();
-            try {
-                ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-                c = (Country) rr.get(0);
-            } catch (NoSuchElementException e) {
-                this.writeLog("getCountryFromField(): couldn't find country with field \"" + field + "\" and value \"" + value + "\"");
-            }
-        }
-        return c;
-    }
-
-    public void storeEuctrItems() throws Exception {
-        // Storing all EUCTR items
-        List<Map<String, List<Item>>> itemMaps = Arrays.asList(
-            studyConditions, studyCountries, studyFeatures, studyICDs, studyIdentifiers, locations,
-            organisations, people, relationships, titles, topics, objects,
-            objectDates, objectDescriptions, objectIdentifiers, objectInstances
-           //     , objectOrganisations,
-           // objectPeople, objectRelationships, objectTitles, objectTopics
-        );
-
-        for (Map<String, List<Item>> itemMap: itemMaps) {
-            for (List<Item> items: itemMap.values()) {
-                for (Item item: items) {
-                    store(item);
-                }
-            }
-        }
-
-        for (Item study: this.studies.values()) {
-            store(study);
-        }
+    public boolean isEuctr() {
+        return this.registry.equals(ConverterCVT.R_EUCTR);
     }
 
     /**
@@ -1517,38 +1411,32 @@ public class WhoConverter extends BaseConverter
 
         if (item != null) {
             if (this.isEuctr()) {
+                // Get item map name from reference
                 String mapName = this.getReverseReferenceNameOfClass(className);
-                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getDeclaredField(mapName).get(this);
-                if (itemMap != null) {
-                    this.saveToItemMap(mainClassItem, itemMap, item);
+                
+                // Get item map name from collection
+                if (mapName == null) {
+                    mapName = this.getReverseCollectionNameOfClass(className, mainClassItem.getClassName());
+                }
+
+                if (mapName != null) {
+                    Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getSuperclass().getDeclaredField(mapName).get(this);
+                    if (itemMap != null) {
+                        this.saveToItemMap(mainClassItem, itemMap, item);
+                    } else {
+                        this.writeLog("Couldn't save EUCTR item to map, class name: " + className);
+                    }
                 } else {
-                    this.writeLog("Couldn't save EUCTR item to map, class name: " + className);
+                    this.writeLog("Failed to save EUCTR item to map (couldn't find map), class name: " + className);
                 }
             } else {
                 store(item);
             }
+        } else {
+            this.writeLog("Failed to create item of class " + className + ", attributes: " + kv);
         }
 
         return item;
-    }
-
-    /**
-     * TODO
-     */
-    public void saveToItemMap(Item mainClassItem, Map<String, List<Item>> itemMap, Item itemToAdd) {
-        String mainClassItemId = mainClassItem.getIdentifier();
-        List<Item> itemList;
-
-        if (!itemMap.containsKey(mainClassItemId)) {
-            itemMap.put(mainClassItemId, new ArrayList<Item>());
-        }
-
-        itemList = itemMap.get(mainClassItemId);
-        itemList.add(itemToAdd);
-    }
-
-    public boolean isEuctr() {
-        return this.registry.equals(ConverterCVT.R_EUCTR);
     }
 
     /**

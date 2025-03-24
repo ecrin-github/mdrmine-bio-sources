@@ -15,10 +15,11 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.util.Map;
 
+import org.jsoup.Jsoup;
+
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
 
-import org.jsoup.Jsoup;
 
 
 
