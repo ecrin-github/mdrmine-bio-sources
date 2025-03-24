@@ -29,24 +29,21 @@ public abstract class CacheConverter extends BaseConverter {
     protected Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyICDs = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studyLocations = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studyOrganisations = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studyPeople = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studyRelationships = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studyTitles = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studyTopics = new HashMap<String, List<Item>>();
     // DOs
-    protected Map<String, List<Item>> studyObjects = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> objects = new HashMap<String, List<Item>>();
     // DO-related classes
     protected Map<String, List<Item>> objectDates = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> objectDescriptions = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> objectIdentifiers = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> objectInstances = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectOrganisations = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectPeople = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectRelationships = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectTitles = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectTopics = new HashMap<String, List<Item>>();
+    // Common to Study and DOs (key can be study id or DO id)
+    // TODO: all items lists? 
+    protected Map<String, List<Item>> locations = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> organisations = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> people = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> relationships = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> titles = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> topics = new HashMap<String, List<Item>>();
 
     public CacheConverter(ItemWriter writer, Model model, String dataSourceName,
                              String dataSetTitle) {
@@ -127,10 +124,9 @@ public abstract class CacheConverter extends BaseConverter {
      */
     public void storeAllItems() throws Exception {
         List<Map<String, List<Item>>> itemMaps = Arrays.asList(
-            this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers, this.studyLocations, 
-            this.studyOrganisations, this.studyPeople, this.studyRelationships, this.studyTitles, this.studyTopics, this.studyObjects, 
-            this.objectDates, this.objectDescriptions, this.objectIdentifiers, this.objectInstances, this.objectOrganisations, 
-            this.objectPeople, this.objectRelationships, this.objectTitles, this.objectTopics
+            this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers, this.locations, 
+            this.organisations, this.people, this.relationships, this.titles, this.topics, this.objects, this.relationships,
+            this.objectDates, this.objectDescriptions, this.objectIdentifiers, this.objectInstances
         );
 
         for (Map<String, List<Item>> itemMap: itemMaps) {

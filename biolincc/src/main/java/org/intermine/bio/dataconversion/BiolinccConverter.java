@@ -10,31 +10,20 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-import java.io.File;
-import java.io.Reader;
-import java.io.BufferedReader;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
-import java.util.regex.Matcher;
-
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
-import com.opencsv.ICSVWriter;
 import com.opencsv.exceptions.CsvMalformedLineException;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
 
+import java.io.Reader;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 /**

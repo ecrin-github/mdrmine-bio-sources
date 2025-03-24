@@ -26,8 +26,10 @@ import java.util.NoSuchElementException;
 import java.util.Properties;
 
 import org.apache.commons.text.WordUtils;
+
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
+import org.intermine.metadata.CollectionDescriptor;
 import org.intermine.metadata.ConstraintOp;
 import org.intermine.metadata.Model;
 import org.intermine.metadata.ReferenceDescriptor;
@@ -43,6 +45,7 @@ import org.intermine.objectstore.query.ResultsRow;
 import org.intermine.objectstore.query.SimpleConstraint;
 import org.intermine.util.PropertiesUtil;
 import org.intermine.xml.full.Item;
+import org.intermine.xml.full.ReferenceList;
 
 
 
@@ -237,26 +240,41 @@ public abstract class BaseConverter extends BioFileConverter
     public Item createClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
         Item classItem = createItem(className);
 
-        // Get reference field of class (either "study" or "linkedStudy" for data objects)
-        ReferenceDescriptor reference = this.getReferenceDescriptorOfClass(className);
-        
-        if (reference != null) {
-            String referenceName = reference.getName();
-            // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
-            String reverseReferenceName = reference.getReverseReferenceFieldName();
-    
-            // Set class values from fieldName - value pairs passed as argument
-            for (int j = 0; j < kv.length; j++) {
-                if (kv[j].length != 2) {
-                    throw new Exception("Key value tuple is not of length == 2");
-                }
-                classItem.setAttributeIfNotNull(kv[j][0], kv[j][1]);
+        // Set class values from fieldName - value pairs passed as argument
+        for (int j = 0; j < kv.length; j++) {
+            if (kv[j].length != 2) {
+                throw new Exception("Key value tuple is not of length == 2");
             }
-    
-            classItem.setReference(referenceName, mainClassItem);
+            classItem.setAttributeIfNotNull(kv[j][0], kv[j][1]);
+        }
+
+        CollectionDescriptor collD = null;
+        String collectionClassName = mainClassItem.getClassName();
+        // Get reference field of class (either "study" or "linkedStudy" for data objects)
+        ReferenceDescriptor referenceD = this.getReferenceDescriptorOfClass(className);
+
+        // Get collection field of class of mainClassItem if no reference
+        if (referenceD != null) {
+            // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
+            String reverseReferenceName = referenceD.getReverseReferenceFieldName();
+            
             mainClassItem.addToCollection(reverseReferenceName, classItem);
-        } else {    // TODO: Collection
-            this.writeLog("createAndStoreClassItem(): couldn't find a known referenceName (study or dataobject) in class " + className);
+            String referenceName = referenceD.getName();
+            classItem.setReference(referenceName, mainClassItem);
+        } else {
+            collD = this.getCollectionDescriptorOfClassFromItem(className, collectionClassName);
+
+            if (collD != null) {
+                // Get reverse reference field of class (=collection field, e.g. "people")
+                String reverseReferenceName = collD.getReverseReferenceFieldName();
+
+                mainClassItem.addToCollection(reverseReferenceName, classItem);
+                String collectionName = collD.getName();
+                classItem.addToCollection(collectionName, mainClassItem);
+            } else {
+                this.writeLog("createAndStoreClassItem(): Failed to find a known referenceName (study or dataobject) in class "
+                             + className + " or collections of " + collectionClassName + " items");
+            }
         }
 
         return classItem;
@@ -291,18 +309,72 @@ public abstract class BaseConverter extends BioFileConverter
         return rd;
     }
 
+    public CollectionDescriptor getCollectionDescriptorOfClassFromItem(String className, String collectionClassName) {
+        CollectionDescriptor collD = null;
+
+        // Get class descriptor
+        ClassDescriptor cd = this.getModel().getClassDescriptorByName(className);
+        CollectionDescriptor[] collDArr = cd.getCollectionDescriptors().toArray(CollectionDescriptor[]::new);
+        
+        // Find index of collection with class name collectionClassName
+        String collName = null;
+        int i = 0;
+        boolean found = false;
+        while (!found && i < collDArr.length) {
+            collName = this.getReferencedClassName(collDArr[i]);
+
+            if (collName.equalsIgnoreCase(collectionClassName)) {
+                found = true;
+                collD = collDArr[i];
+            }
+
+            i++;
+        }
+
+        return collD;
+    }
+
     /**
      * TODO
+     * ReferenceDescriptor.getReferencedClassName but without package name (org.intermine.model.bio.Study -> Study)
+     * @param rd
+     * @return
+     */
+    public String getReferencedClassName(ReferenceDescriptor rd) {
+        String[] splitRD = rd.getReferencedClassName().split("\\.");
+        return splitRD[splitRD.length-1];
+    }
+
+    /**
+     * TODO
+     * Get the reverse reference field name of a class with a single reference to a study or DO item
+     * e.g. studyFeatures (collection name) from StudyFeature (class name)
      */
     public String getReverseReferenceNameOfClass(String className) {
-        String revRef = null;
+        String revRefFN = null;
 
         ReferenceDescriptor rd = this.getReferenceDescriptorOfClass(className);
         if (rd != null) {
-            revRef = rd.getReverseReferenceFieldName();
+            revRefFN = rd.getReverseReferenceFieldName();
         }
 
-        return revRef;
+        return revRefFN;
+    }
+
+    /**
+     * TODO
+     * Get the reverse collection field name of a class
+     * 
+     */
+    public String getReverseCollectionNameOfClass(String className, String collectionClassName) {
+        String revRefFN = null;
+
+        CollectionDescriptor collD = this.getCollectionDescriptorOfClassFromItem(className, collectionClassName);
+        if (collD != null) {
+            revRefFN = collD.getReverseReferenceFieldName();
+        }
+
+        return revRefFN;
     }
 
     /**

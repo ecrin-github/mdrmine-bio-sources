@@ -14,20 +14,19 @@ package org.intermine.bio.dataconversion;
 import java.io.Reader;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import javax.xml.stream.events.XMLEvent;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.events.XMLEvent;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
-import org.intermine.model.bio.Country;
 import org.intermine.xml.full.Item;
 
 
@@ -160,9 +159,10 @@ public class EuctrConverter extends CacheConverter
                 /* WHO universal trial number */
                 String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
                 // TODO: identifier type?
-                if (!this.existingStudy()) {
-                    this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
-                }
+                // TODO: also gives duplicate errors
+                // if (!this.existingStudy()) {
+                //     this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
+                // }
     
                 // Unused, name of registry, seems to always be EUCTR
                 String regName = this.getAndCleanValue(mainInfo, "regName");
@@ -201,7 +201,7 @@ public class EuctrConverter extends CacheConverter
                 // "Not Recruiting" or "Authorised-recruitment may be ongoing or finished" or NA
                 String recruitmentStatus = this.getAndCleanValue(mainInfo, "recruitmentStatus");
                 if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(recruitmentStatus) && !recruitmentStatus.equalsIgnoreCase("NA")) {
-                    study.setAttributeIfNotNull("studyStatus", recruitmentStatus);
+                    study.setAttributeIfNotNull("status", recruitmentStatus);
                 }
                 study.setAttributeIfNotNull("testField4", "EUCTR_" + recruitmentStatus);
                 
@@ -213,7 +213,7 @@ public class EuctrConverter extends CacheConverter
                 // This is always "Interventional clinical trial of medicinal product"
                 // String studyType = this.getAndCleanValue(mainInfo, "studyType");
                 if (!this.existingStudy()) {
-                    study.setAttributeIfNotNull("studyType", ConverterCVT.TYPE_INTERVENTIONAL);
+                    study.setAttributeIfNotNull("type", ConverterCVT.TYPE_INTERVENTIONAL);
                 }
                 
                 /* Study features */
@@ -289,8 +289,8 @@ public class EuctrConverter extends CacheConverter
             if (!ConverterUtils.isNullOrEmptyOrBlank(publicTitle) && !mPublicTitleNA.matches()) {
                 study.setAttributeIfNotNull("displayTitle", publicTitle);
                 displayTitleSet = true;
-                this.createAndStoreClassItem(study, "StudyTitle", 
-                    new String[][]{{"titleText", publicTitle}, {"titleType", ConverterCVT.TITLE_TYPE_PUBLIC}});
+                this.createAndStoreClassItem(study, "Title", 
+                    new String[][]{{"text", publicTitle}, {"type", ConverterCVT.TITLE_TYPE_PUBLIC}});
             }
     
             Matcher mScientificTitleNA = P_TITLE_NA.matcher(scientificTitle);
@@ -299,8 +299,8 @@ public class EuctrConverter extends CacheConverter
                     study.setAttributeIfNotNull("displayTitle", scientificTitle);
                     displayTitleSet = true;
                 }
-                this.createAndStoreClassItem(study, "StudyTitle", 
-                    new String[][]{{"titleText", scientificTitle}, {"titleType", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
+                this.createAndStoreClassItem(study, "Title", 
+                    new String[][]{{"text", scientificTitle}, {"type", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
             }
     
             if (!displayTitleSet) {
@@ -317,11 +317,9 @@ public class EuctrConverter extends CacheConverter
      * TODO
      */
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
-        if (!this.existingStudy()) {
-            this.createAndStoreClassItem(study, "StudyOrganisation", 
-                new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, 
-                                {"organisationName", primarySponsor}});
-        }
+        this.createAndStoreClassItem(study, "Organisation",
+            new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, 
+                            {"name", primarySponsor}});
     }
 
     /**
@@ -354,7 +352,7 @@ public class EuctrConverter extends CacheConverter
         } else {
             // Update DO creation date
             if (creationDate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.studyObjects, "objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
                     Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_CREATED);
                     if (creationOD != null) {
@@ -589,7 +587,7 @@ public class EuctrConverter extends CacheConverter
      */
     public void parseCountries(Item study, List<String> countries) throws Exception {
         // TODO: don't add duplicates (EUCTR2008-007326-19)
-        String status = ConverterUtils.getValueOfItemAttribute(study, "studyStatus");
+        String status = ConverterUtils.getValueOfItemAttribute(study, "status");
 
         if (!this.existingStudy() && countries.size() > 0) {
             boolean foundCurrentCountry = false;
@@ -663,12 +661,23 @@ public class EuctrConverter extends CacheConverter
         Item item = this.createClassItem(mainClassItem, className, kv);
 
         if (item != null) {
+            // Get item map name from reference
             String mapName = this.getReverseReferenceNameOfClass(className);
-            Map<String, List<Item>> itemMap = (Map<String, List<Item>>) EuctrConverter.class.getSuperclass().getDeclaredField(mapName).get(this);
-            if (itemMap != null) {
-                this.saveToItemMap(mainClassItem, itemMap, item);
+            
+            // Get item map name from collection
+            if (mapName == null) {
+                mapName = this.getReverseCollectionNameOfClass(className, mainClassItem.getClassName());
+            }
+            
+            if (mapName != null) {
+                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) EuctrConverter.class.getSuperclass().getDeclaredField(mapName).get(this);
+                if (itemMap != null) {
+                    this.saveToItemMap(mainClassItem, itemMap, item);
+                } else {
+                    this.writeLog("Failed to save EUCTR item to map, class name: " + className);
+                }
             } else {
-                this.writeLog("Failed to save EUCTR item to map, class name: " + className);
+                this.writeLog("Failed to save EUCTR item to map (couldn't find map), class name: " + className);
             }
         } else {
             this.writeLog("Failed to create item of class " + className + ", attributes: " + kv);

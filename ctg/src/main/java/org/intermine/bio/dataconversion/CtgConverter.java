@@ -1,7 +1,8 @@
 package org.intermine.bio.dataconversion;
 
 /*
- * Copyright (C) 2002-2019 FlyMine
+ * Copyright (C) 2024-2025 MDRMine
+ * Modified from 2002-2019 FlyMine
  *
  * This code may be freely distributed and modified under the
  * terms of the GNU Lesser General Public Licence.  This should
@@ -14,15 +15,16 @@ import java.io.Reader;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
+
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 
 
 /**
