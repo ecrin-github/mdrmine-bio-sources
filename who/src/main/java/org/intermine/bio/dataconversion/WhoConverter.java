@@ -614,7 +614,6 @@ public class WhoConverter extends CacheConverter
         // TODO: attempt at separating first name/last name if one of firstName/lastName is empty?
         // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
 
-        Item studyPeople = createItem("StudyPeople");
         String givenName = null;
         String familyName = null;
         String fullName = null;
@@ -917,8 +916,6 @@ public class WhoConverter extends CacheConverter
     public void createAndStoreStudyOrg(Item study, String studyOrgStr, String contribType) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyOrgStr)) {
             // TODO: setting studyOrganisation object for now, need logic to distinguish people from orgs
-            Item studyPeople = createItem("StudyPeople");
-            studyPeople.setAttributeIfNotNull("contribType", contribType);
 
             Matcher mNA = P_NOT_APPLICABLE.matcher(studyOrgStr);
             if (mNA.matches()) {    // N/A
