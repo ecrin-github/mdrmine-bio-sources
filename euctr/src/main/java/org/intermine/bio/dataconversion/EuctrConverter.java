@@ -25,6 +25,7 @@ import javax.xml.stream.events.XMLEvent;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 
+import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
@@ -41,6 +42,9 @@ public class EuctrConverter extends CacheConverter
     private static final String DATA_SOURCE_NAME = "EUCTR";
 
     private static final Pattern P_TITLE_NA = Pattern.compile("^-|_|N\\/?A$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_HC_CODE = Pattern.compile("\\h*therapeutic\\h*area:\\h*(.*)\\h+\\[(\\w+)\\]\\h*-\\h*(.*)\\h+\\[(\\w+)\\]\\h*", 
+        Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_HC_KEYWORD = Pattern.compile(".*classification\\h*code\\h*(\\w+).*term:?\\h*([^\\n]+).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern P_PHASE = Pattern.compile(
         ".*Phase\\h*i\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*ii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iv\\):\\h*(no|yes|)?.*", 
         Pattern.CASE_INSENSITIVE);
@@ -192,9 +196,8 @@ public class EuctrConverter extends CacheConverter
     
                 // Unused, "Date trial authorised"
                 String typeEnrolment = this.getAndCleanValue(mainInfo, "typeEnrolment");
-                study.setAttributeIfNotNull("testField2", "EUCTR_" + typeEnrolment);
     
-                // For the whole trial
+                /* Study planned enrolment (for the whole trial) */
                 String targetSize = this.getAndCleanValue(mainInfo, "targetSize");
                 this.setPlannedEnrolment(study, targetSize);
     
@@ -203,7 +206,6 @@ public class EuctrConverter extends CacheConverter
                 if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(recruitmentStatus) && !recruitmentStatus.equalsIgnoreCase("NA")) {
                     study.setAttributeIfNotNull("status", recruitmentStatus);
                 }
-                study.setAttributeIfNotNull("testField4", "EUCTR_" + recruitmentStatus);
                 
                 /* Note: from https://www.clinicaltrialsregister.eu/about.html, we can read: 
                 * The EU Clinical Trials Register does not: 
@@ -218,45 +220,70 @@ public class EuctrConverter extends CacheConverter
                 
                 /* Study features */
                 String studyDesign = this.getAndCleanValue(mainInfo, "studyDesign");
-                study.setAttributeIfNotNull("testField5", "EUCTR_" + studyDesign);
+                study.setAttributeIfNotNull("testField3", "EUCTR_" + studyDesign);
                 this.parseStudyDesign(study, studyDesign);
                 
                 /* Study feature: phase */
                 String phase = this.getAndCleanValue(mainInfo, "phase");
-                study.setAttributeIfNotNull("testField6", "EUCTR_" + phase);
                 this.parsePhase(study, phase);
                 
-                // TODO: health condition freetext, use with hc code and hc keyword fields
+                /* Study condition */
                 String hcFreetext = this.getAndCleanValue(mainInfo, "hcFreetext");
+                List<String> hcCodes = trial.getHealthConditionCodes();
+                List<String> hcKeywords = trial.getHealthConditionKeywords();
+                this.parseHealthConditions(study, hcFreetext, hcCodes, hcKeywords);
                 
-                // TODO: intervention freetext, use with i code and i keyword fields
+                /* Study topic: products */
                 String iFreetext = this.getAndCleanValue(mainInfo, "iFreetext");
+                // Unused, always empty
+                List<String> iCodes = trial.getInterventionCodes();
+                // Unused, always empty
+                List<String> iKeywords = trial.getInterventionKeywords();
+                this.parseInterventions(study, iFreetext);
                 
-                // TODO: results
-                // For the whole trial
+                /* Study actual enrolment (for the whole trial) */
                 String resultsActualEnrolment = this.getAndCleanValue(mainInfo, "resultsActualEnrolment");
-                String resultsDateCompleted = this.getAndCleanValue(mainInfo, "resultsDateCompleted");
+                this.setActualEnrolment(study, resultsActualEnrolment);
+                
+                /* Study end date ("global completion date") */
+                String resultsDateCompletedStr = this.getAndCleanValue(mainInfo, "resultsDateCompleted");
+                study.setAttributeIfNotNull("testField4", resultsDateCompletedStr);
+                LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+                this.setStudyEndDate(study, resultsDateCompleted);
+                
+                // Study results page link
                 String resultsUrlLink = this.getAndCleanValue(mainInfo, "resultsUrlLink");
+                
+                // Results summary here is actually more of a general trial summary than a results summary
                 String resultsSummary = this.getAndCleanValue(mainInfo, "resultsSummary");
-                String resultsDatePosted = this.getAndCleanValue(mainInfo, "resultsDatePosted");
+                study.setAttributeIfNotNull("briefDescription", resultsSummary);
+                
+                String resultsDatePostedStr = this.getAndCleanValue(mainInfo, "resultsDatePosted");
+                LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+                
+                /* Results summary DO */
+                this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsDateCompleted, resultsDatePosted);
+                
+                // Unused, always empty
                 String resultsDateFirstPublication = this.getAndCleanValue(mainInfo, "resultsDateFirstPublication");
+                // Unused (Link to results page section)
                 String resultsBaselineChar = this.getAndCleanValue(mainInfo, "resultsBaselineChar");
+                // Unused (Link to results page section)
                 String resultsParticipantFlow = this.getAndCleanValue(mainInfo, "resultsParticipantFlow");
+                // Unused (Link to results page section)
                 String resultsAdverseEvents = this.getAndCleanValue(mainInfo, "resultsAdverseEvents");
+                // Unused (Link to results page section)
                 String resultsOutcomeMeasures = this.getAndCleanValue(mainInfo, "resultsOutcomeMeasures");
+                // Unused, always empty
                 String resultsUrlProtocol = this.getAndCleanValue(mainInfo, "resultsUrlProtocol");
+                // Unused, always empty
                 String resultsIPDPlan = this.getAndCleanValue(mainInfo, "resultsIPDPlan");
+                // Unused, always empty
                 String resultsIPDDescription = this.getAndCleanValue(mainInfo, "resultsIPDDescription");
 
-                /*
-
+                /* People */
                 List<EuctrContact> contacts = trial.getContacts();
-                if (contacts.size() > 0) {
-                    this.createAndStoreClassItem(study, "StudyPeople", 
-                        new String[][]{{"personFullName", contacts.get(0).getFirstname()}});
-                }
-
-                */
+                this.parseContacts(study, contacts);
 
                 /* Study countries */
                 List<String> countries = trial.getCountries();
@@ -360,7 +387,7 @@ public class EuctrConverter extends CacheConverter
                         // Updating creation date if older than known creation date
                         if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
                             && creationDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
-                                creationOD.setAttribute("startDate", creationDate.toString());
+                                creationOD.setAttributeIfNotNull("startDate", creationDate.toString());
                             this.writeLog("older creation date: " + creationDate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
                             // Using record registration date as "newer last update"
                             // TODO: use a different variable?
@@ -379,9 +406,22 @@ public class EuctrConverter extends CacheConverter
      */
     public void setPlannedEnrolment(Item study, String plannedEnrolment) {
         if (ConverterUtils.isPosWholeNumber(plannedEnrolment) && !(Long.valueOf(plannedEnrolment) > Integer.MAX_VALUE)) {
-            study.setAttributeIfNotNull("testField3", "EUCTR_" + plannedEnrolment);
+            study.setAttributeIfNotNull("testField2", "EUCTR_" + plannedEnrolment);
             if (!this.existingStudy() || this.newerLastUpdate) {    // Updating planned enrolment for more recent record registration date
                 study.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
+            }
+        }
+    }
+
+    /**
+     * 
+     * @param study
+     * @param actualEnrolment
+     */
+    public void setActualEnrolment(Item study, String actualEnrolment) {
+        if (ConverterUtils.isPosWholeNumber(actualEnrolment) && !(Long.valueOf(actualEnrolment) > Integer.MAX_VALUE)) {
+            if (!this.existingStudy() || this.newerLastUpdate) {    // Updating actual enrolment for more recent record registration date
+                study.setAttributeIfNotNull("actualEnrolment", actualEnrolment);
             }
         }
     }
@@ -585,6 +625,136 @@ public class EuctrConverter extends CacheConverter
     /*
      * TODO
      */
+    public void parseHealthConditions(Item study, String hcFreetext, List<String> hcCodes, List<String> hcKeywords) throws Exception {
+        if (!this.existingStudy()) {
+            // Free text
+            if (!ConverterUtils.isNullOrEmptyOrBlank(hcFreetext)) {
+                this.createAndStoreClassItem(study, "StudyCondition", 
+                    new String[][]{{"originalValue", WordUtils.capitalizeFully(hcFreetext, ' ', '-')}});
+            }
+
+            // HC Codes (MeSH tree)
+            Matcher mHcCode;
+            for (String hcCode: hcCodes) {
+                mHcCode = P_HC_CODE.matcher(hcCode);
+
+                if (mHcCode.matches()) {
+                    // TODO: remove if too generic? therapeutic area (diseases/body conditions)
+                    this.createAndStoreClassItem(study, "StudyCondition", 
+                        new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-')},
+                                        {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", mHcCode.group(2)}});
+
+                    // More specific condition
+                    this.createAndStoreClassItem(study, "StudyCondition", 
+                        new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-')},
+                                        {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", mHcCode.group(4)}});
+                } else {
+                    this.writeLog("Failed to match health condition code: " + hcCode);
+                }
+            }
+
+            // HC Keywords (MedDRA)
+            Matcher mHcKeyword;
+            for (String hcKw: hcKeywords) {
+                mHcKeyword = P_HC_KEYWORD.matcher(hcKw);
+
+                if (mHcKeyword.matches()) {
+                    this.createAndStoreClassItem(study, "StudyCondition", 
+                        new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-')},
+                                        {"originalCTType", ConverterCVT.CV_MEDDRA}, {"originalCTCode", mHcKeyword.group(1)}});
+                } else {
+                    this.writeLog("Failed to match health condition keyword: " + hcKw);
+                }
+            }
+        }
+        // TODO: add check for new conditions for exisiting studies
+    }
+
+    /*
+     * TODO
+     */
+    public void parseInterventions(Item study, String iFreetext) throws Exception {
+        // TODO: Relevant? doing same thing as in WHO
+        study.setAttributeIfNotNull("interventions", iFreetext);
+        
+        // TODO: filter out "empty" products ("Pharmaceutical Form:")
+        // TODO: match with CV
+        String[] products = iFreetext.split("\n\n");
+        for (String p: products) {
+            if (!ConverterUtils.isNullOrEmptyOrBlank(p)) {
+                this.createAndStoreClassItem(study, "Topic",
+                    new String[][]{{"type", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT}, {"value", p}});
+            }
+        }
+    }
+
+    /*
+     * TODO
+     */
+    public void parseContacts(Item study, List<EuctrContact> contacts) throws Exception {
+        if (!this.existingStudy()) {
+            String type, firstName, affiliation;
+            for (EuctrContact contact: contacts) {
+                type = contact.getType();
+                firstName = contact.getFirstname();
+                affiliation = contact.getAffiliation();
+                if (!ConverterUtils.isNullOrEmptyOrBlank(firstName)) {
+
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(type)) {
+                        if (type.equalsIgnoreCase("public")) {
+                            type = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
+                        } else if (type.equalsIgnoreCase("scientific")) {
+                            // Exception already thrown earlier so value can't be anything other than "scientific"
+                            type = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
+                        } else {
+                            this.writeLog("Unknown contact type value: " + type);
+                        }
+                    }
+
+                    // TODO: add reference to organisation affiliation
+                    // TODO: differentiate people from organisations
+                    if (!firstName.equalsIgnoreCase("not applicable")) {
+                        this.createAndStoreClassItem(study, "Person",
+                            new String[][]{ {"fullName", firstName}, {"affiliation", affiliation}, {"contribType", type}});
+                    }   // TODO: else
+                }
+            }
+        }
+
+        /*
+        <contact>
+            <type>Public</type>
+            <firstname>Principal Investigator</firstname>
+            <middlename />
+            <lastname />
+            <address>Liebigstrasse 10-14</address>
+            <city>Leipzig</city>
+            <country1>Germany</country1>
+            <zip>04103</zip>
+            <telephone>0049034197 21 650</telephone>
+            <email>augen@medizin.uni-leipzig.de</email>
+            <affiliation>University of Leipzig</affiliation>
+        </contact>
+         */
+
+        /*
+        <class name="Person" is-interface="true">
+            <attribute name="contribType" type="java.lang.String"/>
+            <attribute name="givenName" type="java.lang.String"/>
+            <attribute name="familyName" type="java.lang.String"/>
+            <attribute name="fullName" type="java.lang.String"/>
+            <attribute name="affiliation" type="java.lang.String"/>
+            <attribute name="orcid" type="java.lang.String"/>
+            <collection name="studies" referenced-type="Study" reverse-reference="people"/>
+            <collection name="objects" referenced-type="DataObject" reverse-reference="people"/>
+            <collection name="affiliations" referenced-type="Organisation" reverse-reference="people"/>
+        </class>
+        */
+    }
+
+    /*
+     * TODO
+     */
     public void parseCountries(Item study, List<String> countries) throws Exception {
         // TODO: don't add duplicates (EUCTR2008-007326-19)
         String status = ConverterUtils.getValueOfItemAttribute(study, "status");
@@ -628,6 +798,45 @@ public class EuctrConverter extends CacheConverter
                 this.writeLog("Couldn't find StudyCountry with this current country (creating it): \"" + this.currentCountry);
                 this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, null, null, null);
                 // this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
+            }
+        }
+    }
+
+    /*
+     * TODO
+     */
+    public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, LocalDate resultsDateCompleted, LocalDate resultsDatePosted) throws Exception {
+        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink) && resultsDatePosted != null) {
+            // Display title
+            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+            String doDisplayTitle;
+            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            } else {
+                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            }
+
+            /* Results summary DO */
+            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
+                                        new String[][]{{"title", ConverterCVT.O_TITLE_RESULTS_SUMMARY},
+                                                        {"displayTitle", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
+                                                        {"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
+            /* Instance with results URL */
+            // TODO: system? (=source)
+            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 
+                                        new String[][]{{"url", resultsUrlLink}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
+            
+            // Results completed date (trial end date)
+            this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED);
+
+            // Results posted date
+            if (resultsDatePosted != null) {
+                this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
+                // Publication year
+                String publicationYear = String.valueOf(resultsDatePosted.getYear());
+                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
+                    resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
+                }
             }
         }
     }
