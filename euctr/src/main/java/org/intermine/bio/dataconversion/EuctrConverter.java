@@ -280,16 +280,10 @@ public class EuctrConverter extends CacheConverter
                 String resultsIPDPlan = this.getAndCleanValue(mainInfo, "resultsIPDPlan");
                 // Unused, always empty
                 String resultsIPDDescription = this.getAndCleanValue(mainInfo, "resultsIPDDescription");
-                
-                /*
 
+                /* People */
                 List<EuctrContact> contacts = trial.getContacts();
-                if (contacts.size() > 0) {
-                    this.createAndStoreClassItem(study, "StudyPeople", 
-                        new String[][]{{"personFullName", contacts.get(0).getFirstname()}});
-                }
-
-                */
+                this.parseContacts(study, contacts);
 
                 /* Study countries */
                 List<String> countries = trial.getCountries();
@@ -692,6 +686,70 @@ public class EuctrConverter extends CacheConverter
                     new String[][]{{"type", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT}, {"value", p}});
             }
         }
+    }
+
+    /*
+     * TODO
+     */
+    public void parseContacts(Item study, List<EuctrContact> contacts) throws Exception {
+        if (!this.existingStudy()) {
+            String type, firstName, affiliation;
+            for (EuctrContact contact: contacts) {
+                type = contact.getType();
+                firstName = contact.getFirstname();
+                affiliation = contact.getAffiliation();
+                if (!ConverterUtils.isNullOrEmptyOrBlank(firstName)) {
+
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(type)) {
+                        if (type.equalsIgnoreCase("public")) {
+                            type = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
+                        } else if (type.equalsIgnoreCase("scientific")) {
+                            // Exception already thrown earlier so value can't be anything other than "scientific"
+                            type = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
+                        } else {
+                            this.writeLog("Unknown contact type value: " + type);
+                        }
+                    }
+
+                    // TODO: add reference to organisation affiliation
+                    // TODO: differentiate people from organisations
+                    if (!firstName.equalsIgnoreCase("not applicable")) {
+                        this.createAndStoreClassItem(study, "Person",
+                            new String[][]{ {"fullName", firstName}, {"affiliation", affiliation}, {"contribType", type}});
+                    }   // TODO: else
+                }
+            }
+        }
+
+        /*
+        <contact>
+            <type>Public</type>
+            <firstname>Principal Investigator</firstname>
+            <middlename />
+            <lastname />
+            <address>Liebigstrasse 10-14</address>
+            <city>Leipzig</city>
+            <country1>Germany</country1>
+            <zip>04103</zip>
+            <telephone>0049034197 21 650</telephone>
+            <email>augen@medizin.uni-leipzig.de</email>
+            <affiliation>University of Leipzig</affiliation>
+        </contact>
+         */
+
+        /*
+        <class name="Person" is-interface="true">
+            <attribute name="contribType" type="java.lang.String"/>
+            <attribute name="givenName" type="java.lang.String"/>
+            <attribute name="familyName" type="java.lang.String"/>
+            <attribute name="fullName" type="java.lang.String"/>
+            <attribute name="affiliation" type="java.lang.String"/>
+            <attribute name="orcid" type="java.lang.String"/>
+            <collection name="studies" referenced-type="Study" reverse-reference="people"/>
+            <collection name="objects" referenced-type="DataObject" reverse-reference="people"/>
+            <collection name="affiliations" referenced-type="Organisation" reverse-reference="people"/>
+        </class>
+        */
     }
 
     /*
