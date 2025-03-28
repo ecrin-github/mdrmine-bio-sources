@@ -98,6 +98,27 @@ public abstract class CacheConverter extends BaseConverter {
 
     /**
      * TODO
+     */
+    public void setStudyEndDate(Item study, LocalDate endDate) {
+        if (endDate != null) {
+            boolean setDate = false;
+            if (!this.existingStudy()) {  // If not parsing an already existing study
+                setDate = true;
+            } else {    // Checking if the parsed end date is later than the already set one (if it exists)
+                String existingDateStr = ConverterUtils.getValueOfItemAttribute(study, "endDate");
+                if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                    && endDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
+                    setDate = true;
+                }
+            }
+            if (setDate) {
+                study.setAttributeIfNotNull("endDate", endDate.toString());
+            }
+        }
+    }
+
+    /**
+     * TODO
      * @param field name of field for comparison to find the item
      * @param value value for comparison to find the item, should be unique!
      */
