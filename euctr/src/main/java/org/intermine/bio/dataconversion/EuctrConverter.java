@@ -48,6 +48,7 @@ public class EuctrConverter extends CacheConverter
     private static final Pattern P_PHASE = Pattern.compile(
         ".*Phase\\h*i\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*ii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iv\\):\\h*(no|yes|)?.*", 
         Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_GENDER = Pattern.compile(".*female:\\h*(yes|no|)\\h*\\nmale:\\h*(yes|no|).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
     private static final String FEATURE_YES = "yes";
     private static final String FEATURE_NO = "no";
@@ -128,7 +129,6 @@ public class EuctrConverter extends CacheConverter
                 if (this.studies.containsKey(cleanedID)) {   // Adding country-specific info to existing trial
                     this.existingStudy = this.studies.get(cleanedID);
                     study = this.existingStudy;
-                    this.writeLog("Add country info, trial ID: " + cleanedID);
                 } else {
                     study = createItem("Study");
                 }
@@ -288,15 +288,37 @@ public class EuctrConverter extends CacheConverter
                 /* Study countries */
                 List<String> countries = trial.getCountries();
                 this.parseCountries(study, countries);
-    
-                /*
 
+                // Trial IEC
                 EuctrCriteria criteria = trial.getCriteria();
+
+                /* IEC */
                 String ic = criteria.getInclusionCriteria();
-                study.setAttributeIfNotNull("iec", ic);
-                
-                */
-    
+                String ec = criteria.getExclusionCriteria();
+                this.parseIEC(study, ic, ec);
+
+                /* Gender */
+                String gender = criteria.getGender();
+                this.parseGender(study, gender);
+
+                // Unused, always empty
+                String ageMin = criteria.getAgemin();
+                // Unused, always empty
+                String ageMax = criteria.getAgemax();
+
+                List<String> primaryOutcomes = trial.getPrimaryOutcomes();
+
+                List<String> secondaryOutcomes = trial.getSecondaryOutcomes();
+
+                List<String> secondarySponsors = trial.getSecondarySponsors();
+
+                List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
+
+                List<String> sourceSupport = trial.getSourceSupport();
+
+                List<EuctrEthicsReview> ethicsReviews = trial.getEthicsReviews();
+
+                // Storing in cache
                 if (!this.existingStudy()) {
                     this.studies.put(this.currentTrialID, study);
                 }
@@ -388,9 +410,8 @@ public class EuctrConverter extends CacheConverter
                         if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
                             && creationDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
                                 creationOD.setAttributeIfNotNull("startDate", creationDate.toString());
-                            this.writeLog("older creation date: " + creationDate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
                             // Using record registration date as "newer last update"
-                            // TODO: use a different variable?
+                            // TODO: use a different variable (name)?
                             this.newerLastUpdate = true;
                         }
                     }
@@ -464,11 +485,12 @@ public class EuctrConverter extends CacheConverter
             for (int i = 0; i < splitFeatures.length; i++) {
                 String[] tuple = splitFeatures[i].split(": ");
                 if (tuple.length == 0) {
-                    this.writeLog("Failed to split feature-value tuple with colon: " + tuple);
+                    this.writeLog("Failed to split feature-value tuple with colon: " + String.join(";", tuple));
                 } else if (tuple.length == 1) {
-                    this.writeLog("Split feature-value tuple with colon but got only 1 value: " + tuple);
+                    // TODO: means value is probably empty (=no)
+                    this.writeLog("Split feature-value tuple with colon but got only 1 value: " + String.join(";", tuple));
                 } else if (tuple.length > 2) {
-                    this.writeLog("Split feature-value tuple with colon but got more than 2 values: " + tuple);
+                    this.writeLog("Split feature-value tuple with colon but got more than 2 values: " + String.join(";", tuple));
                 } else if (!ConverterUtils.isNullOrEmptyOrBlank(tuple[1])) {
                     switch(tuple[0].toLowerCase()) {
                         case "controlled":
@@ -636,34 +658,38 @@ public class EuctrConverter extends CacheConverter
             // HC Codes (MeSH tree)
             Matcher mHcCode;
             for (String hcCode: hcCodes) {
-                mHcCode = P_HC_CODE.matcher(hcCode);
+                if (!ConverterUtils.isNullOrEmptyOrBlank(hcCode)) {
+                    mHcCode = P_HC_CODE.matcher(hcCode);
 
-                if (mHcCode.matches()) {
-                    // TODO: remove if too generic? therapeutic area (diseases/body conditions)
-                    this.createAndStoreClassItem(study, "StudyCondition", 
-                        new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-')},
-                                        {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", mHcCode.group(2)}});
+                    if (mHcCode.matches()) {
+                        // TODO: remove if too generic? therapeutic area (diseases/body conditions)
+                        this.createAndStoreClassItem(study, "StudyCondition", 
+                            new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-')},
+                                            {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", mHcCode.group(2)}});
 
-                    // More specific condition
-                    this.createAndStoreClassItem(study, "StudyCondition", 
-                        new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-')},
-                                        {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", mHcCode.group(4)}});
-                } else {
-                    this.writeLog("Failed to match health condition code: " + hcCode);
+                        // More specific condition
+                        this.createAndStoreClassItem(study, "StudyCondition", 
+                            new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-')},
+                                            {"originalCTType", ConverterCVT.CV_MESH_TREE}, {"originalCTCode", mHcCode.group(4)}});
+                    } else {
+                        this.writeLog("Failed to match health condition code: " + hcCode);
+                    }
                 }
             }
 
             // HC Keywords (MedDRA)
             Matcher mHcKeyword;
             for (String hcKw: hcKeywords) {
-                mHcKeyword = P_HC_KEYWORD.matcher(hcKw);
-
-                if (mHcKeyword.matches()) {
-                    this.createAndStoreClassItem(study, "StudyCondition", 
-                        new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-')},
-                                        {"originalCTType", ConverterCVT.CV_MEDDRA}, {"originalCTCode", mHcKeyword.group(1)}});
-                } else {
-                    this.writeLog("Failed to match health condition keyword: " + hcKw);
+                if (!ConverterUtils.isNullOrEmptyOrBlank(hcKw)) {
+                    mHcKeyword = P_HC_KEYWORD.matcher(hcKw);
+    
+                    if (mHcKeyword.matches()) {
+                        this.createAndStoreClassItem(study, "StudyCondition", 
+                            new String[][]{{"originalValue", WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-')},
+                                            {"originalCTType", ConverterCVT.CV_MEDDRA}, {"originalCTCode", mHcKeyword.group(1)}});
+                    } else {
+                        this.writeLog("Failed to match health condition keyword: " + hcKw);
+                    }
                 }
             }
         }
@@ -684,6 +710,46 @@ public class EuctrConverter extends CacheConverter
             if (!ConverterUtils.isNullOrEmptyOrBlank(p)) {
                 this.createAndStoreClassItem(study, "Topic",
                     new String[][]{{"type", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT}, {"value", p}});
+            }
+        }
+    }
+
+    
+    /*
+     * TODO
+     */
+    public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, LocalDate resultsDateCompleted, LocalDate resultsDatePosted) throws Exception {
+        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink) && resultsDatePosted != null) {
+            // Display title
+            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+            String doDisplayTitle;
+            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            } else {
+                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            }
+
+            /* Results summary DO */
+            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
+                                        new String[][]{{"title", ConverterCVT.O_TITLE_RESULTS_SUMMARY},
+                                                        {"displayTitle", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
+                                                        {"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
+            /* Instance with results URL */
+            // TODO: system? (=source)
+            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 
+                                        new String[][]{{"url", resultsUrlLink}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
+            
+            // Results completed date (trial end date)
+            this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED);
+
+            // Results posted date
+            if (resultsDatePosted != null) {
+                this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
+                // Publication year
+                String publicationYear = String.valueOf(resultsDatePosted.getYear());
+                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
+                    resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
+                }
             }
         }
     }
@@ -805,38 +871,105 @@ public class EuctrConverter extends CacheConverter
     /*
      * TODO
      */
-    public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, LocalDate resultsDateCompleted, LocalDate resultsDatePosted) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink) && resultsDatePosted != null) {
-            // Display title
-            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
-            String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+    public void parseIEC(Item study, String icStr, String ecStr) {
+        if (!this.existingStudy()) {
+            /* IEC */
+            StringBuilder iec = new StringBuilder();
+            
+            /* Inclusion criteria */
+            if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) {
+                iec.append(icStr);
             }
 
-            /* Results summary DO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", ConverterCVT.O_TITLE_RESULTS_SUMMARY},
-                                                        {"displayTitle", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                                                        {"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
-            /* Instance with results URL */
-            // TODO: system? (=source)
-            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 
-                                        new String[][]{{"url", resultsUrlLink}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
-            
-            // Results completed date (trial end date)
-            this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED);
+            /* Exclusion criteria */
+            if (!ConverterUtils.isNullOrEmptyOrBlank(ecStr)) {
+                iec.append(ecStr);
+            }
 
-            // Results posted date
-            if (resultsDatePosted != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
-                // Publication year
-                String publicationYear = String.valueOf(resultsDatePosted.getYear());
-                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
-                    resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
+            // Setting IEC string constructed from IC + EC
+            String iecStr = iec.toString();
+            if (!ConverterUtils.isNullOrEmptyOrBlank(iecStr)) {
+                study.setAttributeIfNotNull("iec", iecStr);
+            }
+
+            /* Min/max age from IC */
+            if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) {
+                // The age criteria is at the end of the IC string
+                List<String> ageLines = ConverterUtils.getLastLines(icStr, 6);
+
+                study.setAttributeIfNotNull("testField5", String.join(";", ageLines));
+                
+                if (ageLines.size() != 6 || !ageLines.get(0).startsWith("Are the")) {
+                    this.writeLog("Malformed IC age end section: " + String.join(";", ageLines));
+                } else {
+                    // Note: not using number of participants per age range info
+                    String under18Line = ageLines.get(0).strip();
+                    String under18Value = under18Line.substring(under18Line.lastIndexOf(" ") + 1, under18Line.length());
+
+                    String range1864Line = ageLines.get(2).strip();
+                    String range1864Value = range1864Line.substring(range1864Line.lastIndexOf(" ") + 1, range1864Line.length());
+
+                    String over65Line = ageLines.get(4).strip();
+                    String over65Value = over65Line.substring(over65Line.lastIndexOf(" ") + 1, over65Line.length());
+
+                    String minAge = "";
+                    String maxAge = "";
+                    
+                    // 18-64 years
+                    if (range1864Value.equalsIgnoreCase("yes")) {
+                        minAge = "18";
+                        maxAge = "64";
+                    }
+                    
+                    // < 18 years
+                    if (under18Value.equalsIgnoreCase("yes")) {
+                        minAge = "0";   // Used when checking over65Value to only set minAge to 65 if minAge is empty
+                        if (maxAge.equals("")) {
+                            maxAge = "17";
+                        }
+                    }
+
+                    // >= 65 years
+                    if (over65Value.equalsIgnoreCase("yes")) {
+                        maxAge = "";
+                        if (minAge.equals("")) {
+                            minAge = "65";
+                        }
+                    }
+
+                    if (minAge.equals("0")) {
+                        minAge = "";
+                    }
+
+                    study.setAttributeIfNotNull("minAge", minAge);
+                    study.setAttributeIfNotNull("maxAge", maxAge);
                 }
+            }
+        }
+    }
+
+    /*
+     * TODO
+     */
+    public void parseGender(Item study, String genderStr) {
+        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(genderStr)) {
+            Matcher mGender = P_GENDER.matcher(genderStr);
+            if (mGender.matches()) {
+                String f = mGender.group(1);
+                String m = mGender.group(2);
+                if (f.equalsIgnoreCase("yes")) {
+                    if (m.equalsIgnoreCase("yes")) {
+                        study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
+                    } else {
+                        study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_WOMEN);
+                    }
+                } else if (m.equalsIgnoreCase("yes")) {
+                    study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_MEN);
+                } else {
+                    this.writeLog("Matched gender string but neither value is yes : " + genderStr);
+                }
+            } else {
+                this.writeLog("Failed to match gender string: " + genderStr);
             }
         }
     }

@@ -13,6 +13,8 @@ package org.intermine.bio.dataconversion;
 import java.time.format.DateTimeFormatter;
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import org.jsoup.Jsoup;
@@ -50,6 +52,26 @@ public class ConverterUtils
      */
     public static boolean isNullOrEmptyOrBlank(String s) {
         return (s == null || s.isEmpty() || s.equalsIgnoreCase("NULL") || s.isBlank());
+    }
+
+    /*
+     * TODO
+     * https://stackoverflow.com/a/43133958
+     */
+    public static List<String> getLastLines(String string, int numLines) {
+        List<String> lines = new ArrayList<>();
+        int currentEndOfLine = string.length();
+        if (string.endsWith("\n")) {
+            currentEndOfLine = currentEndOfLine - "\n".length();
+        }
+        for (int i = 0; i < numLines; ++i) {
+            int lastEndOfLine = currentEndOfLine;
+            // lastIndexOf starts looking backwards from given index
+            currentEndOfLine = string.lastIndexOf("\n", lastEndOfLine - 1);
+            String lastLine = string.substring(currentEndOfLine + 1, lastEndOfLine);
+            lines.add(0, lastLine);
+        }
+        return lines;
     }
 
     /**
