@@ -306,9 +306,12 @@ public class EuctrConverter extends CacheConverter
                 // Unused, always empty
                 String ageMax = criteria.getAgemax();
 
-                List<String> primaryOutcomes = trial.getPrimaryOutcomes();
 
+                List<String> primaryOutcomes = trial.getPrimaryOutcomes();
+                this.parseOutcomes(study, primaryOutcomes, "primary");
+                
                 List<String> secondaryOutcomes = trial.getSecondaryOutcomes();
+                this.parseOutcomes(study, secondaryOutcomes, "secondary");
 
                 List<String> secondarySponsors = trial.getSecondarySponsors();
 
@@ -328,9 +331,7 @@ public class EuctrConverter extends CacheConverter
         }
     }
 
-    /**
-     * TODO
-     */
+    /** */
     public void parseTitles(Item study, String publicTitle, String scientificTitle, String scientificAcronym) throws Exception {
         if (!this.existingStudy()) {
             boolean displayTitleSet = false;
@@ -364,6 +365,9 @@ public class EuctrConverter extends CacheConverter
 
     /**
      * TODO
+     * @param study
+     * @param primarySponsor
+     * @throws Exception
      */
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
         this.createAndStoreClassItem(study, "Organisation",
@@ -373,6 +377,10 @@ public class EuctrConverter extends CacheConverter
 
     /**
      * TODO
+     * @param study
+     * @param creationDate
+     * @param url
+     * @throws Exception
      */
     public void createAndStoreRegistryEntryDO(Item study, LocalDate creationDate, String url) throws Exception {
         if (!this.existingStudy()) {
@@ -421,7 +429,7 @@ public class EuctrConverter extends CacheConverter
     }
 
     /**
-     * 
+     * TODO
      * @param study
      * @param plannedEnrolment
      */
@@ -435,7 +443,7 @@ public class EuctrConverter extends CacheConverter
     }
 
     /**
-     * 
+     * TODO
      * @param study
      * @param actualEnrolment
      */
@@ -448,7 +456,7 @@ public class EuctrConverter extends CacheConverter
     }
 
     /**
-     * 
+     * TODO
      * @param study
      * @param studyFeaturesStr
      * @throws Exception
@@ -595,8 +603,11 @@ public class EuctrConverter extends CacheConverter
         }
     }
 
-    /*
+    /**
      * TODO
+     * @param study
+     * @param phaseStr
+     * @throws Exception
      */
     public void parsePhase(Item study, String phaseStr) throws Exception {
         if (!this.existingStudy()) {
@@ -644,8 +655,13 @@ public class EuctrConverter extends CacheConverter
         }
     }
 
-    /*
+    /**
      * TODO
+     * @param study
+     * @param hcFreetext
+     * @param hcCodes
+     * @param hcKeywords
+     * @throws Exception
      */
     public void parseHealthConditions(Item study, String hcFreetext, List<String> hcCodes, List<String> hcKeywords) throws Exception {
         if (!this.existingStudy()) {
@@ -696,8 +712,11 @@ public class EuctrConverter extends CacheConverter
         // TODO: add check for new conditions for exisiting studies
     }
 
-    /*
+    /**
      * TODO
+     * @param study
+     * @param iFreetext
+     * @throws Exception
      */
     public void parseInterventions(Item study, String iFreetext) throws Exception {
         // TODO: Relevant? doing same thing as in WHO
@@ -715,8 +734,13 @@ public class EuctrConverter extends CacheConverter
     }
 
     
-    /*
+    /**
      * TODO
+     * @param study
+     * @param resultsUrlLink
+     * @param resultsDateCompleted
+     * @param resultsDatePosted
+     * @throws Exception
      */
     public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, LocalDate resultsDateCompleted, LocalDate resultsDatePosted) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink) && resultsDatePosted != null) {
@@ -754,8 +778,11 @@ public class EuctrConverter extends CacheConverter
         }
     }
 
-    /*
+    /**
      * TODO
+     * @param study
+     * @param contacts
+     * @throws Exception
      */
     public void parseContacts(Item study, List<EuctrContact> contacts) throws Exception {
         if (!this.existingStudy()) {
@@ -818,8 +845,11 @@ public class EuctrConverter extends CacheConverter
         */
     }
 
-    /*
+    /**
      * TODO
+     * @param study
+     * @param countries
+     * @throws Exception
      */
     public void parseCountries(Item study, List<String> countries) throws Exception {
         // TODO: don't add duplicates (EUCTR2008-007326-19)
@@ -868,8 +898,11 @@ public class EuctrConverter extends CacheConverter
         }
     }
 
-    /*
+    /**
      * TODO
+     * @param study
+     * @param icStr
+     * @param ecStr
      */
     public void parseIEC(Item study, String icStr, String ecStr) {
         if (!this.existingStudy()) {
@@ -948,8 +981,10 @@ public class EuctrConverter extends CacheConverter
         }
     }
 
-    /*
+    /**
      * TODO
+     * @param study
+     * @param genderStr
      */
     public void parseGender(Item study, String genderStr) {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(genderStr)) {
@@ -976,6 +1011,41 @@ public class EuctrConverter extends CacheConverter
 
     /**
      * TODO
+     * @param study
+     * @param outcomes
+     * @param outcomesType
+     */
+    public void parseOutcomes(Item study, List<String> outcomes, String outcomesType) {
+        if (!this.existingStudy() && outcomes.size() > 0) {
+            StringBuilder outcomesSb = new StringBuilder();
+
+            // Building outcome string from all the outcome fields
+            for (String outcome: outcomes) {
+                outcome = outcome.strip();
+                outcomesSb.append(outcome);
+                if (!outcome.endsWith(".")) {
+                    outcomesSb.append(".");
+                }
+                outcomesSb.append(" ");
+            }
+
+            // Setting primary or secondary outcomes
+            if (outcomesType.equals("primary")) {
+                study.setAttributeIfNotNull("primaryOutcome", outcomesSb.toString().strip());
+            } else if (outcomesType.equals("secondary")) {
+                study.setAttributeIfNotNull("secondaryOutcomes", outcomesSb.toString().strip());
+            } else {
+                new Exception("Unknown outcomesType arg value \"" + outcomesType + "\" in parseOutcomes()");
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * @param euctrObj
+     * @param fieldName
+     * @return
+     * @throws Exception
      */
     public String getAndCleanValue(Object euctrObj, String fieldName) throws Exception {
         Method method = euctrObj.getClass().getMethod("get" + ConverterUtils.capitaliseFirstLetter(fieldName), (Class<?>[]) null);
@@ -986,9 +1056,6 @@ public class EuctrConverter extends CacheConverter
         return value;
     }
 
-    /**
-     * TODO
-     */
     public String cleanValue(String s, boolean strip) {
         if (strip) {
             return s.strip();
@@ -996,9 +1063,6 @@ public class EuctrConverter extends CacheConverter
         return s;
     }
 
-    /**
-     * TODO
-     */
     public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
         Item item = this.createClassItem(mainClassItem, className, kv);
 
