@@ -17,8 +17,11 @@ import java.time.LocalDate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.events.XMLEvent;
@@ -34,6 +37,7 @@ import org.intermine.xml.full.Item;
 
 /**
  * 
+ * Explanation on some of the fields here: https://www.clinicaltrialsregister.eu/doc/How_to_Search_EU_CTR.pdf
  * @author
  */
 public class EuctrConverter extends CacheConverter
@@ -49,9 +53,12 @@ public class EuctrConverter extends CacheConverter
         ".*Phase\\h*i\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*ii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iv\\):\\h*(no|yes|)?.*", 
         Pattern.CASE_INSENSITIVE);
     private static final Pattern P_GENDER = Pattern.compile(".*female:\\h*(yes|no|)\\h*\\nmale:\\h*(yes|no|).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+    private static final Pattern P_ID_NA = Pattern.compile("^\\h*(?:n[\\.\\/]?(?:a|d)\\.?|not\\h*.*|-+|none)\\h*$", Pattern.CASE_INSENSITIVE);   // N/A (all forms) or - or none
+    private static final Set<String> dummyIDs = Set.of("ISRCTN00000000", "NCT00000000", "ISRCTN12345678", "NCT12345678");
 
     private static final String FEATURE_YES = "yes";
     private static final String FEATURE_NO = "no";
+    private static final String ISS_AUTH_PROTOCOL_CODE = "Sponsor Protocol Code";
 
     /**
      * Constructor
@@ -119,6 +126,7 @@ public class EuctrConverter extends CacheConverter
             String mainId = this.getAndCleanValue(mainInfo, "trialId");
             
             // Handling ID
+            // TODO: handle "Outside-EU/EEA" ID suffix
             if (mainId.length() != 17) {
                 this.writeLog("Unexpected length for study id: " + mainId);
             } else {
@@ -173,6 +181,7 @@ public class EuctrConverter extends CacheConverter
     
                 // "Date on which this record was first entered in the EudraCT database" (from trials-full.txt dat format)
                 // Using this as "newer update" date
+                // TODO: more relevant to use date enrolment?
                 String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
                 LocalDate dateRegistration = this.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
     
@@ -186,7 +195,7 @@ public class EuctrConverter extends CacheConverter
                 // Unused, always empty
                 String acronym = this.getAndCleanValue(mainInfo, "acronym");
     
-                /* Date enrolment (start date) */
+                /* Date enrolment (start date), also seems to be "Date of Ethics Committee Opinion" */
                 String dateEnrolmentStr = this.getAndCleanValue(mainInfo, "dateEnrolment");
                 LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
                 this.setStudyStartDate(study, dateEnrolment);
@@ -306,20 +315,27 @@ public class EuctrConverter extends CacheConverter
                 // Unused, always empty
                 String ageMax = criteria.getAgemax();
 
-
+                /* Primary outcomes */
                 List<String> primaryOutcomes = trial.getPrimaryOutcomes();
                 this.parseOutcomes(study, primaryOutcomes, "primary");
                 
+                /* Secondary outcomes */
                 List<String> secondaryOutcomes = trial.getSecondaryOutcomes();
                 this.parseOutcomes(study, secondaryOutcomes, "secondary");
-
+                
+                /* Secondary sponsors */
                 List<String> secondarySponsors = trial.getSecondarySponsors();
+                this.parseSecondarySponsors(study, secondarySponsors);
 
                 List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
+                // TODO: partially unused because of multiple IDs problem
+                this.parseSecondaryIDs(study, secondaryIDs);
 
                 List<String> sourceSupport = trial.getSourceSupport();
-
+                this.parseSourceSupports(study, sourceSupport);
+                
                 List<EuctrEthicsReview> ethicsReviews = trial.getEthicsReviews();
+                this.parseEthicsReviews(study, ethicsReviews);
 
                 // Storing in cache
                 if (!this.existingStudy()) {
@@ -1036,6 +1052,141 @@ public class EuctrConverter extends CacheConverter
                 study.setAttributeIfNotNull("secondaryOutcomes", outcomesSb.toString().strip());
             } else {
                 new Exception("Unknown outcomesType arg value \"" + outcomesType + "\" in parseOutcomes()");
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * @param study
+     * @param secondarySponsors
+     */
+    public void parseSecondarySponsors(Item study, List<String> secondarySponsors) throws Exception {
+        if (!this.existingStudy()) {
+            for (String secondarySponsor: secondarySponsors) {
+                // TODO: link to CV
+                this.createAndStoreClassItem(study, "Organisation",
+                        new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, {"name", secondarySponsor}});
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * @param study
+     * @param secondaryIDs
+     * @throws Exception
+     */
+    public void parseSecondaryIDs(Item study, List<EuctrSecondaryId> secondaryIDs) throws Exception {
+        if (!this.existingStudy() && secondaryIDs.size() > 0) {
+            HashSet<String> seenIds = new HashSet<String>();
+            String secId;
+            String issAuth;
+            Matcher mNA;
+
+            // TODO: protocol id for object identifier
+            for (EuctrSecondaryId secIdObj: secondaryIDs) {
+                secId = secIdObj.getSecondaryId();
+
+                mNA = P_ID_NA.matcher(secId);   // Filtering out N/A and similar values from IDs
+                if (!mNA.matches() && !seenIds.contains(secId) && !dummyIDs.contains(secId)) {  // Also filtering out seen and "dummy" IDs
+                    issAuth = secIdObj.getIssuingAuthority();
+
+                    // Creating protocol DO if ID is of type "Sponsor Protocol Code"
+                    if (issAuth.equalsIgnoreCase(ISS_AUTH_PROTOCOL_CODE)) {
+                        this.createAndStoreProtocolDO(study, secId);
+                    } else {
+                        mNA = P_ID_NA.matcher(issAuth); // Not setting identifier type if issuing authority is N/A (or similar value)
+                        // TODO: normalise identifier type
+                        
+                        // TODO: uncomment once multiple IDs errors resolved
+                        // this.createAndStoreClassItem(study, "StudyIdentifier", 
+                        //     new String[][]{{"identifierValue", secId}, {"identifierType", mNA.matches() ? "" : issAuth}});
+                    }
+
+                    seenIds.add(secId);
+                }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * Note: The sponsor's protocol code can be modified at any time so we can't set a date/publication year from the fields in the data file
+     * https://www.bfarm.de/SharedDocs/Downloads/DE/Arzneimittel/KlinischePruefung/EudraCT_EU-CTR_QuA.pdf?__blob=publicationFile
+     * @param study
+     * @param protocolCode
+     * @throws Exception
+     */
+    public void createAndStoreProtocolDO(Item study, String protocolCode) throws Exception {
+        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(protocolCode)) {
+            // Display title
+            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+            String doDisplayTitle;
+            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+            } else {
+                doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+            }
+
+            /* Protocol DO */
+            Item protocolDO = this.createAndStoreClassItem(study, "DataObject", 
+                new String[][]{{"objectClass", ConverterCVT.O_CLASS_TEXT}, {"objectType", ConverterCVT.O_TYPE_STUDY_PROTOCOL},
+                                {"title", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, {"displayTitle", doDisplayTitle}});
+            
+            /* Protocol code ObjectIdentifier */
+            this.createAndStoreClassItem(protocolDO, "ObjectIdentifier", 
+                new String[][]{{"identifierValue", protocolCode}, {"identifierType", ConverterCVT.ID_TYPE_SPONSOR}});
+        }
+    }
+
+    /**
+     * TODO
+     * @param study
+     * @param sourceSupports
+     * @throws Exception
+     */
+    public void parseSourceSupports(Item study, List<String> sourceSupports) throws Exception {
+        if (!this.existingStudy()) {
+            for (String org: sourceSupports) {
+                // TODO: match with CV
+                if (!ConverterUtils.isNullOrEmptyOrBlank(org)) {
+                    this.createAndStoreClassItem(study, "Organisation",
+                        new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_STUDY_FUNDER}, {"name", org}});
+                }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * @param study
+     * @param ethicsReviews
+     */
+    public void parseEthicsReviews(Item study, List<EuctrEthicsReview> ethicsReviews) {
+        if (this.currentCountry != null) {
+            Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
+
+            if (studyCountry != null) {
+                for (EuctrEthicsReview er: ethicsReviews) {
+                    String erStatus = er.getStatus();
+                    
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(erStatus)) {
+                        studyCountry.setAttributeIfNotNull("status", erStatus);
+                    }
+                    
+                    String erApprovalDateStr = er.getApprovalDate();
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(erApprovalDateStr)) {
+                        LocalDate erApprovalDate = ConverterUtils.getDateFromString(erApprovalDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+                        if (erApprovalDate != null) {
+                            studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", erApprovalDate.toString());
+                        } else {
+                            this.writeLog("Failed to parse ethics review approval date: " + erApprovalDateStr);
+                        }
+                    }
+                }
+            } else {
+                this.writeLog("Failed to retrieve StudyCountry in parseEthicsReviews() from country name " + this.currentCountry.getName());
             }
         }
     }
