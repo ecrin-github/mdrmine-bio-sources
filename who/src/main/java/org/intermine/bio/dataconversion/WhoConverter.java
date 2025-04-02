@@ -299,7 +299,6 @@ public class WhoConverter extends CacheConverter
         // TODO: handle "verbose" values, example study: SLCTR/2017/032
         String targetSize = this.getAndCleanValue(lineValues, "Target_size");
         if (ConverterUtils.isPosWholeNumber(targetSize) && !(Long.valueOf(targetSize) > Integer.MAX_VALUE)) {
-            study.setAttributeIfNotNull("testField5", targetSize);
             if (!this.existingStudy() || this.newerLastUpdate) {    // Updating planned enrolment for more recent last update date
                 study.setAttributeIfNotNull("plannedEnrolment", targetSize);
             }
@@ -309,7 +308,6 @@ public class WhoConverter extends CacheConverter
         // In EUCTR: for the whole clinical trial
         String resultsActualEnrolment = this.getAndCleanValue(lineValues, "results_actual_enrollment");
         if (ConverterUtils.isPosWholeNumber(resultsActualEnrolment) && !(Long.valueOf(resultsActualEnrolment) > Integer.MAX_VALUE)) {
-            study.setAttributeIfNotNull("testField6", resultsActualEnrolment);
             if (this.newerLastUpdate) { // Updating actual enrolment for more recent last update date
                 study.setAttributeIfNotNull("actualEnrolment", resultsActualEnrolment);
             }
@@ -326,7 +324,6 @@ public class WhoConverter extends CacheConverter
         /* Study people: sponsors */
         String primarySponsor = this.getAndCleanValue(lineValues, "Primary_sponsor");
         String secondarySponsors = this.getAndCleanValue(lineValues, "Secondary_sponsors");
-        // TODO: what is source support?
         String sourceSupport = this.getAndCleanValue(lineValues, "Source_Support");
 
         // TODO EUCTR: check for new sponsors for existing study
@@ -337,7 +334,7 @@ public class WhoConverter extends CacheConverter
             this.createAndStoreStudyOrg(study, secondarySponsors, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
             // Checking if the source support string is different than the primary and secondary sponsors + is not "please refer to primary and secondary sponsors"
             if (!sourceSupport.toLowerCase().contains("please") && !sourceSupport.equalsIgnoreCase(primarySponsor) && !sourceSupport.equalsIgnoreCase(secondarySponsors)) {
-                this.createAndStoreStudyOrg(study, sourceSupport, ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT);
+                this.createAndStoreStudyOrg(study, sourceSupport, ConverterCVT.CONTRIBUTOR_TYPE_STUDY_FUNDER);
             }
         }
 
@@ -395,7 +392,7 @@ public class WhoConverter extends CacheConverter
         String secondaryOutcomes = this.getAndCleanValue(lineValues, "Secondary_Outcomes");
         // Additional info with results_adverse_events field
         String resultsAdverseEvents = this.getAndCleanValue(lineValues, "results_adverse_events");
-        // Using resultsDatePosted this field to ignore some placeholder links in resultsAdverseEvents
+        // Using resultsDatePosted field to ignore some placeholder links in resultsAdverseEvents
         this.parseSecondaryOutcomes(study, secondaryOutcomes, resultsAdverseEvents, resultsDatePosted);
 
         // In MDR model but unused; Unclear what the various values mean - certain bridging flag/childs 
@@ -404,18 +401,19 @@ public class WhoConverter extends CacheConverter
         String bridgingFlag = this.getAndCleanValue(lineValues, "Bridging_flag");
         String bridgedType = this.getAndCleanValue(lineValues, "Bridged_type");
         String childs = this.getAndCleanValue(lineValues, "Childs");
-
+        
         // TODO: unused? seems to be somewhat overlapping with study status, 
         // most of the time value is anticipated when status is pending and actual when status is recruiting
         // In MDR WHO model but unused
         String typeEnrolment = this.getAndCleanValue(lineValues, "type_enrolment");
-
+        
         // Note: retrospective studies are, at the same proportion as non-retrospective studies, interventional (= the majority) -> seems wrong?
         String retrospectiveFlag = this.getAndCleanValue(lineValues, "Retrospective_flag");
         this.parseRetrospectiveFlag(study, retrospectiveFlag);
-
+        
         /* Results summary DO */
         String resultsUrlLink = this.getAndCleanValue(lineValues, "results_url_link");
+        // TODO: check if actual results summary? may not be for EUCTR trials at least
         String resultsSummary = this.getAndCleanValue(lineValues, "results_summary");
         // resultsDatePosted used earlier
         String resultsDateFirstPublication = this.getAndCleanValue(lineValues, "results_date_first_publication");
@@ -456,6 +454,8 @@ public class WhoConverter extends CacheConverter
         String ethicsContactName = this.getAndCleanValue(lineValues, "Ethics_Contact_Name");
         // Not in MDR, name of ethics committee (not exactly address)
         String ethicsContactAddress = this.getAndCleanValue(lineValues, "Ethics_Contact_Address");
+        // Not in MDR, name of ethics committee (not exactly address)
+        String ethicsContactEmail = this.getAndCleanValue(lineValues, "Ethics_Contact_Email");
 
         if (!this.existingStudy()) {
             if (cache) {

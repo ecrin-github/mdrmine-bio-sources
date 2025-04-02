@@ -70,16 +70,19 @@ public class ConverterCVT
     public static final String CONTRIBUTOR_TYPE_PUBLIC_CONTACT = "Public contact";
     public static final String CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT = "Scientific contact";
     public static final String CONTRIBUTOR_TYPE_SPONSOR = "Sponsor";
-    public static final String CONTRIBUTOR_TYPE_SCIENTIFIC_SUPPORT = "Scientific support organisation";
+    public static final String CONTRIBUTOR_TYPE_STUDY_FUNDER = "Study funder";
     public static final String DATE_TYPE_AVAILABLE = "Available";
     public static final String DATE_TYPE_CREATED = "Created";
     public static final String DATE_TYPE_UPDATED = "Updated";
     public static final String DATE_TYPE_ISSUED = "Issued";
 
+    /* Both */
     public static final String TITLE_TYPE_PUBLIC = "Public title";
     public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";
     public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
     public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
+
+    /* External CVs */
     public static final String CV_MEDDRA = "MedDRA";
     public static final String CV_MESH = "MeSH";
     public static final String CV_MESH_TREE = "MeSH Tree";
