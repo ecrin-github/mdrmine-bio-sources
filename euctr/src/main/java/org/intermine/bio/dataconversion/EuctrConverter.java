@@ -133,6 +133,9 @@ public class EuctrConverter extends CacheConverter
                 // ID without country code suffix
                 String cleanedID = mainId.substring(0, 14);
                 String countryCode = mainId.substring(15, 17);
+
+                // Adding EUCTR prefix
+                // cleanedID = "EUCTR" + cleanedID;
                 
                 if (this.studies.containsKey(cleanedID)) {   // Adding country-specific info to existing trial
                     this.existingStudy = this.studies.get(cleanedID);
@@ -156,6 +159,7 @@ public class EuctrConverter extends CacheConverter
                 String trialUrl = this.getAndCleanValue(mainInfo, "url");
                 // TODO: also add ID with suffix?
                 if (!this.existingStudy()) {
+                    study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
                     this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, trialUrl);
                 }
                 
@@ -172,9 +176,9 @@ public class EuctrConverter extends CacheConverter
                 String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
                 // TODO: identifier type?
                 // TODO: also gives duplicate errors
-                // if (!this.existingStudy()) {
-                //     this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
-                // }
+                if (!this.existingStudy()) {
+                    this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
+                }
     
                 // Unused, name of registry, seems to always be EUCTR
                 String regName = this.getAndCleanValue(mainInfo, "regName");
@@ -351,30 +355,44 @@ public class EuctrConverter extends CacheConverter
     public void parseTitles(Item study, String publicTitle, String scientificTitle, String scientificAcronym) throws Exception {
         if (!this.existingStudy()) {
             boolean displayTitleSet = false;
+            // TODO: only 1 matcher object?
+            /* Public title */
             Matcher mPublicTitleNA = P_TITLE_NA.matcher(publicTitle);
-            if (!ConverterUtils.isNullOrEmptyOrBlank(publicTitle) && !mPublicTitleNA.matches()) {
+            if (!mPublicTitleNA.matches()) {
                 study.setAttributeIfNotNull("displayTitle", publicTitle);
                 displayTitleSet = true;
+
                 this.createAndStoreClassItem(study, "Title", 
-                    new String[][]{{"text", publicTitle}, {"type", ConverterCVT.TITLE_TYPE_PUBLIC}});
+                new String[][]{{"text", publicTitle}, {"type", ConverterCVT.TITLE_TYPE_PUBLIC}});
             }
-    
+            
+            /* Scientific title */
             Matcher mScientificTitleNA = P_TITLE_NA.matcher(scientificTitle);
-            if (!ConverterUtils.isNullOrEmptyOrBlank(scientificTitle) && !mScientificTitleNA.matches()) {
+            if (!mScientificTitleNA.matches()) {
                 if (!displayTitleSet) {
                     study.setAttributeIfNotNull("displayTitle", scientificTitle);
                     displayTitleSet = true;
                 }
+
                 this.createAndStoreClassItem(study, "Title", 
                     new String[][]{{"text", scientificTitle}, {"type", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
             }
-    
-            if (!displayTitleSet) {
-                // TODO: only 1 matcher object?
-                Matcher mScientificAcronymNA = P_TITLE_NA.matcher(scientificAcronym);
-                if (!mScientificAcronymNA.matches()) {
+
+            /* Acronym */
+            Matcher mScientificAcronymNA = P_TITLE_NA.matcher(scientificAcronym);
+            if (!mScientificAcronymNA.matches()) {
+                if (!displayTitleSet) {
                     study.setAttributeIfNotNull("displayTitle", scientificAcronym);
+                    displayTitleSet = true;
                 }
+
+                this.createAndStoreClassItem(study, "Title", 
+                    new String[][]{{"text", scientificAcronym}, {"type", ConverterCVT.TITLE_TYPE_ACRONYM}});
+            }
+
+            // Unknown title if not set before
+            if (!displayTitleSet) {
+                study.setAttributeIfNotNull("displayTitle", ConverterCVT.TITLE_UNKNOWN);
             }
         }
     }

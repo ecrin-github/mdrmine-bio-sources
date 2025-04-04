@@ -77,8 +77,10 @@ public class ConverterCVT
     public static final String DATE_TYPE_ISSUED = "Issued";
 
     /* Both */
+    public static final String TITLE_UNKNOWN = "Unknown study title";
     public static final String TITLE_TYPE_PUBLIC = "Public title";
     public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";
+    public static final String TITLE_TYPE_ACRONYM = "Acronym or abbreviation";
     public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
     public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
 
