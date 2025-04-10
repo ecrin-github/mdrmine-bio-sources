@@ -119,8 +119,9 @@ public class CtisConverter extends BaseConverter
         /* ID */
         String trialID = this.getAndCleanValue(lineValues, "Trial number");
         // TODO: change identifier to add CTIS prefix?
-        this.createAndStoreStudyIdentifier(study, trialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, null);
         this.currentTrialID = trialID;
+        this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, null);
+        study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
 
         /* Study title (need to get it before protocol DO) */
         String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
