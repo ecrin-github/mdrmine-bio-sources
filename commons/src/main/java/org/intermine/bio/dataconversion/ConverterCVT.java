@@ -32,12 +32,16 @@ public class ConverterCVT
     public static final String TYPE_BASIC_SCIENCE = "Basic science";
     public static final String TYPE_EXPANDED_ACCESS = "Expanded access";
     public static final String TYPE_OTHER = "Other";
+    public static final String STATUS_ACTIVE_NOT_RECRUITING = "Active, not recruiting";
+    public static final String STATUS_COMPLETED = "Completed";
+    public static final String STATUS_SUSPENDED = "Suspended";
     public static final String FEATURE_T_PHASE = "Phase";   // MDR ID: 20
     public static final String FEATURE_T_PRIMARY_PURPOSE = "Primary purpose";   // MDR ID: 21
     public static final String FEATURE_T_ALLOCATION = "Allocation";   // MDR ID: 22
     public static final String FEATURE_T_INTERVENTION_MODEL = "Intervention model";   // MDR ID: 23
     public static final String FEATURE_T_MASKING = "Masking";   // MDR ID: 24
     public static final String FEATURE_T_TIME_PERSPECTIVE = "Time perspective";   // MDR ID: 31
+    public static final String FEATURE_V_EARLY_PHASE_1 = "Early Phase 1";
     public static final String FEATURE_V_RETROSPECTIVE = "Retrospective";
     public static final String FEATURE_V_RANDOMISED = "Randomised";
     public static final String FEATURE_V_NONRANDOMISED = "Nonrandomised";
@@ -53,6 +57,7 @@ public class ConverterCVT
     public static final String GENDER_WOMEN = "Female";
     public static final String GENDER_MEN = "Male";
     public static final String AGE_IN_UTERO = "In utero";
+    public static final String AGE_UNIT_YEARS = "Years";
     public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
 
     /* Objects */
@@ -60,6 +65,8 @@ public class ConverterCVT
     public static final String O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY = "Trial registry results summary";
     public static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
     public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
+    public static final String O_TYPE_INFORMED_CONSENT_FORM = "Informed consent form";
+    public static final String O_TYPE_STATISTICAL_ANALYSIS_PLAN = "Statistical analysis plan";
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_CLASS_TEXT = "Text";
     public static final String O_RESOURCE_TYPE_PDF = "PDF";
@@ -71,6 +78,7 @@ public class ConverterCVT
     public static final String CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT = "Scientific contact";
     public static final String CONTRIBUTOR_TYPE_SPONSOR = "Sponsor";
     public static final String CONTRIBUTOR_TYPE_STUDY_FUNDER = "Study funder";
+    public static final String CONTRIBUTOR_TYPE_COLLABORATING_ORG = "Collaborating organisation";
     public static final String DATE_TYPE_AVAILABLE = "Available";
     public static final String DATE_TYPE_CREATED = "Created";
     public static final String DATE_TYPE_UPDATED = "Updated";

@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.jsoup.Jsoup;
-
+import org.apache.commons.lang.WordUtils;
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
 
@@ -54,9 +54,12 @@ public class ConverterUtils
         return (s == null || s.isEmpty() || s.equalsIgnoreCase("NULL") || s.isBlank());
     }
 
-    /*
+    /**
      * TODO
      * https://stackoverflow.com/a/43133958
+     * @param string
+     * @param numLines
+     * @return
      */
     public static List<String> getLastLines(String string, int numLines) {
         List<String> lines = new ArrayList<>();
@@ -76,6 +79,9 @@ public class ConverterUtils
 
     /**
      * TODO
+     * @param dateStr
+     * @param dateFormatter
+     * @return
      */
     public static LocalDate getDateFromString(String dateStr, DateTimeFormatter dateFormatter) {
         LocalDate parsedDate = null;
@@ -118,6 +124,8 @@ public class ConverterUtils
 
     /**
      * TODO
+     * @param w
+     * @return
      */
     public static String capitaliseFirstLetter(String w) {
         if (w.length() > 0) {
@@ -128,6 +136,8 @@ public class ConverterUtils
     
     /**
      * TODO
+     * @param dateStr
+     * @return
      */
     public static String getYearFromISODateString(String dateStr) {
         String year = null;
@@ -142,6 +152,9 @@ public class ConverterUtils
 
     /**
      * TODO
+     * @param item
+     * @param attrName
+     * @return
      */
     public static String getValueOfItemAttribute(Item item, String attrName) {
         String attrValue = null;
@@ -231,5 +244,19 @@ public class ConverterUtils
         }
 
         return true;
+    }
+
+    /**
+     * TODO
+     * @param str
+     * @param charToReplace
+     * @return
+     */
+    public static String capitaliseAndReplaceCharBySpace(final String str, final char charToReplace) {
+        if (ConverterUtils.isNullOrEmptyOrBlank(str)) {
+            return str;
+        }
+        String capitalised = WordUtils.capitalizeFully(str);
+        return capitalised.replace(charToReplace, ' ');
     }
 }
