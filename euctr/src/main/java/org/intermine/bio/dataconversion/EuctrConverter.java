@@ -404,9 +404,11 @@ public class EuctrConverter extends CacheConverter
      * @throws Exception
      */
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
-        this.createAndStoreClassItem(study, "Organisation",
-            new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, 
-                            {"name", primarySponsor}});
+        if (!this.existingStudy()) {
+            this.createAndStoreClassItem(study, "Organisation",
+                new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, 
+                                {"name", primarySponsor}});
+        }
     }
 
     /**
@@ -1008,8 +1010,15 @@ public class EuctrConverter extends CacheConverter
                         minAge = "";
                     }
 
-                    study.setAttributeIfNotNull("minAge", minAge);
-                    study.setAttributeIfNotNull("maxAge", maxAge);
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(minAge)) {
+                        study.setAttributeIfNotNull("minAge", minAge);
+                        study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
+                    }
+
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(maxAge)) {
+                        study.setAttributeIfNotNull("maxAge", maxAge);
+                        study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
+                    }
                 }
             }
         }
