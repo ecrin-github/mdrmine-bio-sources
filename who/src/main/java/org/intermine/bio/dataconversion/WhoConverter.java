@@ -292,7 +292,8 @@ public class WhoConverter extends CacheConverter
         study.setAttributeIfNotNull("testField2", registrationDate != null ? registrationDate.toString() : null);
 
         // TODO EUCTR: replace updated date + registration date + publication year if existing study + start date more recent
-        this.createAndStoreRegistryEntryDO(study, url, lastUpdate, registrationDate, publicationYear);
+        // TODO: publication year wrong
+        this.createAndStoreRegistryEntryDO(study, url, registrationDate, publicationYear, lastUpdate);
 
         /* Study planned enrolment */
         // In EUCTR: for the whole clinical trial
@@ -435,6 +436,7 @@ public class WhoConverter extends CacheConverter
 
         /* Protocol DO */
         String resultsUrlProtocol = this.getAndCleanValue(lineValues, "results_url_protocol");
+        // TODO: publication year irrelevant?
         this.createAndStoreProtocolDO(study, resultsUrlProtocol, publicationYear);
 
         // Indicates if there is a plan to share IPD
@@ -783,7 +785,7 @@ public class WhoConverter extends CacheConverter
                 String nb2 = mPhaseNumber.group(3);
                 if (nb1 != null) {
                     if ((phase != null && phase.toLowerCase().contains("early")) || nb1.equals("0")) {  // Early phase 1
-                        featureValue = "Early phase 1"; // TODO: to CVT?
+                        featureValue = ConverterCVT.FEATURE_V_EARLY_PHASE_1;
                         if (nb2 != null) {
                             this.writeLog("Anomaly: second number matched for early phase string, phase: " 
                                             + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
@@ -1143,7 +1145,7 @@ public class WhoConverter extends CacheConverter
     /**
      * TODO
      */
-    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate lastUpdate, LocalDate registrationDate, String publicationYear) throws Exception {
+    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate registrationDate, String publicationYear, LocalDate lastUpdate) throws Exception {
         if (!this.existingStudy()) {
             // Display title
             String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
@@ -1166,10 +1168,15 @@ public class WhoConverter extends CacheConverter
 
             // Registry entry created date
             // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
-            this.createAndStoreObjectDate(doRegistryEntry, registrationDate, ConverterCVT.DATE_TYPE_CREATED);
+            // TODO: created or made available?
+            if (registrationDate != null) {
+                this.createAndStoreObjectDate(doRegistryEntry, registrationDate, ConverterCVT.DATE_TYPE_CREATED);
+            }
 
             // Last update
-            this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
+            if (lastUpdate != null) {
+                this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
+            }
         } else {
             // Update DO creation date
             if (registrationDate != null) {
