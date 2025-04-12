@@ -13,6 +13,16 @@ package org.intermine.bio.dataconversion;
  *
  */
 
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
+import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 import java.io.Reader;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
@@ -21,17 +31,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
-
-import org.apache.commons.text.WordUtils;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
 
 
 
@@ -260,8 +259,8 @@ public class CtgConverter extends BaseConverter
      */
     public void parseTrialID(Item study, String trialID) {
         // NCT ID
-        // study.setAttributeIfNotNull("secondaryIdentifier", trialID);
-        study.setAttributeIfNotNull("primaryIdentifier", trialID);
+        study.setAttributeIfNotNull("secondaryIdentifier", trialID);
+        //study.setAttributeIfNotNull("primaryIdentifier", trialID);
     }
 
     /**
@@ -331,7 +330,8 @@ public class CtgConverter extends BaseConverter
                 } else {
                     Matcher mCtis = CtgConverter.P_CTIS_ID.matcher(otherID);
                     if (mCtis.matches()) {
-                        study.setAttributeIfNotNull("ctisID", otherID);
+                         study.setAttributeIfNotNull("primaryIdentifier", otherID);
+//                        study.setAttributeIfNotNull("ctisID", otherID);
                     } else {
                         // TODO: duplicate errors probably
                         // this.createAndStoreClassItem(study, "StudyIdentifier", 

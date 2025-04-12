@@ -11,27 +11,21 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.io.Reader;
-import java.lang.reflect.Method;
-import java.time.LocalDate;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamReader;
-import javax.xml.stream.events.XMLEvent;
-
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
+
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.events.XMLEvent;
+import java.io.Reader;
+import java.lang.reflect.Method;
+import java.time.LocalDate;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 
@@ -159,7 +153,8 @@ public class EuctrConverter extends CacheConverter
                 String trialUrl = this.getAndCleanValue(mainInfo, "url");
                 // TODO: also add ID with suffix?
                 if (!this.existingStudy()) {
-                    study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
+//                    study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
+                    study.setAttributeIfNotNull("euctrID", this.currentTrialID);
                     this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, trialUrl);
                 }
                 
