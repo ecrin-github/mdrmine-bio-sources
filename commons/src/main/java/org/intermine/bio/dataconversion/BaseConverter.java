@@ -45,7 +45,6 @@ import org.intermine.objectstore.query.ResultsRow;
 import org.intermine.objectstore.query.SimpleConstraint;
 import org.intermine.util.PropertiesUtil;
 import org.intermine.xml.full.Item;
-import org.intermine.xml.full.ReferenceList;
 
 
 

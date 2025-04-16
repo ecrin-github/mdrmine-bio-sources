@@ -94,9 +94,11 @@ public class CtisConverter extends BaseConverter
             } else {
                 skipNext = false;
             }
+
             try {
                 nextLine = csvReader.readNext();
             } catch (CsvMalformedLineException e) {
+                this.writeLog("Failed to parse line");
                 nextLine = new String[0];
                 skipNext = true;
             }
@@ -120,7 +122,7 @@ public class CtisConverter extends BaseConverter
         String trialID = this.getAndCleanValue(lineValues, "Trial number");
         // TODO: change identifier to add CTIS prefix?
         this.currentTrialID = trialID;
-        this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, null);
+        // this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, null);
         study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
 
         /* Study title (need to get it before protocol DO) */
@@ -130,7 +132,7 @@ public class CtisConverter extends BaseConverter
             this.createAndStoreClassItem(study, "Title",
                 new String[][]{{"text", trialTitle}, {"type", ConverterCVT.TITLE_TYPE_SCIENTIFIC}});
         } else {
-            study.setAttributeIfNotNull("displayTitle", "Unknown study title");
+            study.setAttributeIfNotNull("displayTitle", ConverterCVT.TITLE_UNKNOWN);
         }
         
         // Sponsor protocol code
@@ -256,8 +258,8 @@ public class CtisConverter extends BaseConverter
 
             /* Protocol DO */
             Item protocolDO = this.createAndStoreClassItem(study, "DataObject", 
-                new String[][]{{"objectClass", ConverterCVT.O_CLASS_TEXT}, {"objectType", ConverterCVT.O_TYPE_STUDY_PROTOCOL},
-                                {"title", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, {"displayTitle", doDisplayTitle}});
+                new String[][]{{"objectClass", ConverterCVT.O_CLASS_TEXT}, {"type", ConverterCVT.O_TYPE_STUDY_PROTOCOL},
+                                {"title", doDisplayTitle}});
 
             /* Object identifier: protocol code */
             this.createAndStoreClassItem(protocolDO, "ObjectIdentifier", 
@@ -655,8 +657,7 @@ public class CtisConverter extends BaseConverter
 
                 /* Ethics approval notification DO */
                 Item ethicsApprovalDO = this.createAndStoreClassItem(study, "DataObject", 
-                    new String[][]{{"objectType", ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION},
-                                    {"title", ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION}, {"displayTitle", doDisplayTitle}});
+                    new String[][]{{"type", ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION}, {"title", doDisplayTitle}});
                 
                 /* Object date: decision date */
                 this.createAndStoreClassItem(ethicsApprovalDO, "ObjectDate", 
@@ -722,8 +723,8 @@ public class CtisConverter extends BaseConverter
 
         /* Trial registry entry DO */
         Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-            new String[][]{{"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
-                            {"title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"displayTitle", doDisplayTitle}});
+            new String[][]{{"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
+                            {"title", doDisplayTitle}});
 
         /* Registry entry instance */
         if (!ConverterUtils.isNullOrEmptyOrBlank(this.currentTrialID)) {
@@ -785,8 +786,7 @@ public class CtisConverter extends BaseConverter
     }
 
     /**
-     * Get a dictionary (map) of the WHO data file field names linked to their corresponding column index in the data file, using a separate headers file.
-     * The headers file path is defined in the project.xml file (and set as an instance attribute of this class).
+     * TODO
      * TODO: also move to parent class (abstract)?
      * 
      * @return map of data file field names and their corresponding column index

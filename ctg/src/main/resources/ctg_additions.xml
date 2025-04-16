@@ -3,7 +3,4 @@
 
 <classes>
 <!-- add any <class> elements here -->
-    <class name="Study" is-interface="true">
-        <attribute name="ctisID" type="java.lang.String"/>
-    </class>
 </classes>

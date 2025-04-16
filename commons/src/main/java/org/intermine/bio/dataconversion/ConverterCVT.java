@@ -21,6 +21,8 @@ public class ConverterCVT
 {
     /* Registries */
     public static final String R_EUCTR = "EUCTR";
+    public static final String R_CTIS = "CTIS";
+    public static final String R_CTG = "CTG";
 
     /* Studies */
     public static final String NOT_APPLICABLE = "N/A";
@@ -85,7 +87,7 @@ public class ConverterCVT
     public static final String DATE_TYPE_ISSUED = "Issued";
 
     /* Both */
-    public static final String TITLE_UNKNOWN = "Unknown study title";
+    public static final String TITLE_UNKNOWN = "Unknown title";
     public static final String TITLE_TYPE_PUBLIC = "Public title";
     public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";
     public static final String TITLE_TYPE_ACRONYM = "Acronym or abbreviation";
