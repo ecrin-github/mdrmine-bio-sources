@@ -11,23 +11,17 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.io.Reader;
-import java.lang.reflect.Method;
-import java.time.LocalDate;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamReader;
-import javax.xml.stream.events.XMLEvent;
+ import javax.xml.stream.XMLInputFactory;
+ import javax.xml.stream.XMLStreamReader;
+ import javax.xml.stream.events.XMLEvent;
+ import java.io.Reader;
+ import java.lang.reflect.Method;
+ import java.time.LocalDate;
+ import java.util.*;
+ import java.util.regex.Matcher;
+ import java.util.regex.Pattern;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
@@ -159,7 +153,8 @@ public class EuctrConverter extends CacheConverter
                 String trialUrl = this.getAndCleanValue(mainInfo, "url");
                 // TODO: also add ID with suffix?
                 if (!this.existingStudy()) {
-                    study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
+                    // study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
+                    study.setAttributeIfNotNull("euctrID", this.currentTrialID);
                     this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, trialUrl);
                 }
                 
@@ -430,8 +425,8 @@ public class EuctrConverter extends CacheConverter
 
             /* Trial registry entry DO */
             Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-                new String[][]{{"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
-                                {"title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"displayTitle", doDisplayTitle}});
+                new String[][]{{"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
+                                {"title", doDisplayTitle}});
 
             /* Registry entry instance */
             if (!ConverterUtils.isNullOrEmptyOrBlank(this.currentTrialID)) {
@@ -445,7 +440,7 @@ public class EuctrConverter extends CacheConverter
         } else {
             // Update DO creation date
             if (creationDate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
                     Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_CREATED);
                     if (creationOD != null) {
@@ -791,9 +786,8 @@ public class EuctrConverter extends CacheConverter
 
             /* Results summary DO */
             Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", ConverterCVT.O_TITLE_RESULTS_SUMMARY},
-                                                        {"displayTitle", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                                                        {"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
+                                        new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
+                                                        {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
             /* Instance with results URL */
             // TODO: system? (=source)
             this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 
@@ -952,8 +946,15 @@ public class EuctrConverter extends CacheConverter
 
             /* Exclusion criteria */
             if (!ConverterUtils.isNullOrEmptyOrBlank(ecStr)) {
+                if (!iec.toString().isEmpty()) {
+                    if (!iec.toString().endsWith(".")) {
+                        iec.append(".");
+                    }
+                    iec.append(" ");
+                }
                 iec.append(ecStr);
             }
+
 
             // Setting IEC string constructed from IC + EC
             String iecStr = iec.toString();
@@ -1158,8 +1159,8 @@ public class EuctrConverter extends CacheConverter
 
             /* Protocol DO */
             Item protocolDO = this.createAndStoreClassItem(study, "DataObject", 
-                new String[][]{{"objectClass", ConverterCVT.O_CLASS_TEXT}, {"objectType", ConverterCVT.O_TYPE_STUDY_PROTOCOL},
-                                {"title", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, {"displayTitle", doDisplayTitle}});
+                new String[][]{{"objectClass", ConverterCVT.O_CLASS_TEXT}, {"type", ConverterCVT.O_TYPE_STUDY_PROTOCOL},
+                                {"title", doDisplayTitle}});
             
             /* Protocol code ObjectIdentifier */
             this.createAndStoreClassItem(protocolDO, "ObjectIdentifier", 

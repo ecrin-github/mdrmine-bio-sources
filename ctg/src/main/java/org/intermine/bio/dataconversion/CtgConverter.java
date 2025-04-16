@@ -27,7 +27,6 @@ import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
-
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
@@ -98,9 +97,11 @@ public class CtgConverter extends BaseConverter
             } else {
                 skipNext = false;
             }
+            
             try {
                 nextLine = csvReader.readNext();
             } catch (CsvMalformedLineException e) {
+                this.writeLog("Failed to parse line");
                 nextLine = new String[0];
                 skipNext = true;
             }
@@ -261,7 +262,8 @@ public class CtgConverter extends BaseConverter
     public void parseTrialID(Item study, String trialID) {
         // NCT ID
         // study.setAttributeIfNotNull("secondaryIdentifier", trialID);
-        study.setAttributeIfNotNull("primaryIdentifier", trialID);
+        // study.setAttributeIfNotNull("primaryIdentifier", trialID);
+        study.setAttributeIfNotNull("nctID", trialID);
     }
 
     /**
@@ -331,7 +333,8 @@ public class CtgConverter extends BaseConverter
                 } else {
                     Matcher mCtis = CtgConverter.P_CTIS_ID.matcher(otherID);
                     if (mCtis.matches()) {
-                        study.setAttributeIfNotNull("ctisID", otherID);
+                        // study.setAttributeIfNotNull("primaryIdentifier", otherID);
+                        study.setAttributeIfNotNull("primaryIdentifier", otherID);
                     } else {
                         // TODO: duplicate errors probably
                         // this.createAndStoreClassItem(study, "StudyIdentifier", 
@@ -427,10 +430,12 @@ public class CtgConverter extends BaseConverter
         }
 
         if (!ConverterUtils.isNullOrEmptyOrBlank(otherOutcomes)) {
-            if (!outcomesSb.toString().endsWith(".")) {
-                outcomesSb.append(".");
+            if (!outcomesSb.toString().isEmpty()) {
+                if (!outcomesSb.toString().endsWith(".")) {
+                    outcomesSb.append(".");
+                }
+                outcomesSb.append(" ");
             }
-            outcomesSb.append(" ");
             outcomesSb.append(otherOutcomes);
         }
         
@@ -788,7 +793,7 @@ public class CtgConverter extends BaseConverter
                             // TODO: title useless? see mdr.xml comment
                             // Document DO
                             documentDO = this.createAndStoreClassItem(study, "DataObject", 
-                                new String[][]{{"objectType", objectType}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"title", g1}, {"displayTitle", g1}});
+                                new String[][]{{"type", objectType}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"title", g1}});
     
                             // DO Instance with direct URL
                             this.createAndStoreClassItem(documentDO, "ObjectInstance", new String[][]{{"url", g2}});
@@ -819,8 +824,8 @@ public class CtgConverter extends BaseConverter
 
         /* Trial registry entry DO */
         Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-            new String[][]{{"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
-                            {"title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"displayTitle", doDisplayTitle}});
+            new String[][]{{"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
+                            {"title", doDisplayTitle}});
         // TODO: publication year?
 
         /* Registry entry instance */
@@ -870,9 +875,8 @@ public class CtgConverter extends BaseConverter
 
             /* Results summary DO */
             Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", ConverterCVT.O_TITLE_RESULTS_SUMMARY},
-                                                        {"displayTitle", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                                                        {"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
+                                        new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
+                                                        {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
             /* Instance with results URL */
             // TODO: system? (=source)
             this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 

@@ -176,56 +176,32 @@ public class WhoConverter extends CacheConverter
         this.existingStudy = null;
         this.currentCountry = null;
         
+        /* Trial ID */
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
-        String cleanedID = null;
+        this.parseTrialID(trialID);
 
-        // Handling EUCTR trials
-        if (trialID.startsWith("EUCTR")) {
-            this.registry = ConverterCVT.R_EUCTR;
-            // ID without country code suffix
-            cleanedID = trialID.substring(0, 19);
-            String countryCode = trialID.substring(20, 22);
-            
-            if (this.studies.containsKey(cleanedID)) {   // Adding country-specific info to existing trial
-                this.existingStudy = this.studies.get(cleanedID);
-                study = this.existingStudy;
-                this.writeLog("Add country info, trial ID: " + cleanedID);
-            } else {
-                this.cache = true;
-            }
-
-            // Using ID without country code suffix
-            this.currentTrialID = cleanedID;
-
-            // Getting country from ID country code
-            if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
-                this.currentCountry = this.getCountryFromField("isoAlpha2", countryCode);
-                if (this.currentCountry == null) {
-                    this.writeLog("Couldn't find country from country code: " + countryCode);
-                }
-            }
+        if (this.existingStudy()) {    // Regular parsing
+            study = this.existingStudy;
         } else {
-            this.currentTrialID = trialID;
-        }
-
-        if (!this.existingStudy()) {    // Regular parsing
             study = createItem("Study");
+            
+            // Setting registry-specific ID fields
+            if (this.isEuctr()) {
+                study.setAttributeIfNotNull("euctrID", this.currentTrialID);
+            } else if (this.isCtg()) {
+                study.setAttributeIfNotNull("nctID", this.currentTrialID);
+            }
         }
 
+        study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
+        
         // TODO: study end date? -> results posted date?
         // Used for registry entry DO
         String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
         LocalDate lastUpdate = this.parseDate(lastUpdateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
-        // TODO: skip creating study if ID is missing?
 
-        /* ID and ID URL */
+        /* Registry page URL */
         String url = this.getAndCleanValue(lineValues, "url");
-
-        // TODO EUCTR: add ID with suffix as well?
-        if (!this.existingStudy()) {
-            // TODO: fix duplicate studyIdentifier error
-            this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, url);
-        }
 
         /* Secondary IDs */
         // TODO EUCTR: check for additional IDs with existing study
@@ -468,6 +444,51 @@ public class WhoConverter extends CacheConverter
         }
 
         this.currentTrialID = null;
+    }
+
+    /**
+     * TODO
+     * @param trialID
+     * @throws Exception
+     */
+    public void parseTrialID(String trialID) throws Exception {
+        // TODO: match other IDs, ChiCTR2000036732, ACTRN12605000029695, TCTR20240426007
+
+        // Handling EUCTR trials
+        if (trialID.startsWith("EUCTR")) {
+            this.registry = ConverterCVT.R_EUCTR;
+            // ID without country code suffix and EUCTR prefix
+            String cleanedID = trialID.substring(5, 19);
+            String countryCode = trialID.substring(20, 22);
+            
+            if (this.studies.containsKey(cleanedID)) {   // Adding country-specific info to existing trial
+                this.existingStudy = this.studies.get(cleanedID);
+                this.writeLog("Add country info, trial ID: " + cleanedID);
+            } else {
+                this.cache = true;
+            }
+            
+            // Using ID without country code suffix
+            this.currentTrialID = cleanedID;
+
+            // Getting country from ID country code
+            if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
+                this.currentCountry = this.getCountryFromField("isoAlpha2", countryCode);
+                if (this.currentCountry == null) {
+                    this.writeLog("Couldn't find country from country code: " + countryCode);
+                }
+            }
+        } else if (trialID.startsWith("CTIS")) {
+            this.registry = ConverterCVT.R_CTIS;
+            this.currentTrialID = trialID.substring(4);
+        } else if (trialID.startsWith("NCT")) {
+            this.registry = ConverterCVT.R_CTG;
+            this.currentTrialID = trialID;
+        } else {
+            this.currentTrialID = trialID;
+        }
+
+        // TODO EUCTR: add ID with suffix as well?
     }
 
     /**
@@ -1072,9 +1093,8 @@ public class WhoConverter extends CacheConverter
 
             /* Results summary DO */
             Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", ConverterCVT.O_TITLE_RESULTS_SUMMARY},
-                                                        {"displayTitle", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                                                        {"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
+                                        new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
+                                                        {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
             /* Instance with results URL */
             // TODO: system? (=source)
             this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 
@@ -1118,8 +1138,8 @@ public class WhoConverter extends CacheConverter
                 // Access type: in practice it might not be the correct access type
                 // Note: only specifying public, not using the various public types MDR has, maybe to change
                 Item protocolDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, {"displayTitle", doDisplayTitle}, 
-                                                        {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"objectType", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, 
+                                        new String[][]{{"title", doDisplayTitle}, 
+                                                        {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"type", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, 
                                                         {"publicationYear", publicationYear}, {"accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC}});
 
                 /* Protocol DO instance with URL */
@@ -1158,9 +1178,8 @@ public class WhoConverter extends CacheConverter
 
             /* Registry entry DO */
             Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-                new String[][]{{"title", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"displayTitle", doDisplayTitle}, 
-                                {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, 
-                                {"publicationYear", publicationYear}});
+                new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
+                                {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"publicationYear", publicationYear}});
 
             /* Registry entry DO instance */
             this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
@@ -1180,7 +1199,7 @@ public class WhoConverter extends CacheConverter
         } else {
             // Update DO creation date
             if (registrationDate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "objectType", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
                     Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_CREATED);
                     if (creationOD != null) {
@@ -1197,7 +1216,7 @@ public class WhoConverter extends CacheConverter
 
             // Update DO last update date
             if (lastUpdate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "objectType",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
                     Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_UPDATED);
                     if (lastUpdateOD != null) {
@@ -1404,6 +1423,14 @@ public class WhoConverter extends CacheConverter
             return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s)).strip();
         }
         return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s));
+    }
+
+    public boolean isCtg() {
+        return this.registry.equals(ConverterCVT.R_CTG);
+    }
+
+    public boolean isCtis() {
+        return this.registry.equals(ConverterCVT.R_CTIS);
     }
 
     public boolean isEuctr() {

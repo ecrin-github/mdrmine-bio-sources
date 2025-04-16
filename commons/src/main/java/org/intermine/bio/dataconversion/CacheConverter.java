@@ -77,6 +77,8 @@ public abstract class CacheConverter extends BaseConverter {
 
     /**
      * TODO
+     * @param study
+     * @param startDate
      */
     public void setStudyStartDate(Item study, LocalDate startDate) {
         if (startDate != null) {
@@ -98,6 +100,8 @@ public abstract class CacheConverter extends BaseConverter {
 
     /**
      * TODO
+     * @param study
+     * @param endDate
      */
     public void setStudyEndDate(Item study, LocalDate endDate) {
         if (endDate != null) {
