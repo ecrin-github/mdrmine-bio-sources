@@ -98,9 +98,7 @@ public class EuctrConverter extends CacheConverter
         }
         xr.close();
 
-        this.storeAllItems();
-
-        this.stopLogging();
+        this.storeAllItems();   // Note: this also calls this.stopLogging
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
@@ -1240,34 +1238,5 @@ public class EuctrConverter extends CacheConverter
             return s.strip();
         }
         return s;
-    }
-
-    public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
-        Item item = this.createClassItem(mainClassItem, className, kv);
-
-        if (item != null) {
-            // Get item map name from reference
-            String mapName = this.getReverseReferenceNameOfClass(className);
-            
-            // Get item map name from collection
-            if (mapName == null) {
-                mapName = this.getReverseCollectionNameOfClass(className, mainClassItem.getClassName());
-            }
-            
-            if (mapName != null) {
-                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) EuctrConverter.class.getSuperclass().getDeclaredField(mapName).get(this);
-                if (itemMap != null) {
-                    this.saveToItemMap(mainClassItem, itemMap, item);
-                } else {
-                    this.writeLog("Failed to save EUCTR item to map, class name: " + className);
-                }
-            } else {
-                this.writeLog("Failed to save EUCTR item to map (couldn't find map), class name: " + className);
-            }
-        } else {
-            this.writeLog("Failed to create item of class " + className + ", attributes: " + kv);
-        }
-
-        return item;
     }
 }

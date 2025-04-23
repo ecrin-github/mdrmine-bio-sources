@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 import org.jsoup.Jsoup;
 import org.apache.commons.lang.WordUtils;
@@ -44,6 +45,27 @@ public class ConverterUtils
     public static final DateTimeFormatter P_DATE_D_M_Y_SLASHES = DateTimeFormatter.ofPattern("d/M/uuuu");
     public static final DateTimeFormatter P_DATE_D_MWORD_Y_SPACES = DateTimeFormatter.ofPattern("d MMMM uuuu");
     public static final DateTimeFormatter P_DATE_MWORD_D_Y_HOUR = DateTimeFormatter.ofPattern("MMM d uuuu hh:mma");
+
+    /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
+    public static final Pattern P_EU_ID = Pattern.compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?");  // Both EUCTR and CTIS (they might have the same format)
+    public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
+    public static final Pattern P_WHO_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
+    // public static final Pattern P_ANZCTR_ID = Pattern.compile();
+    // public static final Pattern P_CHICTR_ID = Pattern.compile();
+    // public static final Pattern P_CRIS_ID = Pattern.compile();
+    // public static final Pattern P_CTRI_ID = Pattern.compile();
+    // public static final Pattern P_DRKS_ID = Pattern.compile();
+    // public static final Pattern P_IRCT_ID = Pattern.compile();
+    // public static final Pattern P_ISRCTN_ID = Pattern.compile();
+    // public static final Pattern P_ITMCTR_ID = Pattern.compile();
+    // public static final Pattern P_JRCT_ID = Pattern.compile();
+    // public static final Pattern P_LBCTR_ID = Pattern.compile();
+    // public static final Pattern P_TCTR_ID = Pattern.compile();
+    // public static final Pattern P_PACTR_ID = Pattern.compile();
+    // public static final Pattern P_REBEC_ID = Pattern.compile();
+    // public static final Pattern P_REPEC_ID = Pattern.compile();
+    // public static final Pattern P_RPCEC_ID = Pattern.compile();
+    // public static final Pattern P_SLCTR_ID = Pattern.compile();
 
     /**
      * Check if a string is null, empty, only contains whitespaces, or is equal to "NULL".

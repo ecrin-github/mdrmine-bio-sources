@@ -16,11 +16,18 @@ package org.intermine.bio.dataconversion;
 import java.io.Reader;
 import java.time.LocalDate;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
@@ -44,8 +51,6 @@ public class CtgConverter extends BaseConverter
     private static final String DATASET_TITLE = "CTG-Studies";
     private static final String DATA_SOURCE_NAME = "CTG";
 
-    private static final Pattern P_EUCTR_ID = Pattern.compile(".*\\b\\d{4}-\\d{6}-\\d{2}");
-    private static final Pattern P_CTIS_ID = Pattern.compile(".*\\b\\d{4}-\\d{6}-\\d{2}-\\d{2}");
     private static final Pattern P_PHASE = Pattern.compile("(NA)|(early_)?phase(\\d)(?:\\|phase(\\d))?", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_DOC = Pattern.compile("(.*?),\\h*(http\\S+)\\h*", Pattern.CASE_INSENSITIVE);
 
@@ -54,6 +59,7 @@ public class CtgConverter extends BaseConverter
     private static final String AGE_OLDER_ADULT = "OLDER_ADULT";
 
     private Map<String, Integer> fieldsToInd;
+    private HashSet<String> storedPKs = new HashSet<String>();  // Storing all NCT, EUCTR, and CTIS id to avoid duplicate errors
 
     /**
      * Constructor
@@ -116,12 +122,13 @@ public class CtgConverter extends BaseConverter
 
         /* Trial ID */
         String trialID = this.getAndCleanValue(lineValues, "NCT Number");
+        /* Secondary IDs (EUCTR, CTIS, Protocol code, etc.) */
+        String otherIDs = this.getAndCleanValue(lineValues, "Other IDs");
 
-        // Not storing study if trialID is blank or is the trial that is not parsed properly
-        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID) && !trialID.equals("NCT01027572")) {
-            this.currentTrialID = trialID;
-            this.parseTrialID(study, trialID);
-            
+        // Not storing study if trialID is blank or is the trial that is not parsed properly or is a trial with an ID that is already linked to another study
+        // TODO: if studies with blank trial IDs exist, check otherIDs then?
+        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID) && !trialID.equals("NCT01027572") &&
+            this.parseTrialIDs(study, trialID, otherIDs)) {
             /* Study title */
             String studyTitle = this.getAndCleanValue(lineValues, "Study Title");
             // Study acronym
@@ -166,10 +173,6 @@ public class CtgConverter extends BaseConverter
             String otherOutcomeMeasures = this.getAndCleanValue(lineValues, "Other Outcome Measures");
             this.parseSecondaryOutcomes(study, secondaryOutcomeMeasures, otherOutcomeMeasures);
     
-            /* Secondary IDs (EUCTR, CTIS, Protocol code, etc.) */
-            String otherIDs = this.getAndCleanValue(lineValues, "Other IDs");
-            this.parseOtherIDs(study, otherIDs);
-            
             /* Trial sponsor */
             String sponsor = this.getAndCleanValue(lineValues, "Sponsor");
             this.parseSponsor(study, sponsor);
@@ -250,8 +253,9 @@ public class CtgConverter extends BaseConverter
             study.setAttributeIfNotNull("testField8", studyDocuments);
     
             store(study);
-            this.currentTrialID = null;
+
         }
+        this.currentTrialID = null;
     }
 
     /**
@@ -261,9 +265,146 @@ public class CtgConverter extends BaseConverter
      */
     public void parseTrialID(Item study, String trialID) {
         // NCT ID
-        // study.setAttributeIfNotNull("secondaryIdentifier", trialID);
-        // study.setAttributeIfNotNull("primaryIdentifier", trialID);
         study.setAttributeIfNotNull("nctID", trialID);
+    }
+
+    /**
+     * TODO
+     * @param study
+     * @param mainTrialID
+     * @param otherIDsStr
+     * @return
+     * @throws Exception
+     */
+    public boolean parseTrialIDs(Item study, String mainTrialID, String otherIDsStr) throws Exception {
+        boolean continueParsing = true;
+
+        // NCT ID
+        if (storedPKs.contains(mainTrialID)) {
+            continueParsing = false;
+            this.writeLog("NCT ID already exists: " + mainTrialID);
+        } else {
+            this.currentTrialID = mainTrialID;
+            study.setAttributeIfNotNull("nctID", mainTrialID);
+        }
+
+        // Other IDs
+        if (!ConverterUtils.isNullOrEmptyOrBlank(otherIDsStr) && continueParsing) {
+            boolean ctisIdSet = false;
+            boolean euctrIdSet = false;
+            List<String> euIds = new ArrayList<String>();
+
+            // Adding secondaryIDs and trialID into one set
+            Set<String> ids = Stream.of(otherIDsStr.split(";"))
+                .map(String::strip)
+                .collect(Collectors.toSet());
+
+            Iterator<String> idsIter = ids.iterator();
+            while (idsIter.hasNext() && continueParsing) {
+                String otherID = idsIter.next();
+
+                Matcher mEu = ConverterUtils.P_EU_ID.matcher(otherID);
+                if (mEu.matches()) {
+                    String ctisPrefix = mEu.group(1);
+                    String euctrPrefix = mEu.group(2);
+                    String euId = mEu.group(3);
+                    String ctisSuffix = mEu.group(4);
+                    String euctrSuffix = mEu.group(5);
+
+                    if (storedPKs.contains(euId)) {
+                        continueParsing = false;
+                        this.writeLog("EU ID already exists: " + euId + "; raw id: " + otherID);
+                    } else {
+                        if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
+                            if (euctrPrefix == null && euctrSuffix == null) {
+                                // Setting CTIS ID without prefix and suffix
+                                study.setAttributeIfNotNull("primaryIdentifier", euId);
+                                ctisIdSet = true;
+                            } else {
+                                this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " + otherID);
+                            }
+                        } else if (euctrPrefix != null || euctrSuffix != null) {    // EUCTR ID
+                            // Setting EUCTR ID without prefix and suffix
+                            study.setAttributeIfNotNull("euctrID", euId);
+                            euctrIdSet = true;
+                            
+                            if (euctrSuffix != null) {
+                                this.writeLog("EUCTR ID matched and suffix is not null: " + euctrSuffix);
+                            }
+                        } else {    // Undistinguishable ID
+                            if (ctisIdSet) {
+                                if (!euctrIdSet) {
+                                    study.setAttributeIfNotNull("euctrID", euId);
+                                    euctrIdSet = true;
+                                } else {
+                                    this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: " + euId + "; full string of IDs: " + otherIDsStr);
+                                }
+                            } else if (ctisIdSet) {
+                                study.setAttributeIfNotNull("primaryIdentifier", euId);
+                                ctisIdSet = true;
+                            } else {
+                                euIds.add(euId);
+                            }
+                        }
+                    }
+                } else {
+                    // TODO: infer ID type
+                    this.createAndStoreClassItem(study, "StudyIdentifier", 
+                        new String[][]{{"identifierValue", otherID}});
+                }
+            }
+
+            // Handling undistinguishable EU IDs
+            if (continueParsing && euIds.size() > 0) {
+                if (euIds.size() > 2) {
+                    this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + otherIDsStr);
+                } else if (euIds.size() == 2) {
+                    if (ctisIdSet || euctrIdSet) {
+                        this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
+                    } else {
+                        String id1 = euIds.get(0);
+                        String id2 = euIds.get(1);
+
+                        // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
+                        if (id1.compareTo(id2) > 0) {
+                            study.setAttributeIfNotNull("primaryIdentifier", id1);
+                            study.setAttributeIfNotNull("euctrID", id2);
+                        } else {
+                            study.setAttributeIfNotNull("primaryIdentifier", id2);
+                            study.setAttributeIfNotNull("euctrID", id1);
+                        }
+                    }
+                } else {    // 1 ID
+                    if (ctisIdSet && euctrIdSet) {
+                        this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
+                    } else {
+                        String id1 = euIds.get(0);
+
+                        // Note: if both ctisID and euctrID have not been set before, we populate both fields hoping for a merge to correct the fields later
+                        if (!ctisIdSet) {
+                            study.setAttributeIfNotNull("primaryIdentifier", id1);
+                        }
+                        if (!euctrIdSet) {
+                            study.setAttributeIfNotNull("euctrID", id1);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (continueParsing) {
+            String nctID = ConverterUtils.getValueOfItemAttribute(study, "nctID");
+            String euctrID = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
+            String ctisID = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
+
+            for (String id: new String[]{nctID, ctisID, euctrID}) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+                    this.storedPKs.add(id);
+                }
+            }
+        }
+
+        return continueParsing;
     }
 
     /**
@@ -308,40 +449,6 @@ public class CtgConverter extends BaseConverter
     public void parseBriefSummary(Item study, String briefSummary) {
         if (!ConverterUtils.isNullOrEmptyOrBlank(briefSummary)) {
             study.setAttribute("briefDescription", briefSummary);
-        }
-    }
-
-    /**
-     * TODO
-     * @param study
-     * @param otherIDsStr
-     * @throws Exception
-     */
-    public void parseOtherIDs(Item study, String otherIDsStr) throws Exception {
-        // example: GO42784|2021-000129-28|2023-507172-44-00
-        // first id: sponsor protocol code, euctr id, ctis id
-        // TODO: as secondary identifiers?
-        if (!ConverterUtils.isNullOrEmptyOrBlank(otherIDsStr)) {
-            String[] otherIDs = otherIDsStr.split("\\|");
-            for (String otherID: otherIDs) {
-                otherID = otherID.strip();
-
-                Matcher mEuctr = CtgConverter.P_EUCTR_ID.matcher(otherID);
-                if (mEuctr.matches()) {
-                    study.setAttributeIfNotNull("euctrID", otherID);
-                    // study.setAttributeIfNotNull("primaryIdentifier", otherID);
-                } else {
-                    Matcher mCtis = CtgConverter.P_CTIS_ID.matcher(otherID);
-                    if (mCtis.matches()) {
-                        // study.setAttributeIfNotNull("primaryIdentifier", otherID);
-                        study.setAttributeIfNotNull("primaryIdentifier", otherID);
-                    } else {
-                        // TODO: duplicate errors probably
-                        // this.createAndStoreClassItem(study, "StudyIdentifier", 
-                        //     new String[][]{{"identifierValue", otherID}});
-                    }
-                }
-            }
         }
     }
 

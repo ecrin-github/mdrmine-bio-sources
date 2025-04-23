@@ -165,6 +165,8 @@ public abstract class CacheConverter extends BaseConverter {
         for (Item study: this.studies.values()) {
             store(study);
         }
+
+        this.stopLogging();
     }
 
     /**
@@ -182,6 +184,78 @@ public abstract class CacheConverter extends BaseConverter {
         itemList.add(itemToAdd);
     }
 
-    public abstract Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception;
+    /**
+     * TODO
+     * @param study
+     */
+    public void removeStudyAndLinkedItems(Item study) {
+        // Maps where key is or can be study ID
+        List<Map<String, List<Item>>> studyMaps = Arrays.asList(
+            this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers,
+            this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.relationships
+        );
+
+        // Maps where key is or can be object ID
+        List<Map<String, List<Item>>> objectMaps = Arrays.asList(
+            this.objectDates, this.objectDescriptions, this.objectIdentifiers, this.objectInstances,
+            this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.relationships
+        );
+
+        String studyId = study.getIdentifier();
+        
+        // Removing items linked to study
+        for (Map<String, List<Item>> itemMap: studyMaps) {
+            itemMap.remove(studyId);
+        }
+        
+        List<Item> objects = this.objects.get(studyId);
+        if (objects != null) {
+            // Retrieving all object IDs
+            List<String> objectIds = new ArrayList<String>();
+            for (Item object: objects) {
+                objectIds.add(object.getIdentifier());
+            }
+            
+            // Removing items linked to objects
+            for (Map<String, List<Item>> itemMap: objectMaps) {
+                for (String objectId: objectIds) {
+                    itemMap.remove(objectId);
+                }
+            }
+        }
+
+        // Removing objects
+        this.objects.remove(studyId);
+    }
+
+    @Override
+    public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
+        Item item = this.createClassItem(mainClassItem, className, kv);
+
+        if (item != null) {
+            // Get item map name from reference
+            String mapName = this.getReverseReferenceNameOfClass(className);
+            
+            // Get item map name from collection
+            if (mapName == null) {
+                mapName = this.getReverseCollectionNameOfClass(className, mainClassItem.getClassName());
+            }
+            
+            if (mapName != null) {
+                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) CacheConverter.class.getDeclaredField(mapName).get(this);
+                if (itemMap != null) {
+                    this.saveToItemMap(mainClassItem, itemMap, item);
+                } else {
+                    this.writeLog("Failed to save item to map, class name: " + className);
+                }
+            } else {
+                this.writeLog("Failed to save item to map (couldn't find map), class name: " + className);
+            }
+        } else {
+            this.writeLog("Failed to create item of class " + className + ", attributes: " + kv);
+        }
+
+        return item;
+    }
 
 }

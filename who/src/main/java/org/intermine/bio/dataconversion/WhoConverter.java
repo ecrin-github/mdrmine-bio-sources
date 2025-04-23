@@ -19,11 +19,14 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
@@ -45,9 +48,11 @@ import org.intermine.xml.full.Item;
  */
 public class WhoConverter extends CacheConverter
 {
-    /* Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html */
+    private static final Pattern P_NONVALID_ID = Pattern.compile(
+        "(?:\\bnull\\b)|(?:\\bnill?(?:\\h*known)?\\.?)|(?:not\\h*applicable)|(?:not\\h*available)|(?:N[\\/\\.]?A\\.?)|(?:none\\.?)|(?:NCT00000000)|(?:NCT12345678)|(?:ISRCTN00000000)|(?:ISRCTN12345678)|(?:[0\\.-:\\?\\h\\*]+)",
+        Pattern.CASE_INSENSITIVE);
     // TODO: "-"/"--" are none or unknown?
-    private static final Pattern P_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N/?A).*", Pattern.CASE_INSENSITIVE);  // N/A
+    private static final Pattern P_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N\\/?A).*", Pattern.CASE_INSENSITIVE);  // N/A
     private static final Pattern P_NONE = Pattern.compile(".*\\b(none|no)\\b.*", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_UNKNOWN = Pattern.compile(".*\\b(unknown|not\\h*specified|not\\h*stated)\\b.*", Pattern.CASE_INSENSITIVE);
     // TODO: N/A != none?
@@ -98,6 +103,8 @@ public class WhoConverter extends CacheConverter
     private Map<String, Integer> fieldsToInd;
     private String registry;    // Registry name
     private boolean cache;  // Caching if new EUCTR study
+    // Get a study's ID used for caching from any of its other IDs - key: trial id, value: single trial id used as key in this.studies
+    private Map<String, String> mainTrialIdMap = new HashMap<String, String>();
 
     /**
      * Constructor
@@ -159,7 +166,7 @@ public class WhoConverter extends CacheConverter
 
         this.storeAllItems();
 
-        this.stopLogging();
+        // this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
@@ -178,23 +185,12 @@ public class WhoConverter extends CacheConverter
         
         /* Trial ID */
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
-        this.parseTrialID(trialID);
-
-        if (this.existingStudy()) {    // Regular parsing
-            study = this.existingStudy;
-        } else {
-            study = createItem("Study");
-            
-            // Setting registry-specific ID fields
-            if (this.isEuctr()) {
-                study.setAttributeIfNotNull("euctrID", this.currentTrialID);
-            } else if (this.isCtg()) {
-                study.setAttributeIfNotNull("nctID", this.currentTrialID);
-            }
-        }
-
-        study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
+        /* Secondary IDs */
+        String secondaryIDs = this.getAndCleanValue(lineValues, "SecondaryIDs");
         
+        // TODO EUCTR: check for additional IDs with existing study
+        study = this.parseTrialIDsAndGetStudy(trialID, secondaryIDs);
+
         // TODO: study end date? -> results posted date?
         // Used for registry entry DO
         String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
@@ -202,12 +198,6 @@ public class WhoConverter extends CacheConverter
 
         /* Registry page URL */
         String url = this.getAndCleanValue(lineValues, "url");
-
-        /* Secondary IDs */
-        // TODO EUCTR: check for additional IDs with existing study
-        // Secondary IDs can also include project IDs (e.g. P30CA015704) and therefore appear multiple times, not parsing them for now
-        String secondaryIDs = this.getAndCleanValue(lineValues, "SecondaryIDs");
-        // this.parseSecondaryIDs(study, secondaryIDs);
 
         // TODO EUCTR: check for additional titles with existing study
         /* Public title */
@@ -436,8 +426,19 @@ public class WhoConverter extends CacheConverter
         String ethicsContactEmail = this.getAndCleanValue(lineValues, "Ethics_Contact_Email");
 
         if (!this.existingStudy()) {
-            if (cache) {
+            if (this.cache) {
                 this.studies.put(this.currentTrialID, study);
+
+                // Adding this study's other IDs along with the main ID to be able to find it in the studies map
+                String nctID = ConverterUtils.getValueOfItemAttribute(study, "nctID");
+                String euctrID = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
+                String ctisID = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
+
+                for (String id: new String[]{nctID, ctisID, euctrID}) {
+                    if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+                        this.mainTrialIdMap.put(id, this.currentTrialID);
+                    }
+                }
             } else {
                 store(study);
             }
@@ -448,70 +449,218 @@ public class WhoConverter extends CacheConverter
 
     /**
      * TODO
+     * TODO: method is too long
      * @param trialID
+     * @param secondaryIDs
+     * @return
      * @throws Exception
      */
-    public void parseTrialID(String trialID) throws Exception {
-        // TODO: match other IDs, ChiCTR2000036732, ACTRN12605000029695, TCTR20240426007
+    public Item parseTrialIDsAndGetStudy(String trialID, String secondaryIDs) throws Exception {
+        Item study = null;
+        String ctisID = "";
+        String nctID = "";
+        String euctrID = "";
+        List<String> euIds = new ArrayList<String>();
+        List<String> otherIDs = new ArrayList<String>();
+        
+        // Adding secondaryIDs and trialID into one set
+        Set<String> ids = Stream.of(secondaryIDs.split(";"))
+            .map(String::strip)
+            .collect(Collectors.toSet());
+        ids.add(trialID);
 
-        // Handling EUCTR trials
-        if (trialID.startsWith("EUCTR")) {
-            this.registry = ConverterCVT.R_EUCTR;
-            // ID without country code suffix and EUCTR prefix
-            String cleanedID = trialID.substring(5, 19);
-            String countryCode = trialID.substring(20, 22);
-            
-            if (this.studies.containsKey(cleanedID)) {   // Adding country-specific info to existing trial
-                this.existingStudy = this.studies.get(cleanedID);
-                this.writeLog("Add country info, trial ID: " + cleanedID);
+        Iterator<String> idsIter = ids.iterator();
+        while (idsIter.hasNext()) {
+            String id = idsIter.next();
+
+            if (!P_NONVALID_ID.matcher(id).matches()) {
+                Matcher mEu = ConverterUtils.P_EU_ID.matcher(id);
+
+                // Attempting to match against ID types that have dedicated fields (ctis, euctr, nct)
+                if (ConverterUtils.P_NCT_ID.matcher(id).matches()) {
+                    if (nctID.isEmpty()) {
+                        nctID = id;
+                    } else {
+                        this.writeLog("NCT id already set, existing id: " + nctID + "; parsed id: " + id);
+                    }
+                } else if (mEu.matches()) {
+                    String ctisPrefix = mEu.group(1);
+                    String euctrPrefix = mEu.group(2);
+                    String euId = mEu.group(3);
+                    String ctisSuffix = mEu.group(4);
+                    String euctrSuffix = mEu.group(5);
+
+                    if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
+                        if (euctrPrefix == null && euctrSuffix == null) {
+                            if (ctisID.isEmpty()) {
+                                // Setting CTIS ID without prefix and suffix
+                                ctisID = euId;
+                            } else {
+                                this.writeLog("CTIS id already set, existing id: " + ctisID + "; parsed id: " + id);
+                            }
+                        } else {
+                            this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " + id);
+                        }
+                    } else if (euctrPrefix != null || euctrSuffix != null) {    // EUCTR ID
+                        if (euctrID.isEmpty()) {
+                            // Setting EUCTR ID without prefix and suffix
+                            euctrID = euId;
+                        } else {
+                            this.writeLog("EUCTR id already set, existing id: " + euctrID + "; parsed id: " + id);
+                        }
+                        
+                        // TODO: handle case where EUCTR ID ends up different from already set ID in study found with other ID, current country discrepancy in this case
+                        // Country code, only processing if euctrID is main ID
+                        if (euctrSuffix != null && id.equals(trialID)) {
+                            // TODO: handle "Outside-EU/EEA" country code
+                            // Getting country from ID country code
+                            if (!ConverterUtils.isNullOrEmptyOrBlank(euctrSuffix)) {
+                                this.currentCountry = this.getCountryFromField("isoAlpha2", euctrSuffix);
+                                if (this.currentCountry == null) {
+                                    this.writeLog("Couldn't find country from country code: " + euctrSuffix);
+                                }
+                            }
+                        }
+                    } else {    // Undistinguishable ID
+                        if (!ctisID.isEmpty()) {
+                            if (euctrID.isEmpty()) {
+                                euctrID = euId;
+                            } else {
+                                this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: " + euId + "; full string of IDs: " + ids);
+                            }
+                        } else if (!ctisID.isEmpty()) {
+                            ctisID = euId;
+                        } else {
+                            euIds.add(euId);
+                        }
+                    }
+                } else {
+                    otherIDs.add(id);
+                }
+            }
+        }
+
+        // Handling undistinguishable EU IDs
+        if (euIds.size() > 0) {
+            if (euIds.size() > 2) {
+                this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + ids);
+            } else if (euIds.size() == 2) {
+                if (!ctisID.isEmpty() || !euctrID.isEmpty()) {
+                    this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds + "; full string of IDs: " + ids);
+                } else {
+                    String id1 = euIds.get(0);
+                    String id2 = euIds.get(1);
+
+                    // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
+                    if (id1.compareTo(id2) > 0) {
+                        ctisID = id1;
+                        euctrID = id2;
+                    } else {
+                        ctisID = id2;
+                        euctrID = id1;
+                    }
+                }
+            } else {    // 1 ID
+                if (!ctisID.isEmpty() && !euctrID.isEmpty()) {
+                    this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds + "; full string of IDs: " + ids);
+                } else {
+                    String id1 = euIds.get(0);
+
+                    // Note: if both ctisID and euctrID have not been set before, we populate both fields hoping for a merge to correct the fields later
+                    if (ctisID.isEmpty()) {
+                        ctisID = id1;
+                    }
+                    if (euctrID.isEmpty()) {
+                        euctrID = id1;
+                    }
+                }
+            }
+        }
+        
+        // Attempting to find an existing (cached study) from the IDs
+        for (String id: new String[]{nctID, ctisID, euctrID}) {
+            if (this.mainTrialIdMap.containsKey(id)) {
+                String mainId = this.mainTrialIdMap.get(id);
+                this.existingStudy = this.studies.get(mainId);
+                study = this.existingStudy;
+                this.currentTrialID = mainId;
+                break;
+            }
+        }
+
+        // Not an already existing study
+        if (study == null) {
+            study = createItem("Study");
+        }
+
+        /* Setting the various id fields */
+        if (!ctisID.isEmpty()) {
+            String existingCtisId = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
+            if (this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(existingCtisId) && !existingCtisId.equals(ctisID)) {
+                this.writeLog("CTIS ID is already set on existing study: " + existingCtisId + ", and is different from the parsed ID: " + ctisID);
             } else {
-                this.cache = true;
+                study.setAttributeIfNotNull("primaryIdentifier", ctisID);
             }
-            
-            // Using ID without country code suffix
-            this.currentTrialID = cleanedID;
 
-            // Getting country from ID country code
-            if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
-                this.currentCountry = this.getCountryFromField("isoAlpha2", countryCode);
-                if (this.currentCountry == null) {
-                    this.writeLog("Couldn't find country from country code: " + countryCode);
-                }
+            if (this.currentTrialID == null) {
+                this.currentTrialID = ctisID;
             }
-        } else if (trialID.startsWith("CTIS")) {
-            this.registry = ConverterCVT.R_CTIS;
-            this.currentTrialID = trialID.substring(4);
-        } else if (trialID.startsWith("NCT")) {
-            this.registry = ConverterCVT.R_CTG;
-            this.currentTrialID = trialID;
-        } else {
-            this.currentTrialID = trialID;
-        }
-
-        // TODO EUCTR: add ID with suffix as well?
-    }
-
-    /**
-     * Parse secondary IDs input to create StudyIdentifier items.
-     * 
-     * @param study the study item to link to study identifiers
-     * @param secIDsStr the input secondary IDs string
-     */
-    public void parseSecondaryIDs(Item study, String secIDsStr) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(secIDsStr)) {
-            HashSet<String> seenIds = new HashSet<String>();
-
-            String[] ids = secIDsStr.split(";");
-            for (String id: ids) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(id) && !seenIds.contains(id)) {
-                    this.createAndStoreClassItem(study, "StudyIdentifier", 
-                        new String[][]{{"identifierValue", id}});
-                    seenIds.add(id);
-                }
-                // TODO: identifier type
-                // TODO: identifier link
+            if (this.registry.isEmpty()) {
+                this.registry = ConverterCVT.R_CTIS;
             }
         }
+        
+        if (!nctID.isEmpty()) {
+            String existingNctId = ConverterUtils.getValueOfItemAttribute(study, "nctID");
+            if (this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(existingNctId) && !existingNctId.equals(nctID)) {
+                this.writeLog("NCT ID is already set on existing study: " + existingNctId + ", and is different from the parsed ID: " + nctID);
+            } else {
+                study.setAttributeIfNotNull("nctID", nctID);
+            }
+
+            if (this.currentTrialID == null) {
+                this.currentTrialID = nctID;
+            }
+            if (this.registry.isEmpty()) {
+                this.registry = ConverterCVT.R_CTG;
+            }
+        }
+        
+        if (!euctrID.isEmpty()) {
+            String existingEuctrId = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
+            if (this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(existingEuctrId) && !existingEuctrId.equals(euctrID)) {
+                this.writeLog("EUCTR ID is already set on existing study: " + existingEuctrId + ", and is different from the parsed ID: " + euctrID);
+            } else {
+                study.setAttributeIfNotNull("euctrID", euctrID);
+            }
+
+            if (this.currentTrialID == null) {
+                this.currentTrialID = euctrID;
+            }
+            if (this.registry.isEmpty()) {
+                this.registry = ConverterCVT.R_EUCTR;
+            }
+        }
+
+        // Note: Not setting any other ID types as "primaryIdentifier" as there are some garbage IDs in "TrialID" field and non-unique IDs in "SecondaryIDs" field
+        // Setting currentTrialID however since it's just used for logging
+        if (this.currentTrialID == null) {
+            this.currentTrialID = trialID;
+        } else if (!this.existingStudy()) {
+            this.cache = true;
+        }
+
+        // Storing other IDs
+        // TODO: infer ID type
+        for (String id: otherIDs) {
+            // Adding IDs if not an existing study or not added already for an existing study
+            if (!this.existingStudy() || (this.getItemFromItemMap(study, this.studyIdentifiers, "identifierValue", id) == null)) {
+                this.createAndStoreClassItem(study, "StudyIdentifier", 
+                    new String[][]{{"identifierValue", id}});
+            }
+        }
+
+        return study;
     }
 
     /**
@@ -1241,7 +1390,7 @@ public class WhoConverter extends CacheConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(genderStr) && this.existingStudy()) {
             Matcher mGenderAll = P_GENDER_ALL.matcher(genderStr);
             if (mGenderAll.matches()) {
-                study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.GENDER_ALL);
+                study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
             } else {    // "structured" pattern
 
                 Matcher mGenderStructured = P_GENDER_STRUCTURED.matcher(genderStr);
@@ -1261,10 +1410,10 @@ public class WhoConverter extends CacheConverter
                         
                             Matcher mGenderNotSpecified = P_UNKNOWN.matcher(genderStr);
                             if (mGenderNotSpecified.matches()) {
-                                study.setAttributeIfNotNull("studyGenderElig", ConverterCVT.UNKNOWN);
+                                study.setAttributeIfNotNull("genderElig", ConverterCVT.UNKNOWN);
                             } else {    // Raw value (shouldn't happen)
 
-                                study.setAttributeIfNotNull("studyGenderElig", genderStr);
+                                study.setAttributeIfNotNull("genderElig", genderStr);
                                 this.writeLog("Couldn't parse study gender (used raw value): " + genderStr);
                             }
                         }
@@ -1437,14 +1586,12 @@ public class WhoConverter extends CacheConverter
         return this.registry.equals(ConverterCVT.R_EUCTR);
     }
 
-    /**
-     * TODO
-     */
+    @Override
     public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
         Item item = this.createClassItem(mainClassItem, className, kv);
 
         if (item != null) {
-            if (this.isEuctr()) {
+            if (this.isCtg() || this.isEuctr() || this.isCtis()) {
                 // Get item map name from reference
                 String mapName = this.getReverseReferenceNameOfClass(className);
                 
@@ -1452,16 +1599,16 @@ public class WhoConverter extends CacheConverter
                 if (mapName == null) {
                     mapName = this.getReverseCollectionNameOfClass(className, mainClassItem.getClassName());
                 }
-
+                
                 if (mapName != null) {
                     Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getSuperclass().getDeclaredField(mapName).get(this);
                     if (itemMap != null) {
                         this.saveToItemMap(mainClassItem, itemMap, item);
                     } else {
-                        this.writeLog("Couldn't save EUCTR item to map, class name: " + className);
+                        this.writeLog("Couldn't save item to map, class name: " + className);
                     }
                 } else {
-                    this.writeLog("Failed to save EUCTR item to map (couldn't find map), class name: " + className);
+                    this.writeLog("Failed to save item to map (couldn't find map), class name: " + className);
                 }
             } else {
                 store(item);
