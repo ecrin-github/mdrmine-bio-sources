@@ -152,8 +152,8 @@ public class CtgConverter extends BaseConverter
             String briefSummary = this.getAndCleanValue(lineValues, "Brief Summary");
             this.parseBriefSummary(study, briefSummary);
     
+            // TODO: use this to parse results or not?
             String studyResults = this.getAndCleanValue(lineValues, "Study Results");
-            study.setAttributeIfNotNull("testField1", studyResults);
     
             /* Study conditions */
             String conditions = this.getAndCleanValue(lineValues, "Conditions");
@@ -290,12 +290,14 @@ public class CtgConverter extends BaseConverter
 
         // Other IDs
         if (!ConverterUtils.isNullOrEmptyOrBlank(otherIDsStr) && continueParsing) {
+            study.setAttributeIfNotNull("testField1", otherIDsStr);
             boolean ctisIdSet = false;
             boolean euctrIdSet = false;
             List<String> euIds = new ArrayList<String>();
+            List<String> otherIds = new ArrayList<String>();    // IDs to be added as "StudyIdentifier" items later
 
             // Adding secondaryIDs and trialID into one set
-            Set<String> ids = Stream.of(otherIDsStr.split(";"))
+            Set<String> ids = Stream.of(otherIDsStr.split("\\|"))
                 .map(String::strip)
                 .collect(Collectors.toSet());
 
@@ -348,44 +350,51 @@ public class CtgConverter extends BaseConverter
                         }
                     }
                 } else {
+                    otherIds.add(otherID);
+                }
+            }
+
+            if (continueParsing) {
+                // Adding other IDs as StudyIdentifier items
+                for (String otherID: otherIds) {
                     // TODO: infer ID type
                     this.createAndStoreClassItem(study, "StudyIdentifier", 
                         new String[][]{{"identifierValue", otherID}});
                 }
-            }
-
-            // Handling undistinguishable EU IDs
-            if (continueParsing && euIds.size() > 0) {
-                if (euIds.size() > 2) {
-                    this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + otherIDsStr);
-                } else if (euIds.size() == 2) {
-                    if (ctisIdSet || euctrIdSet) {
-                        this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
-                    } else {
-                        String id1 = euIds.get(0);
-                        String id2 = euIds.get(1);
-
-                        // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
-                        if (id1.compareTo(id2) > 0) {
-                            study.setAttributeIfNotNull("primaryIdentifier", id1);
-                            study.setAttributeIfNotNull("euctrID", id2);
+                
+                // Handling undistinguishable EU IDs
+                if (euIds.size() > 0) {
+                    if (euIds.size() > 2) {
+                        this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + otherIDsStr);
+                    } else if (euIds.size() == 2) {
+                        if (ctisIdSet || euctrIdSet) {
+                            this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
                         } else {
-                            study.setAttributeIfNotNull("primaryIdentifier", id2);
-                            study.setAttributeIfNotNull("euctrID", id1);
+                            String id1 = euIds.get(0);
+                            String id2 = euIds.get(1);
+    
+                            // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
+                            if (id1.compareTo(id2) > 0) {
+                                study.setAttributeIfNotNull("primaryIdentifier", id1);
+                                study.setAttributeIfNotNull("euctrID", id2);
+                            } else {
+                                study.setAttributeIfNotNull("primaryIdentifier", id2);
+                                study.setAttributeIfNotNull("euctrID", id1);
+                            }
                         }
-                    }
-                } else {    // 1 ID
-                    if (ctisIdSet && euctrIdSet) {
-                        this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
-                    } else {
-                        String id1 = euIds.get(0);
-
-                        // Note: if both ctisID and euctrID have not been set before, we populate both fields hoping for a merge to correct the fields later
-                        if (!ctisIdSet) {
-                            study.setAttributeIfNotNull("primaryIdentifier", id1);
-                        }
-                        if (!euctrIdSet) {
-                            study.setAttributeIfNotNull("euctrID", id1);
+                    } else {    // 1 ID
+                        if (ctisIdSet && euctrIdSet) {
+                            this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
+                        } else {
+                            String id1 = euIds.get(0);
+    
+                            // Note: if both ctisID and euctrID have not been set before, we populate both fields hoping for a merge to correct the fields later
+                            if (!ctisIdSet) {
+                                study.setAttributeIfNotNull("primaryIdentifier", id1);
+                            }
+                            if (!euctrIdSet) {
+                                study.setAttributeIfNotNull("euctrID", id1);
+                            }
                         }
                     }
                 }
