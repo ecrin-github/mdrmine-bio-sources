@@ -102,7 +102,7 @@ public class WhoConverter extends CacheConverter
     private String headersFilePath = "";
     private Map<String, Integer> fieldsToInd;
     private String registry;    // Registry name
-    private boolean cache;  // Caching if new EUCTR study
+    private boolean cache;  // Caching studies that have nct/euctr/ctis id
     // Get a study's ID used for caching from any of its other IDs - key: trial id, value: single trial id used as key in this.studies
     private Map<String, String> mainTrialIdMap = new HashMap<String, String>();
 
@@ -182,7 +182,7 @@ public class WhoConverter extends CacheConverter
         this.newerLastUpdate = false;
         this.existingStudy = null;
         this.currentCountry = null;
-        
+
         /* Trial ID */
         String trialID = this.getAndCleanValue(lineValues, "TrialID");
         /* Secondary IDs */
@@ -428,17 +428,6 @@ public class WhoConverter extends CacheConverter
         if (!this.existingStudy()) {
             if (this.cache) {
                 this.studies.put(this.currentTrialID, study);
-
-                // Adding this study's other IDs along with the main ID to be able to find it in the studies map
-                String nctID = ConverterUtils.getValueOfItemAttribute(study, "nctID");
-                String euctrID = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
-                String ctisID = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
-
-                for (String id: new String[]{nctID, ctisID, euctrID}) {
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
-                        this.mainTrialIdMap.put(id, this.currentTrialID);
-                    }
-                }
             } else {
                 store(study);
             }
@@ -646,8 +635,20 @@ public class WhoConverter extends CacheConverter
         // Setting currentTrialID however since it's just used for logging
         if (this.currentTrialID == null) {
             this.currentTrialID = trialID;
-        } else if (!this.existingStudy()) {
-            this.cache = true;
+        } else {
+            this.studies.put(this.currentTrialID, study);
+
+            // Adding this study's other IDs along with the main ID to be able to find it in the studies map
+            for (String id: new String[]{nctID, ctisID, euctrID}) {
+                if (ConverterUtils.isNullOrEmptyOrBlank(id) && (!this.existingStudy() || !this.mainTrialIdMap.containsKey(id))) {
+                    this.mainTrialIdMap.put(id, this.currentTrialID);
+                }
+            }
+
+            // Caching study if currentTrialID is not null (=euctr/ctis/nct id)
+            if (!this.existingStudy()) {
+                this.cache = true;
+            }
         }
 
         // Storing other IDs
