@@ -105,6 +105,8 @@ public class CtisConverter extends CacheConverter
             }
         }
 
+        csvReader.close();
+
         this.storeAllItems();   // Note: this also calls this.stopLogging
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
@@ -240,7 +242,6 @@ public class CtisConverter extends CacheConverter
 
             this.currentTrialID = null;
         }
-
     }
 
     /**

@@ -113,6 +113,8 @@ public class CtgConverter extends BaseConverter
             }
         }
 
+        csvReader.close();
+
         this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }

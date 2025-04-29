@@ -166,6 +166,8 @@ public abstract class CacheConverter extends BaseConverter {
             store(study);
         }
 
+        this.clearMaps();
+
         this.stopLogging();
     }
 
@@ -182,6 +184,27 @@ public abstract class CacheConverter extends BaseConverter {
 
         itemList = itemMap.get(mainClassItemId);
         itemList.add(itemToAdd);
+    }
+
+    public void clearMaps() {
+        this.studies = null;
+        this.studyConditions = null;
+        this.studyCountries = null;
+        this.studyFeatures = null;
+        this.studyICDs = null;
+        this.studyIdentifiers = null;
+        this.locations = null;
+        this.organisations = null;
+        this.people = null;
+        this.relationships = null;
+        this.titles = null;
+        this.topics = null;
+        this.objects = null;
+        this.relationships = null;
+        this.objectDates = null;
+        this.objectDescriptions = null;
+        this.objectIdentifiers = null;
+        this.objectInstances = null;
     }
 
     /**

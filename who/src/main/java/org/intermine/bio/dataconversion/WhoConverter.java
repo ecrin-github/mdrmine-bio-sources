@@ -159,10 +159,13 @@ public class WhoConverter extends CacheConverter
             try {
                 nextLine = csvReader.readNext();
             } catch (CsvMalformedLineException e) {
+                this.writeLog("Found malformed line, skipping it");
                 nextLine = new String[0];
                 skipNext = true;
             }
         }
+
+        csvReader.close();
 
         this.storeAllItems();
 
