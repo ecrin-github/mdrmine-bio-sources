@@ -428,13 +428,16 @@ public class WhoConverter extends CacheConverter
         // Not in MDR, name of ethics committee (not exactly address)
         String ethicsContactEmail = this.getAndCleanValue(lineValues, "Ethics_Contact_Email");
 
-        if (!this.existingStudy()) {
-            if (this.cache) {
-                this.studies.put(this.currentTrialID, study);
-            } else {
-                store(study);
-            }
+        if (!this.existingStudy() && !this.cache) {
+            store(study);
         }
+        // if (!this.existingStudy()) {
+        //     if (this.cache) {
+        //         this.studies.put(this.currentTrialID, study);
+        //     } else {
+        //         store(study);
+        //     }
+        // }
 
         this.currentTrialID = null;
     }
@@ -579,7 +582,7 @@ public class WhoConverter extends CacheConverter
                 break;
             }
         }
-
+        
         // Not an already existing study
         if (study == null) {
             study = createItem("Study");
@@ -643,7 +646,7 @@ public class WhoConverter extends CacheConverter
 
             // Adding this study's other IDs along with the main ID to be able to find it in the studies map
             for (String id: new String[]{nctID, ctisID, euctrID}) {
-                if (ConverterUtils.isNullOrEmptyOrBlank(id) && (!this.existingStudy() || !this.mainTrialIdMap.containsKey(id))) {
+                if (!ConverterUtils.isNullOrEmptyOrBlank(id) && (!this.existingStudy() || !this.mainTrialIdMap.containsKey(id))) {
                     this.mainTrialIdMap.put(id, this.currentTrialID);
                 }
             }
