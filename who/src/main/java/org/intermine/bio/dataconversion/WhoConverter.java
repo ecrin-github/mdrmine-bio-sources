@@ -378,7 +378,8 @@ public class WhoConverter extends CacheConverter
         String typeEnrolment = this.getAndCleanValue(lineValues, "type_enrolment");
         
         // Note: retrospective studies are, at the same proportion as non-retrospective studies, interventional (= the majority) -> seems wrong?
-        String retrospectiveFlag = this.getAndCleanValue(lineValues, "Retrospective_flag");
+        // Note: field changed from "Retrospective_flag" to "Prospective_registration" as of 10/7/2025
+        String retrospectiveFlag = this.getAndCleanValue(lineValues, "Prospective_registration");
         this.parseRetrospectiveFlag(study, retrospectiveFlag);
         
         /* Results summary DO */
