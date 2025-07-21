@@ -249,7 +249,7 @@ public class WhoConverter extends CacheConverter
         /* Date enrolment (start date) */
         // "Date of Competent Authority Decision" in EUCTR
         String dateEnrolmentStr = this.getAndCleanValue(lineValues, "Date_enrollement");
-        study.setAttributeIfNotNull("testField3", dateEnrolmentStr);
+        // study.setAttributeIfNotNull("testField3", dateEnrolmentStr);
         LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, null);
         this.setStudyStartDate(study, dateEnrolment);
 
@@ -257,8 +257,8 @@ public class WhoConverter extends CacheConverter
         String resultsDatePostedStr = this.getAndCleanValue(lineValues, "results_date_posted");
         LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, null);
         String publicationYear = resultsDatePosted != null ? String.valueOf(resultsDatePosted.getYear()) : "";
-        study.setAttributeIfNotNull("testField1", lastUpdate != null ? lastUpdate.toString() : null);
-        study.setAttributeIfNotNull("testField2", registrationDate != null ? registrationDate.toString() : null);
+        // study.setAttributeIfNotNull("testField1", lastUpdate != null ? lastUpdate.toString() : null);
+        // study.setAttributeIfNotNull("testField2", registrationDate != null ? registrationDate.toString() : null);
 
         // TODO EUCTR: replace updated date + registration date + publication year if existing study + start date more recent
         // TODO: publication year wrong
@@ -311,7 +311,7 @@ public class WhoConverter extends CacheConverter
         /* Ethics decision date, can be a semi colon list  */
         // TODO
         String ethicsApprovalDateStr = this.getAndCleanValue(lineValues, "Ethics_Approval_Date");
-        study.setAttributeIfNotNull("testField4", ethicsApprovalDateStr);
+        // study.setAttributeIfNotNull("testField4", ethicsApprovalDateStr);
 
         /* Study countries */
         String countries = this.getAndCleanValue(lineValues, "Countries");
