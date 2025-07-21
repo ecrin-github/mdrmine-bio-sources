@@ -29,6 +29,7 @@ public abstract class CacheConverter extends BaseConverter {
     protected Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyICDs = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> studySources = new HashMap<String, List<Item>>();
     // DOs
     protected Map<String, List<Item>> objects = new HashMap<String, List<Item>>();
     // DO-related classes
@@ -149,8 +150,8 @@ public abstract class CacheConverter extends BaseConverter {
      */
     public void storeAllItems() throws Exception {
         List<Map<String, List<Item>>> itemMaps = Arrays.asList(
-            this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers, this.locations, 
-            this.organisations, this.people, this.relationships, this.titles, this.topics, this.objects, this.relationships,
+            this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers, this.studySources,
+            this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.objects, this.relationships,
             this.objectDates, this.objectDescriptions, this.objectIdentifiers, this.objectInstances
         );
 
@@ -193,6 +194,7 @@ public abstract class CacheConverter extends BaseConverter {
         this.studyFeatures = null;
         this.studyICDs = null;
         this.studyIdentifiers = null;
+        this.studySources = null;
         this.locations = null;
         this.organisations = null;
         this.people = null;
@@ -214,7 +216,7 @@ public abstract class CacheConverter extends BaseConverter {
     public void removeStudyAndLinkedItems(Item study) {
         // Maps where key is or can be study ID
         List<Map<String, List<Item>>> studyMaps = Arrays.asList(
-            this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers,
+            this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers, this.studySources,
             this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.relationships
         );
 
