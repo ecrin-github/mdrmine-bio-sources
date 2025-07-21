@@ -126,6 +126,11 @@ public class CtisConverter extends CacheConverter
 
         // Not parsing if existing study is found and with a more recent resubmission number than the current
         if (this.parseTrialID(study, trialID)) {
+            /* Adding this source */
+            if (!this.existingStudy()) {
+                this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+            }
+
             /* Study title (need to get it before protocol DO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
             if (!ConverterUtils.isNullOrEmptyOrBlank(trialTitle)) {
@@ -154,8 +159,8 @@ public class CtisConverter extends CacheConverter
             // TODO: the multiple ranges may not be continuous but our current model only takes into account min and max ages (no range)
             String ageRangeSecondaryIdentifier = this.getAndCleanValue(lineValues, "Age range secondary identifier");
             this.parseAgeRanges(study, ageGroup, ageRangeSecondaryIdentifier);
-            study.setAttributeIfNotNull("testField1", "CTIS_" + ageGroup);
-            study.setAttributeIfNotNull("testField2", "CTIS_" + ageRangeSecondaryIdentifier);
+            // study.setAttributeIfNotNull("testField1", "CTIS_" + ageGroup);
+            // study.setAttributeIfNotNull("testField2", "CTIS_" + ageRangeSecondaryIdentifier);
     
             /* Gender */
             String gender = this.getAndCleanValue(lineValues, "Gender");
@@ -173,7 +178,7 @@ public class CtisConverter extends CacheConverter
             // TODO: match with MedDRA terminology
             String medicalConditions = this.getAndCleanValue(lineValues, "Medical conditions");
             this.parseStudyConditions(study, medicalConditions);
-            study.setAttributeIfNotNull("testField3", "CTIS_" + medicalConditions);
+            // study.setAttributeIfNotNull("testField3", "CTIS_" + medicalConditions);
     
             /* Study topics */
             String therapeuticArea = this.getAndCleanValue(lineValues, "Therapeutic area");
@@ -211,8 +216,8 @@ public class CtisConverter extends CacheConverter
             String endDate = this.getAndCleanValue(lineValues, "End date");
             String globalEndOfTrial = this.getAndCleanValue(lineValues, "Global end of the trial");
             this.parseTrialEndDate(study, endDate, globalEndOfTrial);
-            study.setAttributeIfNotNull("testField4", "CTIS_" + endDate);
-            study.setAttributeIfNotNull("testField5", "CTIS_" + globalEndOfTrial);
+            // study.setAttributeIfNotNull("testField4", "CTIS_" + endDate);
+            // study.setAttributeIfNotNull("testField5", "CTIS_" + globalEndOfTrial);
     
             // Unused, same as WHO, yes or no value (majority of no)
             String trialResults = this.getAndCleanValue(lineValues, "Trial results");
@@ -221,14 +226,14 @@ public class CtisConverter extends CacheConverter
             String sponsors = this.getAndCleanValue(lineValues, "Sponsor/Co-Sponsors");
             String sponsorType = this.getAndCleanValue(lineValues, "Sponsor type");
             this.parseSponsors(study, sponsors, sponsorType);
-            study.setAttributeIfNotNull("testField6", "CTIS_" + sponsors);
-            study.setAttributeIfNotNull("testField7", "CTIS_" + sponsorType);
+            // study.setAttributeIfNotNull("testField6", "CTIS_" + sponsors);
+            // study.setAttributeIfNotNull("testField7", "CTIS_" + sponsorType);
     
             /* Trial registry entry DO + instance + last updated date */
             String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
             LocalDate lastUpdated = this.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
             this.createAndStoreRegistryEntryDO(study, lastUpdated);
-            study.setAttributeIfNotNull("testField8", "CTIS_" + lastUpdated);
+            // study.setAttributeIfNotNull("testField8", "CTIS_" + lastUpdated);
     
             /* Brief description (constructed) */
             // TODO: missing Main Objective field from CTIS UI

@@ -146,6 +146,11 @@ public class EuctrConverter extends CacheConverter
                         this.writeLog("Couldn't find country from country code: " + countryCode);
                     }
                 }
+
+                /* Adding this source */
+                if (!this.existingStudy()) {
+                    this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+                }
     
                 /* EUCTR trial ID */
                 String trialUrl = this.getAndCleanValue(mainInfo, "url");
@@ -197,7 +202,7 @@ public class EuctrConverter extends CacheConverter
                 LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
                 this.setStudyStartDate(study, dateEnrolment);
                 if (dateEnrolment != null) {    // (?)
-                    study.setAttributeIfNotNull("testField1", "EUCTR_" + (dateEnrolment != null ? dateEnrolment.toString() : null));
+                    // study.setAttributeIfNotNull("testField1", "EUCTR_" + (dateEnrolment != null ? dateEnrolment.toString() : null));
                 }
     
                 // Unused, "Date trial authorised"
@@ -226,7 +231,7 @@ public class EuctrConverter extends CacheConverter
                 
                 /* Study features */
                 String studyDesign = this.getAndCleanValue(mainInfo, "studyDesign");
-                study.setAttributeIfNotNull("testField3", "EUCTR_" + studyDesign);
+                // study.setAttributeIfNotNull("testField3", "EUCTR_" + studyDesign);
                 this.parseStudyDesign(study, studyDesign);
                 
                 /* Study feature: phase */
@@ -253,7 +258,7 @@ public class EuctrConverter extends CacheConverter
                 
                 /* Study end date ("global completion date") */
                 String resultsDateCompletedStr = this.getAndCleanValue(mainInfo, "resultsDateCompleted");
-                study.setAttributeIfNotNull("testField4", resultsDateCompletedStr);
+                // study.setAttributeIfNotNull("testField4", resultsDateCompletedStr);
                 LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
                 this.setStudyEndDate(study, resultsDateCompleted);
                 
@@ -464,7 +469,7 @@ public class EuctrConverter extends CacheConverter
      */
     public void setPlannedEnrolment(Item study, String plannedEnrolment) {
         if (ConverterUtils.isPosWholeNumber(plannedEnrolment) && !(Long.valueOf(plannedEnrolment) > Integer.MAX_VALUE)) {
-            study.setAttributeIfNotNull("testField2", "EUCTR_" + plannedEnrolment);
+            // study.setAttributeIfNotNull("testField2", "EUCTR_" + plannedEnrolment);
             if (!this.existingStudy() || this.newerLastUpdate) {    // Updating planned enrolment for more recent record registration date
                 study.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
             }
@@ -965,7 +970,7 @@ public class EuctrConverter extends CacheConverter
                 // The age criteria is at the end of the IC string
                 List<String> ageLines = ConverterUtils.getLastLines(icStr, 6);
 
-                study.setAttributeIfNotNull("testField5", String.join(";", ageLines));
+                // study.setAttributeIfNotNull("testField5", String.join(";", ageLines));
                 
                 if (ageLines.size() != 6 || !ageLines.get(0).startsWith("Are the")) {
                     this.writeLog("Malformed IC age end section: " + String.join(";", ageLines));

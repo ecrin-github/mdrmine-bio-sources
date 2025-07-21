@@ -131,6 +131,10 @@ public class CtgConverter extends BaseConverter
         // TODO: if studies with blank trial IDs exist, check otherIDs then?
         if (!ConverterUtils.isNullOrEmptyOrBlank(trialID) && !trialID.equals("NCT01027572") &&
             this.parseTrialIDs(study, trialID, otherIDs)) {
+
+            /* Adding this source */
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+
             /* Study title */
             String studyTitle = this.getAndCleanValue(lineValues, "Study Title");
             // Study acronym
@@ -164,7 +168,7 @@ public class CtgConverter extends BaseConverter
             /* Study topics */
             String interventions = this.getAndCleanValue(lineValues, "Interventions");
             this.parseInterventions(study, interventions);
-            study.setAttributeIfNotNull("testField2", interventions);
+            // study.setAttributeIfNotNull("testField2", interventions);
     
             /* Primary outcomes */
             String primaryOutcomeMeasures = this.getAndCleanValue(lineValues, "Primary Outcome Measures");
@@ -201,7 +205,7 @@ public class CtgConverter extends BaseConverter
 
             // Unused (see wiki)
             String funderType = this.getAndCleanValue(lineValues, "Funder Type");
-            study.setAttributeIfNotNull("testField3", funderType);
+            // study.setAttributeIfNotNull("testField3", funderType);
             
             /* Study type */
             String studyType = this.getAndCleanValue(lineValues, "Study Type");
@@ -227,17 +231,17 @@ public class CtgConverter extends BaseConverter
             // Record posted (available) date
             String firstPostedStr = this.getAndCleanValue(lineValues, "First Posted");
             LocalDate firstPosted = ConverterUtils.getDateFromString(firstPostedStr, null);
-            study.setAttributeIfNotNull("testField4", firstPostedStr);
+            // study.setAttributeIfNotNull("testField4", firstPostedStr);
             
             // Record last update date
             String lastUpdatePostedStr = this.getAndCleanValue(lineValues, "Last Update Posted");
             LocalDate lastUpdatePosted = ConverterUtils.getDateFromString(lastUpdatePostedStr, null);
-            study.setAttributeIfNotNull("testField5", lastUpdatePostedStr);
+            // study.setAttributeIfNotNull("testField5", lastUpdatePostedStr);
             
             // Results posted (available) date
             String resultsFirstPostedStr = this.getAndCleanValue(lineValues, "Results First Posted");
             LocalDate resultsFirstPosted = ConverterUtils.getDateFromString(resultsFirstPostedStr, null);
-            study.setAttributeIfNotNull("testField6", resultsFirstPostedStr);
+            // study.setAttributeIfNotNull("testField6", resultsFirstPostedStr);
 
             /* Trial registry entry DO */
             this.createAndStoreRegistryEntryDO(study, studyURL, firstPosted, lastUpdatePosted);
@@ -248,11 +252,11 @@ public class CtgConverter extends BaseConverter
             /* Study locations */
             String locations = this.getAndCleanValue(lineValues, "Locations");
             this.parseLocations(study, locations);
-            study.setAttributeIfNotNull("testField7", locations);
+            // study.setAttributeIfNotNull("testField7", locations);
             
             String studyDocuments = this.getAndCleanValue(lineValues, "Study Documents");
             this.parseStudyDocuments(study, studyDocuments);
-            study.setAttributeIfNotNull("testField8", studyDocuments);
+            // study.setAttributeIfNotNull("testField8", studyDocuments);
     
             store(study);
 
@@ -292,7 +296,7 @@ public class CtgConverter extends BaseConverter
 
         // Other IDs
         if (!ConverterUtils.isNullOrEmptyOrBlank(otherIDsStr) && continueParsing) {
-            study.setAttributeIfNotNull("testField1", otherIDsStr);
+            // study.setAttributeIfNotNull("testField1", otherIDsStr);
             boolean ctisIdSet = false;
             boolean euctrIdSet = false;
             List<String> euIds = new ArrayList<String>();
