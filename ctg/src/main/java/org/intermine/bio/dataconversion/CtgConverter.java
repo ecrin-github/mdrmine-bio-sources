@@ -133,7 +133,7 @@ public class CtgConverter extends BaseConverter
             this.parseTrialIDs(study, trialID, otherIDs)) {
 
             /* Adding this source */
-            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+            // this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
 
             /* Study title */
             String studyTitle = this.getAndCleanValue(lineValues, "Study Title");
@@ -142,10 +142,10 @@ public class CtgConverter extends BaseConverter
             this.parseStudyTitle(study, studyTitle, acronym);
             
             // TODO
-            Item studySource = createItem("StudySource");
-            studySource.setAttribute("sourceName", "CTG");
-            studySource.setReference("study", study);
-            store(studySource);
+            // Item studySource = createItem("StudySource");
+            // studySource.setAttribute("sourceName", "CTG");
+            // studySource.setReference("study", study);
+            // store(studySource);
     
             // Registry trial page URL (used later for registry entry and results summary DO)
             String studyURL = this.getAndCleanValue(lineValues, "Study URL");
@@ -883,46 +883,52 @@ public class CtgConverter extends BaseConverter
      */
     public void parseStudyDocuments(Item study, String studyDocuments) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyDocuments)) {
-            Item documentDO;
-            String objectType;
             String[] splitDocuments = studyDocuments.split("\\|");
-            Deque<String> objectTypes = new ArrayDeque<String>();
+            HashMap<String, List<String>> instances = new HashMap<String, List<String>>();
 
             for (String doc: splitDocuments) {
                 // Matching title + URL
                 Matcher mDoc = P_DOC.matcher(doc);
                 if (mDoc.matches()) {
-                    String g1 = mDoc.group(1);
+                    String g1 = mDoc.group(1);  // Object type
                     String g1Lower = g1.toLowerCase();
                     String g2 = mDoc.group(2);  // Direct link to study documents (study protocols, SAPs, ICFs)
 
-                    // Object type(s), one document may combine multiple types (e.g. protocol + ICF)
+                    // Adding URL to list with objects of found types, one document may combine multiple types, one study may have multiple instances of the same object type
                     if (g1Lower.contains("informed consent form")) {
-                        objectTypes.add(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM);
+                        if (!instances.containsKey(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM)) {
+                            instances.put(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM, new ArrayList<String>());
+                        }
+                        instances.get(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM).add(g2);
                     }
                     if (g1Lower.contains("study protocol")) {
-                        objectTypes.add(ConverterCVT.O_TYPE_STUDY_PROTOCOL);
+                        if (!instances.containsKey(ConverterCVT.O_TYPE_STUDY_PROTOCOL)) {
+                            instances.put(ConverterCVT.O_TYPE_STUDY_PROTOCOL, new ArrayList<String>());
+                        }
+                        instances.get(ConverterCVT.O_TYPE_STUDY_PROTOCOL).add(g2);
                     }
                     if (g1Lower.contains("statistical analysis plan")) {
-                        objectTypes.add(ConverterCVT.O_TYPE_STATISTICAL_ANALYSIS_PLAN);
-                    }
-
-                    if (objectTypes.isEmpty()) {
-                        this.writeLog("Unknown study document type: " + g1Lower);
-                    } else if (!g1Lower.isEmpty()) {
-                        while (!objectTypes.isEmpty()) {
-                            objectType = objectTypes.pop();
-                            // TODO: title useless? see mdr.xml comment
-                            // Document DO
-                            documentDO = this.createAndStoreClassItem(study, "DataObject", 
-                                new String[][]{{"type", objectType}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"title", g1}});
-    
-                            // DO Instance with direct URL
-                            this.createAndStoreClassItem(documentDO, "ObjectInstance", new String[][]{{"url", g2}});
+                        if (!instances.containsKey(ConverterCVT.O_TYPE_STATISTICAL_ANALYSIS_PLAN)) {
+                            instances.put(ConverterCVT.O_TYPE_STATISTICAL_ANALYSIS_PLAN, new ArrayList<String>());
                         }
+                        instances.get(ConverterCVT.O_TYPE_STATISTICAL_ANALYSIS_PLAN).add(g2);
                     }
                 } else {
                     this.writeLog("Failed to match study document string: " + doc);
+                }
+            }
+
+            // Adding one DO per type (if any instance exist), and adding as many instances as different URLs for the same object type
+            for (Map.Entry<String, List<String>> entry : instances.entrySet()) {
+                String objectType = entry.getKey();
+                List<String> urls = entry.getValue();
+                // Document DO
+                Item documentDO = this.createAndStoreClassItem(study, "DataObject", 
+                    new String[][]{{"type", objectType}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"title", objectType}});
+
+                for (String url: urls) {
+                    // DO Instance with direct URL
+                    this.createAndStoreClassItem(documentDO, "ObjectInstance", new String[][]{{"url", url}});
                 }
             }
         }
