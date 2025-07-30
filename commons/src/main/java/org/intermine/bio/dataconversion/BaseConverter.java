@@ -21,9 +21,15 @@ import java.nio.file.Paths;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.Set;
 
 import org.apache.commons.text.WordUtils;
 
@@ -34,6 +40,7 @@ import org.intermine.metadata.ConstraintOp;
 import org.intermine.metadata.Model;
 import org.intermine.metadata.ReferenceDescriptor;
 import org.intermine.model.bio.Country;
+import org.intermine.model.bio.Study;
 import org.intermine.objectstore.ObjectStore;
 import org.intermine.objectstore.ObjectStoreFactory;
 import org.intermine.objectstore.query.Query;
@@ -148,6 +155,61 @@ public abstract class BaseConverter extends BioFileConverter
             }
         }
         return c;
+    }
+
+    /**
+     * TODO
+     * 
+     */
+    public HashMap<String, Map<String, String>> getExistingStudyIDs() throws Exception {
+        HashMap<String, Map<String, String>> idsMap = new HashMap<String, Map<String, String>>();
+
+        ClassDescriptor cdStudy = this.getModel().getClassDescriptorByName("Study");
+        if (cdStudy == null) {
+            throw new RuntimeException("This model does not contain a Study class");
+        }
+
+        Query q = new Query();
+        QueryClass qcStudy = new QueryClass(cdStudy.getType());
+
+        QueryField qfCtisID = new QueryField(qcStudy, "primaryIdentifier");
+        QueryField qfNctID = new QueryField(qcStudy, "nctID");
+        QueryField qfEuctrID = new QueryField(qcStudy, "euctrID");
+
+        q.addFrom(qcStudy);
+        q.addToSelect(qfCtisID);
+        q.addToSelect(qfNctID);
+        q.addToSelect(qfEuctrID);
+        
+        Results res = this.os.execute(q);
+        Iterator<?> resIter = res.iterator();
+
+        while (resIter.hasNext()) {
+            ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
+
+            String ctisID = (String) rr.get(0);
+            String nctID = (String) rr.get(1);
+            String euctrID = (String) rr.get(2);
+
+            // Note: keys need to match Study class field names
+            Map<String, String> nonEmptyIDs = new HashMap<String, String>();
+            if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID)) {
+                nonEmptyIDs.put("primaryIdentifier", ctisID);
+            }
+            if (!ConverterUtils.isNullOrEmptyOrBlank(nctID)) {
+                nonEmptyIDs.put("nctID", nctID);
+            }
+            if (!ConverterUtils.isNullOrEmptyOrBlank(euctrID)) {
+                nonEmptyIDs.put("euctrID", euctrID);
+            }
+
+            // Adding all combinations of entries in idsMap (1 per ID)
+            for (String id: nonEmptyIDs.values()) {
+                idsMap.put(id, nonEmptyIDs);
+            }
+        }
+
+        return idsMap;
     }
 
     /**
