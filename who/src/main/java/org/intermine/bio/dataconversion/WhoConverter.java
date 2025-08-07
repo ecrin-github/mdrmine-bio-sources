@@ -108,7 +108,7 @@ public class WhoConverter extends CacheConverter
     private boolean cache;  // Caching studies that have nct/euctr/ctis id
     // Get a study's ID used for caching from any of its other IDs - key: trial id, value: single trial id used as key in this.studies
     private Map<String, String> mainTrialIdMap = new HashMap<String, String>();
-    private HashMap<String, StudyIDsList> previousSourcesStudyIDs = null;
+    private HashMap<String, IDsHandler> previousSourcesStudyIDs = null;
 
     /**
      * Constructor
@@ -455,9 +455,6 @@ public class WhoConverter extends CacheConverter
      */
     public Item parseTrialIDsAndGetStudy(String trialID, String secondaryIDs, String bridgingFlag, String childs) throws Exception {
         Item study = null;
-        String ctisID = "";
-        String nctID = "";
-        String euctrID = "";
         List<String> euIds = new ArrayList<String>();
         List<String> otherIDs = new ArrayList<String>();
         
@@ -469,6 +466,7 @@ public class WhoConverter extends CacheConverter
         ids.add(trialID);
 
         /* Parsing of IDs */
+        IDsHandler idsH = new IDsHandler();
 
         Iterator<String> idsIter = ids.iterator();
         while (idsIter.hasNext()) {
@@ -479,10 +477,10 @@ public class WhoConverter extends CacheConverter
 
                 // Attempting to match against ID types that have dedicated fields (ctis, euctr, nct)
                 if (ConverterUtils.P_NCT_ID.matcher(id).matches()) {
-                    if (nctID.isEmpty()) {
-                        nctID = id;
-                    } else if (!nctID.equals(id)) {
-                        this.writeLog("NCT id already set, existing id: " + nctID + "; parsed id: " + id);
+                    if (idsH.nctID.isEmpty()) {
+                        idsH.nctID = id;
+                    } else if (!idsH.nctID.equals(id)) {
+                        this.writeLog("NCT id already set, existing id: " + idsH.nctID + "; parsed id: " + id);
                     }
                 } else if (mEu.matches()) {
                     String ctisPrefix = mEu.group(1);
@@ -493,21 +491,21 @@ public class WhoConverter extends CacheConverter
 
                     if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
                         if (euctrPrefix == null && euctrSuffix == null) {
-                            if (ctisID.isEmpty()) {
+                            if (idsH.ctisID.isEmpty()) {
                                 // Setting CTIS ID without prefix and suffix
-                                ctisID = euId;
-                            } else if (!ctisID.equals(euId)) {
-                                this.writeLog("CTIS id already set, existing id: " + ctisID + "; parsed id: " + euId);
+                                idsH.ctisID = euId;
+                            } else if (!idsH.ctisID.equals(euId)) {
+                                this.writeLog("CTIS id already set, existing id: " + idsH.ctisID + "; parsed id: " + euId);
                             }
                         } else {
                             this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " + id);
                         }
                     } else if (euctrPrefix != null || euctrSuffix != null) {    // EUCTR ID
-                        if (euctrID.isEmpty()) {
+                        if (idsH.euctrID.isEmpty()) {
                             // Setting EUCTR ID without prefix and suffix
-                            euctrID = euId;
-                        } else if (euctrID.equals(euId)) {
-                            this.writeLog("EUCTR id already set, existing id: " + euctrID + "; parsed id: " + euId);
+                            idsH.euctrID = euId;
+                        } else if (idsH.euctrID.equals(euId)) {
+                            this.writeLog("EUCTR id already set, existing id: " + idsH.euctrID + "; parsed id: " + euId);
                         }
                         
                         // TODO: handle case where EUCTR ID ends up different from already set ID in study found with other ID, current country discrepancy in this case
@@ -523,14 +521,14 @@ public class WhoConverter extends CacheConverter
                             }
                         }
                     } else {    // Undistinguishable ID
-                        if (!ctisID.isEmpty()) {
-                            if (euctrID.isEmpty()) {
-                                euctrID = euId;
+                        if (!idsH.ctisID.isEmpty()) {
+                            if (idsH.euctrID.isEmpty()) {
+                                idsH.euctrID = euId;
                             } else {
                                 this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: " + euId + "; full string of IDs: " + ids);
                             }
-                        } else if (!ctisID.isEmpty()) {
-                            ctisID = euId;
+                        } else if (!idsH.ctisID.isEmpty()) {
+                            idsH.ctisID = euId;
                         } else {
                             euIds.add(euId);
                         }
@@ -546,7 +544,7 @@ public class WhoConverter extends CacheConverter
             if (euIds.size() > 2) {
                 this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + ids);
             } else if (euIds.size() == 2) {
-                if (!ctisID.isEmpty() || !euctrID.isEmpty()) {
+                if (!idsH.ctisID.isEmpty() || !idsH.euctrID.isEmpty()) {
                     this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds + "; full string of IDs: " + ids);
                 } else {
                     String id1 = euIds.get(0);
@@ -554,25 +552,25 @@ public class WhoConverter extends CacheConverter
 
                     // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
                     if (id1.compareTo(id2) > 0) {
-                        ctisID = id1;
-                        euctrID = id2;
+                        idsH.ctisID = id1;
+                        idsH.euctrID = id2;
                     } else {
-                        ctisID = id2;
-                        euctrID = id1;
+                        idsH.ctisID = id2;
+                        idsH.euctrID = id1;
                     }
                 }
             } else {    // 1 ID
-                if (!ctisID.isEmpty() && !euctrID.isEmpty()) {
+                if (!idsH.ctisID.isEmpty() && !idsH.euctrID.isEmpty()) {
                     this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds + "; full string of IDs: " + ids);
                 } else {
                     String id1 = euIds.get(0);
 
                     // Note: if both ctisID and euctrID have not been set before, we populate both fields hoping for a merge to correct the fields later
-                    if (ctisID.isEmpty()) {
-                        ctisID = id1;
+                    if (idsH.ctisID.isEmpty()) {
+                        idsH.ctisID = id1;
                     }
-                    if (euctrID.isEmpty()) {
-                        euctrID = id1;
+                    if (idsH.euctrID.isEmpty()) {
+                        idsH.euctrID = id1;
                     }
                 }
             }
@@ -580,56 +578,11 @@ public class WhoConverter extends CacheConverter
 
         /* Start matching with previous study IDs and local (WHO) study instances */
 
-        /* TODO: put this in OneDrive MDR folder or on the wiki
-            cases to handle:
-            - 1: 1 who study with euctr id, 1 who study with nct id, 1 who study with both ids
-                - if both existing studies were matched to previous sources studies, study with both ids should be matched with one of the 2 (title?)
-                - if only one of the existing studies was matched to a previous source study, ?
-                - if none of the existing studies were matched to a previous source study, ?
-                - should be treated as different if ids from study with both IDs would override one the existing 2
-                    (meaning one of the existing 2 records already has a different id set for another id field)
-                - otherwise match one of the 2 and remove the other one
-            - 2: 1 prev source study with euctr id, 1 prev source study with nct id, 1 who study with both ids
-                - if both studies are the same:
-                    - studies can be considered the same only if they are from different sources, 
-                      otherwise they probably should have been handled in their original source (as there are no ways to merge both later)
-                    - in this case, if IDs match other studies from WHO, studies should be merged here (always?)
-                    - how do we know if they are the same and not different?
-                - if both studies are different:
-                    - studies should automatically be considered different if they are from the same source (see above)
-                    - studies can be considered different if they are from different sources
-                    - in this case, matching on other fields (title), removing any id common with the non-matched study, local studies merge?
-                    - how do we know if they are different and not the same?
-                - should be treated as different if ids from who study would override one the existing 2 
-                    (meaning one of the existing 2 records already has a different id set for another id field)
-            - 3: mix of both - prev source study with nct id, who study with euctr id, who study with both ids
-                -> depends on if 1 or 2 comes first, whichever it is would need to be done twice?
-                - different if prev source id overwrite? what about overwriting who studies?
-                - should probably always be treated as same studies, local merge with other who study
-            
-            "specific cases":
-            - 1: 1 who with euctr id, does not match with an existing who study, 
-                 matches with previous studies IDs and now has all of them, then matches with existing who studies (with single ids)
-            - 2: 1 who with euctr id, does not match with previous studies IDs,
-                 matches with an existing who study (now gets all IDs), no need to check the previous studies IDs then, because existing study will have already matched them
-            - 3: failinglines7 - will match both existing studies, will match on title
-
-            -> don't overwrite IDs when matching with previous studies IDs? even not overwriting could lead to problems?
-
-            need an ignore system to avoid merging errors? with manual case handling later?
-         */
-
-                
-
         /* This finds all matching IDs from previous sources studies */
-        // TODO: loop should not stop on 1st find, and if there is a second find, 
-        // match with most appropriate one (from main id field? title?), and remove any ID common with the other one
-        // Try to set the various ID fields from previous sources studies
-        // TODO: NCT first?
-        String[] parsedIDs = {ctisID, euctrID, nctID};
-        Set<StudyIDsList> allIdsSet = new HashSet<StudyIDsList>();
+        String[] parsedIDs = idsH.getIDsList();
+        Set<IDsHandler> allIdsSet = new HashSet<IDsHandler>();
         for (int i = 0; i < parsedIDs.length; i++) {
-            StudyIDsList idsList = this.previousSourcesStudyIDs.getOrDefault(parsedIDs[i], null);
+            IDsHandler idsList = this.previousSourcesStudyIDs.getOrDefault(parsedIDs[i], null);
             if (idsList != null) {
                 // TODO: don't log if duplicate
                 this.writeLog("Found id from previous source: " + parsedIDs[i]);
@@ -637,61 +590,52 @@ public class WhoConverter extends CacheConverter
             }
         }
 
-        /* TODO */
-        // TODO: should be done after choosing study?
+        /* 
+            All previous studies found are distinct, we need to pick the most appropriate one if multiple were found, 
+            and remove any ID that would be common with other previous studies, e.g.
+            previous study 1: CTIS2016-004754-15 NCT03059446 EUCTR2016-004754-15
+            previous study 2: CTIS() NCT02217475 EUCTR2014-003164-21
+            parsed ID: CTIS() NCT02217475 EUCTR2016-004754-15
+        */
         if (allIdsSet.size() > 0) {
-            StudyIDsList idsList; 
+            IDsHandler idsList; 
             if (allIdsSet.size() == 1) {
                 idsList = allIdsSet.iterator().next();
             } else {
-                List<StudyIDsList> allIdsList = new ArrayList<StudyIDsList>(allIdsSet);
+                List<IDsHandler> allIdsList = new ArrayList<IDsHandler>(allIdsSet);
                 // TODO: match against title (with LevenshteinDistance) instead of arbitrarily taking 1st idsList
                 idsList = allIdsList.get(0);
+
+                // Note: if anything matches here, that means we have a "previous studies: NCT03 + 2016-, NCT02 + 2014- current study: NCT02 + 2016-" situation
+
                 // Removing all IDs conflicting with other previous studies
                 for (int i = 1; i < allIdsList.size(); i++) {
-                    StudyIDsList currIdsList = allIdsList.get(i);
+                    IDsHandler currIdsList = allIdsList.get(i);
                     if (!ConverterUtils.isNullOrEmptyOrBlank(currIdsList.ctisID)) {
-                        if (ctisID.equalsIgnoreCase(currIdsList.ctisID)) {
-                            ctisID = "";
+                        if (idsH.ctisID.equalsIgnoreCase(currIdsList.ctisID)) {
+                            idsH.ctisID = "";
                         }
                     }
                     if (!ConverterUtils.isNullOrEmptyOrBlank(currIdsList.nctID)) {
-                        if (nctID.equalsIgnoreCase(currIdsList.nctID)) {
-                            nctID = "";
+                        if (idsH.nctID.equalsIgnoreCase(currIdsList.nctID)) {
+                            idsH.nctID = "";
                         }
                     }
                     if (!ConverterUtils.isNullOrEmptyOrBlank(currIdsList.euctrID)) {
-                        if (euctrID.equalsIgnoreCase(currIdsList.euctrID)) {
-                            euctrID = "";
+                        if (idsH.euctrID.equalsIgnoreCase(currIdsList.euctrID)) {
+                            idsH.euctrID = "";
                         }
                     }
                 }
             }
 
-            // TODO: handle case where CTIS ID and EUCTR ID are equal (NCT03385564 case in CTG)
-            if (!ConverterUtils.isNullOrEmptyOrBlank(idsList.ctisID)) {
-                if (!ctisID.isEmpty() && !idsList.ctisID.equals(ctisID)) {  // Logging if we are overwriting an existing and different ID
-                    // TODO: inaccurate log message?
-                    this.writeLog("ctisID about to be set (" + idsList.ctisID + ") is different than ID it is replacing on existing study (" + ctisID + ")");
-                }
-                ctisID = idsList.ctisID;
-            } else if (!ConverterUtils.isNullOrEmptyOrBlank(idsList.euctrID)) {
-                if (!euctrID.isEmpty() && !idsList.euctrID.equals(euctrID)) {
-                    this.writeLog("euctrID about to be set (" + idsList.euctrID + ") is different than ID it is replacing on existing study (" + euctrID + ")");
-                }
-                euctrID = idsList.euctrID;
-            } else if (!ConverterUtils.isNullOrEmptyOrBlank(idsList.nctID)) {
-                if (!nctID.isEmpty() && !idsList.nctID.equals(nctID)) {
-                    this.writeLog("nctID about to be set (" + idsList.nctID + ") is different than ID it is replacing on existing study (" + nctID + ")");
-                }
-                nctID = idsList.nctID;
-            }
+            /* Handling various cases regarding CTIS and EUCTR IDs, as they can be equal (both in previous study IDs and parsed IDs) */
+            idsH.updateIDs(idsList.ctisID, idsList.nctID, idsList.euctrID);
         }
 
+        /* Attempting to find an existing (cached) study from the IDs we have */
         HashSet<String> seenIds = new HashSet<String>();    // To avoid checking for the same ID multiple times
-        // Attempting to find an existing (cached study) from the IDs
-        // TODO: order?
-        for (String id: new String[]{nctID, ctisID, euctrID}) {
+        for (String id: idsH.getIDsList()) {
             if (this.mainTrialIdMap.containsKey(id)) {
                 String mainId = this.mainTrialIdMap.get(id);
                 
@@ -700,20 +644,11 @@ public class WhoConverter extends CacheConverter
                     study = this.existingStudy;
                     this.currentTrialID = mainId;
                     seenIds.add(mainId);
-                } else if (!seenIds.contains(mainId)) { // Existing study, meaning 2 studies are linked by a 3rd study (=the current record being parsed)
-                    /* (brainstorming how to handle case where 2 studies are linked by a 3rd study which contains an id matching both of them)
-                    from the main trial id map we cant get all the entries from 1 id, except if we get the study and then check back the study id fields in the maintrialidmap
-                    if we don't do that, 1st map will point permanently to a main id
-                    this main id can't point to an existing study again, unless we change the storing method in CacheConverter
-                    if we do change, nothing else to do -> current solution (only solution?)
-                    if we don't, it will point to null -> we could stumble upon the same error again in case euctr + nct + euctr/nct + nct/ctis
-                    other case to consider: euctr + nct + nct/ctis + euctr/ctis
-                    */
+                } else if (!seenIds.contains(mainId)) { // Existing study, meaning 2 existing studies are linked by a 3rd study (=the current record being parsed)
                     // TODO: add handling of IDs who are not euctr/ctis/nct but are in the 1st field in the WHO data
-                    // TODO: merge info from the study to be deleted with the current study before deleting it + prioritization of IDs (=sources)
+                    // TODO: merge info from the study to be deleted with the current study before deleting it
 
-                    // Testing if we found a different instance of the same study
-                    // Test ID: 2007-007258-75
+                    // Test if we found a different instance of the same study
                     if (!this.existingStudy.getIdentifier().equals(this.studies.get(mainId).getIdentifier())) {
                         // Deleting previously cached study and all cached items linked to that study
                         this.removeStudyAndLinkedItems(mainId);
@@ -732,49 +667,38 @@ public class WhoConverter extends CacheConverter
             study = createItem("Study");
         }
 
-        /* Setting the various id fields */
-        if (!ctisID.isEmpty()) {
-            String existingCtisId = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
-            if (this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(existingCtisId) && !existingCtisId.equals(ctisID)) {
-                this.writeLog("CTIS ID is already set on existing study: " + existingCtisId + ", and is different from the parsed ID: " + ctisID);
-            } else {
-                study.setAttributeIfNotNull("primaryIdentifier", ctisID);
-            }
+        /* Setting the various ID fields */
 
+        // TODO: could be null or not?
+        String existingCtisID = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
+        String existingNctID = ConverterUtils.getValueOfItemAttribute(study, "nctID");
+        String existingEuctrID = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
+        idsH.updateIDs(existingCtisID, existingNctID, existingEuctrID);
+
+        if (!ConverterUtils.isNullOrEmptyOrBlank(idsH.ctisID)) {
+            study.setAttribute("primaryIdentifier", idsH.ctisID);
             if (this.currentTrialID == null) {
-                this.currentTrialID = ctisID;
+                this.currentTrialID = idsH.ctisID;
             }
             if (this.registry.isEmpty()) {
                 this.registry = ConverterCVT.R_CTIS;
             }
         }
-        
-        if (!nctID.isEmpty()) {
-            String existingNctId = ConverterUtils.getValueOfItemAttribute(study, "nctID");
-            if (this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(existingNctId) && !existingNctId.equals(nctID)) {
-                this.writeLog("NCT ID is already set on existing study: " + existingNctId + ", and is different from the parsed ID: " + nctID);
-            } else {
-                study.setAttributeIfNotNull("nctID", nctID);
-            }
 
+        if (!ConverterUtils.isNullOrEmptyOrBlank(idsH.nctID)) {
+            study.setAttribute("nctID", idsH.nctID);
             if (this.currentTrialID == null) {
-                this.currentTrialID = nctID;
+                this.currentTrialID = idsH.nctID;
             }
             if (this.registry.isEmpty()) {
                 this.registry = ConverterCVT.R_CTG;
             }
         }
-        
-        if (!euctrID.isEmpty()) {
-            String existingEuctrId = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
-            if (this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(existingEuctrId) && !existingEuctrId.equals(euctrID)) {
-                this.writeLog("EUCTR ID is already set on existing study: " + existingEuctrId + ", and is different from the parsed ID: " + euctrID);
-            } else {
-                study.setAttributeIfNotNull("euctrID", euctrID);
-            }
 
+        if (!ConverterUtils.isNullOrEmptyOrBlank(idsH.euctrID)) {
+            study.setAttribute("euctrID", idsH.euctrID);
             if (this.currentTrialID == null) {
-                this.currentTrialID = euctrID;
+                this.currentTrialID = idsH.euctrID;
             }
             if (this.registry.isEmpty()) {
                 this.registry = ConverterCVT.R_EUCTR;
@@ -784,30 +708,13 @@ public class WhoConverter extends CacheConverter
         // Note: Not setting any other ID types as "primaryIdentifier" as there are some garbage IDs in "TrialID" field and non-unique IDs in "SecondaryIDs" field
         // Setting currentTrialID however since it's just used for logging
         if (this.currentTrialID == null) {
-            this.writeLog("Current study has no CTIS/NCT/EUCTR id to be used as primary identifier, using this id: " + trialID);
+            this.writeLog("Current study has no CTIS/NCT/EUCTR ID to be used as primary identifier, using this id: " + trialID);
             this.currentTrialID = trialID;
         } else {
-            // TODO: could already contain this kv?
             this.studies.put(this.currentTrialID, study);
 
             // Adding this study's other IDs along with the main ID to be able to find it in the studies map
-            List<String> definitiveIDs = new ArrayList<String>();
-            String setCtisID = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
-            String setNctID = ConverterUtils.getValueOfItemAttribute(study, "nctID");
-            String setEuctrID = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
-
-            this.writeLog("IDs for the current study, CTIS: " + setCtisID + ", NCT: " + setNctID + ", EUCTR: " + setEuctrID);
-            
-            String[][] idsToCheck = {{setCtisID, ctisID}, {setNctID, nctID}, {setEuctrID, euctrID}};
-            for (int j = 0; j < idsToCheck.length; j++) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(idsToCheck[j][0])) {
-                    definitiveIDs.add(idsToCheck[j][0]);
-                } else if (!ConverterUtils.isNullOrEmptyOrBlank(idsToCheck[j][1])) {
-                    definitiveIDs.add(idsToCheck[j][1]);
-                }
-            }
-
-            for (String id: definitiveIDs) {
+            for (String id: idsH.getIDsList()) {
                 if (!ConverterUtils.isNullOrEmptyOrBlank(id) && !this.mainTrialIdMap.containsKey(id)) {
                     this.mainTrialIdMap.put(id, this.currentTrialID);
                 }

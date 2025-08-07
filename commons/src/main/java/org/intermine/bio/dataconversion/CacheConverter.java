@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -163,8 +164,13 @@ public abstract class CacheConverter extends BaseConverter {
             }
         }
 
+        // TODO: check for duplicates and don't store them
+        HashSet<String> seenIds = new HashSet<String>();
         for (Item study: this.studies.values()) {
-            store(study);
+            if (!seenIds.contains(study.getIdentifier())) {
+                store(study);
+                seenIds.add(study.getIdentifier());
+            }
         }
 
         this.clearMaps();
@@ -213,8 +219,8 @@ public abstract class CacheConverter extends BaseConverter {
      * TODO
      * @param study
      */
-    public void removeStudyAndLinkedItems(Item study) {
-        // Maps where key is or can be study ID
+    public void removeStudyAndLinkedItems(String mainTrialID) {
+        // Maps where key is or can be study ID (-objects)
         List<Map<String, List<Item>>> studyMaps = Arrays.asList(
             this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers, this.studySources,
             this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.relationships
@@ -226,6 +232,7 @@ public abstract class CacheConverter extends BaseConverter {
             this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.relationships
         );
 
+        Item study = this.studies.get(mainTrialID);
         String studyId = study.getIdentifier();
         
         // Removing items linked to study
@@ -251,6 +258,15 @@ public abstract class CacheConverter extends BaseConverter {
 
         // Removing objects
         this.objects.remove(studyId);
+
+        // Removing study from studies map
+        Item removedStudy = this.studies.remove(mainTrialID);
+        // TODO: run with this
+        if (removedStudy == null) {
+            this.writeLog("Attempted to remove study, but failed, main trial ID: " + mainTrialID);
+        } else {
+            this.writeLog("Removed study, main trial ID: " + mainTrialID);
+        }
     }
 
     @Override

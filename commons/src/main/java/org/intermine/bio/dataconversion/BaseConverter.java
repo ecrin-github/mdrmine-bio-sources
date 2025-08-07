@@ -161,8 +161,8 @@ public abstract class BaseConverter extends BioFileConverter
      * TODO
      * 
      */
-    public HashMap<String, Map<String, String>> getExistingStudyIDs() throws Exception {
-        HashMap<String, Map<String, String>> idsMap = new HashMap<String, Map<String, String>>();
+    public HashMap<String, IDsHandler> getExistingStudyIDs() throws Exception {
+        HashMap<String, IDsHandler> idsMap = new HashMap<String, IDsHandler>();
 
         ClassDescriptor cdStudy = this.getModel().getClassDescriptorByName("Study");
         if (cdStudy == null) {
@@ -191,21 +191,17 @@ public abstract class BaseConverter extends BioFileConverter
             String nctID = (String) rr.get(1);
             String euctrID = (String) rr.get(2);
 
-            // Note: keys need to match Study class field names
-            Map<String, String> nonEmptyIDs = new HashMap<String, String>();
-            if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID)) {
-                nonEmptyIDs.put("primaryIdentifier", ctisID);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(nctID)) {
-                nonEmptyIDs.put("nctID", nctID);
-            }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(euctrID)) {
-                nonEmptyIDs.put("euctrID", euctrID);
-            }
+            IDsHandler l = new IDsHandler(ctisID, nctID, euctrID);
 
             // Adding all combinations of entries in idsMap (1 per ID)
-            for (String id: nonEmptyIDs.values()) {
-                idsMap.put(id, nonEmptyIDs);
+            if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID)) {
+                idsMap.put(ctisID, l);
+            }
+            if (!ConverterUtils.isNullOrEmptyOrBlank(nctID)) {
+                idsMap.put(nctID, l);
+            }
+            if (!ConverterUtils.isNullOrEmptyOrBlank(euctrID)) {
+                idsMap.put(euctrID, l);
             }
         }
 
