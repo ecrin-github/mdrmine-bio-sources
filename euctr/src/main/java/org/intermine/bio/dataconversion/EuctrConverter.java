@@ -148,9 +148,9 @@ public class EuctrConverter extends CacheConverter
                 }
 
                 /* Adding this source */
-                if (!this.existingStudy()) {
-                    this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
-                }
+                // if (!this.existingStudy()) {
+                //     this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+                // }
     
                 /* EUCTR trial ID */
                 String trialUrl = this.getAndCleanValue(mainInfo, "url");

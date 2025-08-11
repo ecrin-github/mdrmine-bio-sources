@@ -127,9 +127,9 @@ public class CtisConverter extends CacheConverter
         // Not parsing if existing study is found and with a more recent resubmission number than the current
         if (this.parseTrialID(study, trialID)) {
             /* Adding this source */
-            if (!this.existingStudy()) {
-                this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
-            }
+            // if (!this.existingStudy()) {
+            //     this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+            // }
 
             /* Study title (need to get it before protocol DO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
@@ -273,7 +273,7 @@ public class CtisConverter extends CacheConverter
                         continueParsing = true;
 
                         // Removing previously stored study
-                        this.removeStudyAndLinkedItems(this.studies.get(this.currentTrialID));
+                        this.removeStudyAndLinkedItems(this.currentTrialID);
                     } else if (resubmission < storedResubmission) {
                         this.writeLog("Skipping existing trial with older resubmission number stored, id: "
                              + trialID + ", stored resubmission number: " + storedResubmission);
