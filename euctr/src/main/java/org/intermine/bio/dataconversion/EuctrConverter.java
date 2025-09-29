@@ -98,7 +98,9 @@ public class EuctrConverter extends CacheConverter
         }
         xr.close();
 
-        this.storeAllItems();   // Note: this also calls this.stopLogging
+        this.storeAllItems();
+
+        this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 

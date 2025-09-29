@@ -174,8 +174,6 @@ public abstract class CacheConverter extends BaseConverter {
         }
 
         this.clearMaps();
-
-        this.stopLogging();
     }
 
     /**

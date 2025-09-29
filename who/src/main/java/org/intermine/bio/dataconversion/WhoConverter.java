@@ -35,10 +35,12 @@ import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
-
 import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.text.WordUtils;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
@@ -51,6 +53,8 @@ import org.intermine.xml.full.Item;
  */
 public class WhoConverter extends CacheConverter
 {
+    private static final Logger LOGGER = LogManager.getLogger("mdrmine");
+
     private static final Pattern P_NONVALID_ID = Pattern.compile(
         "(?:\\bnull\\b)|(?:\\bnill?(?:\\h*known)?\\.?)|(?:not\\h*applicable)|(?:not\\h*available)|(?:N[\\/\\.]?A\\.?)|(?:none\\.?)|(?:NCT00000000)|(?:NCT12345678)|(?:ISRCTN00000000)|(?:ISRCTN12345678)|(?:[0\\.-:\\?\\h\\*]+)",
         Pattern.CASE_INSENSITIVE);
@@ -177,7 +181,7 @@ public class WhoConverter extends CacheConverter
 
         this.storeAllItems();
 
-        // this.stopLogging();
+        this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
@@ -466,7 +470,7 @@ public class WhoConverter extends CacheConverter
         ids.add(trialID);
 
         /* Parsing of IDs */
-        IDsHandler idsH = new IDsHandler();
+        IDsHandler idsH = new IDsHandler(this.logger);
 
         Iterator<String> idsIter = ids.iterator();
         while (idsIter.hasNext()) {

@@ -61,10 +61,8 @@ import org.intermine.xml.full.Item;
  */
 public abstract class BaseConverter extends BioFileConverter
 {
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss.SSS");
-
     private String logDir = "";
-    private Writer logWriter = null;
+    protected Logger logger = null;
     protected String currentTrialID = null;
     protected ObjectStore os = null;
 
@@ -191,7 +189,7 @@ public abstract class BaseConverter extends BioFileConverter
             String nctID = (String) rr.get(1);
             String euctrID = (String) rr.get(2);
 
-            IDsHandler l = new IDsHandler(ctisID, nctID, euctrID);
+            IDsHandler l = new IDsHandler(this.logger, ctisID, nctID, euctrID);
 
             // Adding all combinations of entries in idsMap (1 per ID)
             if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID)) {
@@ -213,50 +211,26 @@ public abstract class BaseConverter extends BioFileConverter
      * This sets the logWriter instance attribute.
      */
     public void startLogging(String suffix) throws Exception {
-        if (!this.logDir.equals("")) {
-            String current_timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-                
-            Path logDir = Paths.get(this.logDir);
-            if (!Files.exists(logDir)) Files.createDirectories(logDir);
-
-            Path logFile = Paths.get(logDir.toString(), current_timestamp + "_" + suffix + ".log");
-            this.logWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile.toString()), "utf-8"));
-        } else {
-            throw new Exception("Log folder not specified");
-        }
+        this.logger = new Logger(logDir, suffix);
     }
 
     /**
      * Close opened log writer.
      */
     public void stopLogging() throws IOException {
-        if (this.logWriter != null) {
-            this.logWriter.close();
-        }
+        this.logger.stopLogging();
     }
 
     /**
-     * Write to WHO log file with timestamp.
+     * Write to log file with timestamp.
      * 
      * @param text the log text
      */
     public void writeLog(String text) {
-        try {
-            if (this.logWriter != null) {
-                if (this.currentTrialID != null) {
-                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + this.currentTrialID + " - " + text + "\n");
-                    this.logWriter.flush();
-                } else {
-                    // TODO: temp, modify it to still log but without id?
-                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + text + "\n");
-                    this.logWriter.flush();
-                    // System.out.println("WHO - Trial ID null (cannot write logs)");
-                }
-            } else {
-                System.out.println("WHO - Log writer is null (cannot write logs)");
-            }
-        } catch(IOException e) {
-            System.out.println("WHO - Couldn't write to log file");
+        if (this.logger != null) {
+            this.logger.writeLog(this.currentTrialID, text);
+        } else {
+            System.out.println("Logger is null (cannot write logs)");
         }
     }
 

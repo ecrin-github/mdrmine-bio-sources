@@ -107,7 +107,9 @@ public class CtisConverter extends CacheConverter
 
         csvReader.close();
 
-        this.storeAllItems();   // Note: this also calls this.stopLogging
+        this.storeAllItems();
+
+        this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
