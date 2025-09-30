@@ -132,17 +132,14 @@ public class CtgConverter extends BaseConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(trialID) && !trialID.equals("NCT01027572") &&
             this.parseTrialIDs(study, trialID, otherIDs)) {
 
-            /* Adding this source */
-            // this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+            /* Study data source */
+            this.addStudySource(study);
 
             /* Study title */
             String studyTitle = this.getAndCleanValue(lineValues, "Study Title");
             // Study acronym
             String acronym = this.getAndCleanValue(lineValues, "Acronym");
             this.parseStudyTitle(study, studyTitle, acronym);
-            
-            /* Study data source */
-            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_CTG}});
     
             // Registry trial page URL (used later for registry entry and results summary DO)
             String studyURL = this.getAndCleanValue(lineValues, "Study URL");
@@ -417,6 +414,14 @@ public class CtgConverter extends BaseConverter
         }
 
         return continueParsing;
+    }
+    
+    /**
+     * TODO
+     * @param study
+     */
+    public void addStudySource(Item study) throws Exception {
+        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_CTG}});
     }
 
     /**

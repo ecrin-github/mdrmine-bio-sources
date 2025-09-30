@@ -214,6 +214,9 @@ public class WhoConverter extends CacheConverter
         // TODO EUCTR: check for additional IDs with existing study
         study = this.parseTrialIDsAndGetStudy(trialID, secondaryIDs, bridgingFlag, childs);
 
+        /* Study data source */
+        this.addStudySource(study);
+
         // TODO: study end date? -> results posted date?
         // Used for registry entry DO
         String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
@@ -230,9 +233,6 @@ public class WhoConverter extends CacheConverter
         /* Scientific title */
         String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
         this.parseTitle(study, scientificTitle, ConverterCVT.TITLE_TYPE_SCIENTIFIC);
-
-        /* Study data source */
-        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_WHO}});
 
         // TODO EUCTR: check for additional contacts with existing study
         /* Study people (public and scientific contacts) */
@@ -740,6 +740,15 @@ public class WhoConverter extends CacheConverter
         }
 
         return study;
+    }
+
+    /**
+     * TODO
+     */
+    public void addStudySource(Item study) throws Exception {
+        if (!this.existingStudy()) {
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_WHO}});
+        }
     }
 
     /**

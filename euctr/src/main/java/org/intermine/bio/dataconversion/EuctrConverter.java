@@ -150,7 +150,7 @@ public class EuctrConverter extends CacheConverter
                 }
 
                 /* Study data source */
-                this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_EUCTR}});
+                this.addStudySource(study);
     
                 /* EUCTR trial ID */
                 String trialUrl = this.getAndCleanValue(mainInfo, "url");
@@ -349,7 +349,24 @@ public class EuctrConverter extends CacheConverter
         }
     }
 
-    /** */
+    /**
+     * TODO
+     * @param study
+     */
+    public void addStudySource(Item study) throws Exception {
+        if (!this.existingStudy()) {
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_EUCTR}});
+        }
+    }
+    
+    /**
+     * TODO
+     * @param study
+     * @param publicTitle
+     * @param scientificTitle
+     * @param scientificAcronym
+     * @throws Exception
+     */
     public void parseTitles(Item study, String publicTitle, String scientificTitle, String scientificAcronym) throws Exception {
         if (!this.existingStudy()) {
             boolean displayTitleSet = false;
