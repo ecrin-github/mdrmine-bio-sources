@@ -421,7 +421,7 @@ public class CtgConverter extends BaseConverter
      * @param study
      */
     public void addStudySource(Item study) throws Exception {
-        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_CTG}});
+        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_CTG}});
     }
 
     /**

@@ -747,7 +747,7 @@ public class WhoConverter extends CacheConverter
      */
     public void addStudySource(Item study) throws Exception {
         if (!this.existingStudy()) {
-            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_WHO}});
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_WHO}});
         }
     }
 

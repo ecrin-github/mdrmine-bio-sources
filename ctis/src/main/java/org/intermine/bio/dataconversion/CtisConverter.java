@@ -307,7 +307,7 @@ public class CtisConverter extends CacheConverter
      */
     public void addStudySource(Item study) throws Exception {
         if (!this.existingStudy()) {
-            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_CTIS}});
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_CTIS}});
         }
     }
 
