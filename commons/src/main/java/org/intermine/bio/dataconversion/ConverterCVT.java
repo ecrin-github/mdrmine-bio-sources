@@ -14,7 +14,6 @@ package org.intermine.bio.dataconversion;
 
 /**
  * Class with MDR model CV terms
- * TODO: to other file format somehow?
  * @author
  */
 public class ConverterCVT
@@ -115,4 +114,11 @@ public class ConverterCVT
     public static final String CV_MEDDRA = "MedDRA";
     public static final String CV_MESH = "MeSH";
     public static final String CV_MESH_TREE = "MeSH Tree";
+
+    /* Data source names */
+    public static final String SOURCE_NAME_WHO = "International Clinical Trials Registry Platform (ICTRP)";
+    public static final String SOURCE_NAME_CTG = "ClinicalTrials.gov";
+    public static final String SOURCE_NAME_CTIS = "Clinical Trials Information System (CTIS)";
+    public static final String SOURCE_NAME_EUCTR = "EU Clinical Trials Register";
+    public static final String SOURCE_NAME_BIOLINCC = "Biologic Specimen and Data Repository Information Coordinating Center (BioLINCC)";
 }

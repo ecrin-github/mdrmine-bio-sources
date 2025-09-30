@@ -231,12 +231,8 @@ public class WhoConverter extends CacheConverter
         String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
         this.parseTitle(study, scientificTitle, ConverterCVT.TITLE_TYPE_SCIENTIFIC);
 
-        // TODO: not working as intended
-        // Item studySource = createItem("StudySource");
-        // studySource.setAttributeIfNotNull("sourceName", "WHO");
-        // studySource.setReference("study", study);
-        // store(studySource);
-        // study.addToCollection("studySources", studySource);
+        /* Study data source */
+        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_WHO}});
 
         // TODO EUCTR: check for additional contacts with existing study
         /* Study people (public and scientific contacts) */

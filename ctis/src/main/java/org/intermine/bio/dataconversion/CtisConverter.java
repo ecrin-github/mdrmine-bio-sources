@@ -128,10 +128,10 @@ public class CtisConverter extends CacheConverter
 
         // Not parsing if existing study is found and with a more recent resubmission number than the current
         if (this.parseTrialID(study, trialID)) {
-            /* Adding this source */
-            // if (!this.existingStudy()) {
-            //     this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
-            // }
+            /* Study data source */
+            if (!this.existingStudy()) {
+                this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_CTIS}});
+            }
 
             /* Study title (need to get it before protocol DO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");

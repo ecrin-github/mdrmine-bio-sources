@@ -141,11 +141,8 @@ public class CtgConverter extends BaseConverter
             String acronym = this.getAndCleanValue(lineValues, "Acronym");
             this.parseStudyTitle(study, studyTitle, acronym);
             
-            // TODO
-            // Item studySource = createItem("StudySource");
-            // studySource.setAttribute("sourceName", "CTG");
-            // studySource.setReference("study", study);
-            // store(studySource);
+            /* Study data source */
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", ConverterCVT.SOURCE_NAME_CTG}});
     
             // Registry trial page URL (used later for registry entry and results summary DO)
             String studyURL = this.getAndCleanValue(lineValues, "Study URL");
@@ -286,7 +283,7 @@ public class CtgConverter extends BaseConverter
         boolean continueParsing = true;
 
         // NCT ID
-        if (storedPKs.contains(mainTrialID)) {
+        if (storedPKs.contains(mainTrialID)) {  // should not happen
             continueParsing = false;
             this.writeLog("NCT ID already exists: " + mainTrialID);
         } else {
