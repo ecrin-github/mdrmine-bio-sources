@@ -34,7 +34,7 @@ public class Logger {
     private Writer logWriter = null;
 
     public Logger(String logDir, String suffix) throws Exception {
-        if (!logDir.equals("")) {
+        if (logDir.equals("")) {
             System.out.println("Warning: log dir is empty, log file will be created in current directory");
         }
 
