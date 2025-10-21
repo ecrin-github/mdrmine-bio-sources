@@ -20,9 +20,12 @@ package org.intermine.bio.dataconversion;
  import java.util.*;
  import java.util.regex.Matcher;
  import java.util.regex.Pattern;
+ import java.util.stream.Collectors;
+ import java.util.stream.Stream;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
 import org.apache.commons.text.WordUtils;
+import org.apache.velocity.test.IntrospectorTestCase2.Foo;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
@@ -71,6 +74,7 @@ public class EuctrConverter extends CacheConverter
     public void process(Reader reader) throws Exception {
         /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
         this.startLogging("euctr");
+        this.loadCountries();
 
         XMLInputFactory xi = XMLInputFactory.newInstance();
         XMLStreamReader xr = xi.createXMLStreamReader(reader);
@@ -98,6 +102,7 @@ public class EuctrConverter extends CacheConverter
         }
         xr.close();
 
+        this.storeCountries();
         this.storeAllItems();
 
         this.stopLogging();
@@ -143,7 +148,7 @@ public class EuctrConverter extends CacheConverter
 
                 // Getting country from ID country code
                 if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
-                    this.currentCountry = this.getCountryFromField("isoAlpha2", countryCode);
+                    this.currentCountry = this.getCountry(countryCode);
                     if (this.currentCountry == null) {
                         this.writeLog("Couldn't find country from country code: " + countryCode);
                     }
@@ -902,48 +907,54 @@ public class EuctrConverter extends CacheConverter
      * @throws Exception
      */
     public void parseCountries(Item study, List<String> countries) throws Exception {
-        // TODO: don't add duplicates (EUCTR2008-007326-19)
+        // TODO: plannedEnrolment & cadDate?
+        boolean foundCurrentCountry = false;
         String status = ConverterUtils.getValueOfItemAttribute(study, "status");
 
-        if (!this.existingStudy() && countries.size() > 0) {
-            boolean foundCurrentCountry = false;
+        Set<Item> seenCountries = null; // Already cached countries (if existing study) + countries parsed
 
+        if (this.existingStudy()) { // Getting already stored (cached) Country items
+            List<Item> cachedCountries = this.countries.get(study.getIdentifier());
+            if (cachedCountries != null) {
+                seenCountries = new HashSet<Item>(cachedCountries);
+            }
+        }
+
+        if (seenCountries == null) {
+            seenCountries = new HashSet<Item>();
+        }
+
+        if (countries.size() > 0) {
             for (String countryName: countries) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(countryName)) {
-                    if (this.currentCountry != null && countryName.equalsIgnoreCase(this.currentCountry.getName())) {    // Setting more info for current country
-                        this.createAndStoreStudyCountry(study, countryName, status, null, null, null);
+                Item country = this.getCountry(countryName);
+                if (!seenCountries.contains(country)) {
+                    if (this.currentCountry != null && this.currentCountry.equals(country)) {
+                        // Setting more info for current country
+                        this.createAndStoreStudyCountry(study, country, countryName, status, null, null, null);
                         // this.createAndStoreStudyCountry(study, countryName, status, plannedEnrolment, cadDate, null);
                         foundCurrentCountry = true;
                     } else {    // Regular parsing
-                        this.createAndStoreStudyCountry(study, countryName, null, null, null, null);
+                        this.createAndStoreStudyCountry(study, country, countryName, null, null, null, null);
+                    }
+
+                    if (country != null) {
+                        seenCountries.add(country);
                     }
                 }
             }
+        }
 
-            // Creating country if currentCountry is set but couldn't match it with a country in the country list
-            if (this.currentCountry != null && !foundCurrentCountry) {
-                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, null, null, null);
-                // this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
-            }
-        } else if (this.currentCountry != null) {   // Updating existing study
-            Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
-            if (studyCountry != null) {
-                studyCountry.setAttributeIfNotNull("status", status);
-                // studyCountry.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
-                
-                // "dateEnrolment" is "Date of Competent Authority Decision" in EUCTR
-                // if (cadDate != null) {
-                //     studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate", cadDate.toString());
-                // }
-                
-                // "Date of Ethics Committee Opinion" in EUCTR
-                // if (ecdDate != null) {
-                //     studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
-                // }
+        // Case where current country (from trial ID) is not found in parsed countries
+        if (this.currentCountry != null && !foundCurrentCountry) {
+            if (seenCountries.contains(this.currentCountry)) {
+                // TODO: currently not possible
+                // Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "country", this.currentCountry);
+                // studyCountry.setAttributeIfNotNull("status", status);
+                ;
             } else {
-                this.writeLog("Couldn't find StudyCountry with this current country (creating it): \"" + this.currentCountry);
-                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, null, null, null);
-                // this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
+                this.createAndStoreStudyCountry(study, this.currentCountry, ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"), status, null, null, null);
+                this.writeLog("Couldn't find StudyCountry with this current country (creating it): " + ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"));
+                // this.createAndStoreStudyCountry(study, ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"), status, plannedEnrolment, cadDate, null);
             }
         }
     }
@@ -1213,7 +1224,7 @@ public class EuctrConverter extends CacheConverter
      */
     public void parseEthicsReviews(Item study, List<EuctrEthicsReview> ethicsReviews) {
         if (this.currentCountry != null) {
-            Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
+            Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"));
 
             if (studyCountry != null) {
                 for (EuctrEthicsReview er: ethicsReviews) {
@@ -1234,7 +1245,7 @@ public class EuctrConverter extends CacheConverter
                     }
                 }
             } else {
-                this.writeLog("Failed to retrieve StudyCountry in parseEthicsReviews() from country name " + this.currentCountry.getName());
+                this.writeLog("Failed to retrieve StudyCountry in parseEthicsReviews() from country name " + ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"));
             }
         }
     }

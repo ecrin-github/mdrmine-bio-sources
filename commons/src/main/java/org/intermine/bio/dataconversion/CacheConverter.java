@@ -10,6 +10,7 @@ import java.util.Map;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
+import org.intermine.metadata.ReferenceDescriptor;
 import org.intermine.model.bio.Country;
 import org.intermine.xml.full.Item;
 
@@ -19,7 +20,7 @@ public abstract class CacheConverter extends BaseConverter {
 
     protected Item existingStudy;    // Indicates if currently parsing an existing study (if not null)
     protected boolean newerLastUpdate; // When parsing existing EUCTR study, true if last update date more recent than current one
-    protected Country currentCountry; // When parsing existing EUCTR study, country associated with country code
+    protected Item currentCountry; // When parsing existing EUCTR study, country associated with country code
 
     /* Saving all items for later modification and storing at the end  */
     // Cache of studies, key is primary identifier (not Item or DB id)
@@ -27,6 +28,7 @@ public abstract class CacheConverter extends BaseConverter {
     // Study-related classes
     protected Map<String, List<Item>> studyConditions = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyCountries = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> countries = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyICDs = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
@@ -128,7 +130,7 @@ public abstract class CacheConverter extends BaseConverter {
      * @param field name of field for comparison to find the item
      * @param value value for comparison to find the item, should be unique!
      */
-    public Item getItemFromItemMap(Item parentItem, Map<String, List<Item>> itemMap, String field, String value) {
+    public <T> Item getItemFromItemMap(Item parentItem, Map<String, List<Item>> itemMap, String field, T value) {
         Item searchedItem = null;
 
         String parentId = parentItem.getIdentifier();
@@ -272,24 +274,7 @@ public abstract class CacheConverter extends BaseConverter {
         Item item = this.createClassItem(mainClassItem, className, kv);
 
         if (item != null) {
-            // Get item map name from reference
-            String mapName = this.getReverseReferenceNameOfClass(className);
-            
-            // Get item map name from collection
-            if (mapName == null) {
-                mapName = this.getReverseCollectionNameOfClass(className, mainClassItem.getClassName());
-            }
-            
-            if (mapName != null) {
-                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) CacheConverter.class.getDeclaredField(mapName).get(this);
-                if (itemMap != null) {
-                    this.saveToItemMap(mainClassItem, itemMap, item);
-                } else {
-                    this.writeLog("Failed to save item to map, class name: " + className);
-                }
-            } else {
-                this.writeLog("Failed to save item to map (couldn't find map), class name: " + className);
-            }
+            this.storeClassItem(mainClassItem, item);
         } else {
             this.writeLog("Failed to create item of class " + className + ", attributes: " + kv);
         }
@@ -297,4 +282,35 @@ public abstract class CacheConverter extends BaseConverter {
         return item;
     }
 
+    /**
+     * TODO
+     */
+    public void storeClassItem(Item mainClassItem, Item item) throws Exception {
+        // Get item map name from reference
+        ReferenceDescriptor rd = this.getReferenceDescriptorInItemAOfItemB(mainClassItem, item);
+
+        if (rd != null) {
+            String mapName = rd.getName();
+            
+            Map<String, List<Item>> itemMap = (Map<String, List<Item>>) CacheConverter.class.getDeclaredField(mapName).get(this);
+            if (itemMap != null) {
+                this.saveToItemMap(mainClassItem, itemMap, item);
+            } else {
+                this.writeLog("Failed to save item to map (couldn't find map '" + mapName + "') from "
+                             + this.getClassDescriptor(mainClassItem).getSimpleName() + " item and " 
+                             + this.getClassDescriptor(item).getSimpleName() + " item");
+            }
+        } else {
+            // TODO: temporary solution?
+            if (this.getClassDescriptor(mainClassItem).getSimpleName().equalsIgnoreCase("study") 
+                && this.getClassDescriptor(item).getSimpleName().equalsIgnoreCase("country")) {
+                Map<String, List<Item>> itemMap = (Map<String, List<Item>>) CacheConverter.class.getDeclaredField("countries").get(this);
+                this.saveToItemMap(mainClassItem, itemMap, item);
+            } else {
+                this.writeLog("Failed to find collection in " 
+                            + this.getClassDescriptor(mainClassItem).getSimpleName() + " class of " 
+                            + this.getClassDescriptor(item).getSimpleName() + " items");
+            }
+        }
+    }
 }
