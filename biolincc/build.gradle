@@ -20,3 +20,7 @@ sourceSets {
 processResources {
     from('.') { include ("*.properties")}
 }
+
+dependencies {
+    compile project(':commons')
+}
