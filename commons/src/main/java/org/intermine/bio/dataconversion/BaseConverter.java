@@ -10,7 +10,10 @@ package org.intermine.bio.dataconversion;
  *
  */
 
+import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileReader;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -29,9 +32,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import java.util.Set;
 
 import org.apache.commons.text.WordUtils;
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
 
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
@@ -58,15 +68,17 @@ import org.intermine.xml.full.Item;
 /**
  * Class with utility functions for converter classes
  * @author
+ * Note: this.getModel() to access model
  */
 public abstract class BaseConverter extends BioFileConverter
 {
-    private static final DateTimeFormatter TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH:mm:ss.SSS");
-
+    private String countriesFP = "";
+    private String countriesAltNamesFP = "";
     private String logDir = "";
-    private Writer logWriter = null;
+    protected Logger logger = null;
     protected String currentTrialID = null;
     protected ObjectStore os = null;
+    protected Map<String, Item> countriesMap = new HashMap<String, Item>(); // Key: country code, name, aliases (all lowercase), Value: Country Item
 
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
                              String dataSetTitle) {
@@ -92,6 +104,75 @@ public abstract class BaseConverter extends BioFileConverter
     }
 
     /**
+     * Clean a value according to the subclass' logic. Note: method should be static but Java does not allow abstract + static
+     * 
+     * @param s the value to clean
+     * @param strip boolean indicating whether to strip the string of any leading/trailing whitespace
+     * @return the cleaned value
+     * @see #unescapeHtml()
+     * @see #removeQuotes()
+     */
+    public abstract String cleanValue(String s, boolean strip);
+
+    /**
+     * Set logDir from the corresponding source property in project.xml.
+     * Method called by InterMine.
+     * 
+     * @param logDir the path to the directory where the log file will be created
+     */
+    public void setLogDir(String logDir) {
+        this.logDir = logDir;
+    }
+
+    /**
+     * Set countries CV data path from the corresponding source property in project.xml.
+     * Method called by InterMine.
+     * 
+     * @param countriesFP the path to the countries data file
+     */
+    public void setCountriesFP(String countriesFP) {
+        this.countriesFP = countriesFP;
+    }
+
+    /**
+     * Set countries alternative names data path from the corresponding source property in project.xml.
+     * Method called by InterMine.
+     * 
+     * @param countriesAltNamesFP the path to the countries alternative names data file
+     */
+    public void setCountriesAltNamesFP(String countriesAltNamesFP) {
+        this.countriesAltNamesFP = countriesAltNamesFP;
+    }
+
+    /**
+     * Instantiate logger by creating log file and writer.
+     * This sets the logWriter instance attribute.
+     */
+    public void startLogging(String suffix) throws Exception {
+        this.logger = new Logger(logDir, suffix);
+    }
+
+    /**
+     * Close opened log writer.
+     */
+    public void stopLogging() throws IOException {
+        this.logger.stopLogging();
+    }
+
+    /**
+     * Write to log file with timestamp.
+     * 
+     * @param text the log text
+     */
+    public void writeLog(String text) {
+        if (this.logger != null) {
+            this.logger.writeLog(this.currentTrialID, text);
+        } else {
+            System.out.println("Logger is null (cannot write logs)");
+        }
+    }
+
+    /**
      * TODO
      */
     public void initObjectStore() {
@@ -108,19 +189,154 @@ public abstract class BaseConverter extends BioFileConverter
         }
     }
 
+    public ClassDescriptor getClassDescriptor(Item item) {
+        if (item == null) {
+            this.writeLog("Error: called getClassDescriptor() with a null item");
+            return null;
+        }
+        return this.getModel().getClassDescriptorByName(item.getClassName());
+    }
+
+    /**
+     * TODO
+     * populates countriesMap
+     */
+    public void loadCountries() throws Exception {
+        if (this.countriesFP.equals("")) {
+            throw new Exception("countriesFP property not set in mdrmine project.xml");
+        }
+
+        if (!(new File(this.countriesFP).isFile())) {
+            throw new Exception("Countries file does not exist (path tested: " + this.countriesFP + " )");
+        }
+
+        HashMap<String, List<String>> altNames = this.loadAltCountryNames();
+
+        FileReader in = new FileReader(this.countriesFP);
+        BufferedReader br = new BufferedReader(in);
+
+        final CSVParser parser = new CSVParserBuilder()
+                                        .withSeparator('	')
+                                        .build();
+        final CSVReader csvReader = new CSVReaderBuilder(br)
+                                            .withCSVParser(parser)
+                                            .build();
+
+        boolean skipNext = false;
+
+        csvReader.readNext();   // Skip headers
+        String[] lineValues = csvReader.readNext();
+
+        while (lineValues != null) {
+            if (!skipNext) {
+                // Creating a Country Item for each line in the file
+                // Fields order in file for indices: Country.isoAlpha2, Country.isoAlpha3, null, null, Country.name, Country.capital, null, null, Country.continent, Country.tld, null, null, null, null, null, null, Country.geonameId, null, null
+                Item country = this.createClassItem("Country", 
+                    new String[][]{{"isoAlpha2", lineValues[0]}, {"isoAlpha3", lineValues[1]}, {"name", lineValues[4]},
+                                    {"capital", lineValues[5]}, {"continent", lineValues[8]}, {"tld", lineValues[9]}, {"geonameId", lineValues[16]}});
+                
+                // Adding entries in map to find Country Item based on various values
+                if (!ConverterUtils.isNullOrEmptyOrBlank(lineValues[0])) {
+                    this.countriesMap.put(lineValues[0].toLowerCase(), country);
+                }
+                if (!ConverterUtils.isNullOrEmptyOrBlank(lineValues[1])) {
+                    this.countriesMap.put(lineValues[1].toLowerCase(), country);
+                }
+                if (!ConverterUtils.isNullOrEmptyOrBlank(lineValues[4])) {
+                    this.countriesMap.put(lineValues[4].toLowerCase(), country);
+                }
+
+                // Adding alternative names from other file
+                if (altNames != null) {
+                    List<String> aliases = altNames.getOrDefault(lineValues[0].toLowerCase(), null);
+                    if (aliases == null) {
+                        this.writeLog("Warning: couldn't find any alias for country " + lineValues[4] + " with iso code " + lineValues[0].toLowerCase());
+                    } else {
+                        for (String alias: aliases) {
+                            this.countriesMap.put(alias.toLowerCase(), country);
+                        }
+                    }
+                }
+            } else {
+                skipNext = false;
+            }
+            try {
+                lineValues = csvReader.readNext();
+            } catch (CsvMalformedLineException e) {
+                this.writeLog("Found malformed line, skipping it: " + e);
+                lineValues = new String[0];
+                skipNext = true;
+            }
+        }
+
+        csvReader.close();
+    }
+
+    public HashMap<String, List<String>> loadAltCountryNames() throws Exception {
+        HashMap<String, List<String>> altNames = null;
+
+        if (this.countriesAltNamesFP.equals("")) {
+            this.writeLog("Warning: countriesAltNamesFP property is not set in mdrmine project.xml, countries mapping will be worse");
+        } else {
+            if (!(new File(this.countriesAltNamesFP).isFile())) {
+                this.writeLog("Warning: countries alternative names file does not exist (path tested: " + this.countriesAltNamesFP + " ), countries mapping will be worse");
+            } else {
+                altNames = new HashMap<String, List<String>>();
+
+                FileReader in = new FileReader(this.countriesAltNamesFP);
+                BufferedReader br = new BufferedReader(in);
+        
+                final CSVParser parser = new CSVParserBuilder()
+                                                .withSeparator(',')
+                                                .build();
+                final CSVReader csvReader = new CSVReaderBuilder(br)
+                                                    .withCSVParser(parser)
+                                                    .build();
+                
+                boolean skipNext = false;
+        
+                csvReader.readNext();   // Skip headers
+                String[] lineValues = csvReader.readNext();
+        
+                while (lineValues != null) {
+                    // TODO: check if line values are not empty? (should not be)
+                    if (!skipNext) {
+                        String isoCode = lineValues[0].toLowerCase();
+                        if (altNames.getOrDefault(isoCode, null) == null) {
+                            altNames.put(isoCode, new ArrayList<String>());
+                        }
+                        altNames.get(isoCode).add(lineValues[1].toLowerCase());
+                    } else {
+                        skipNext = false;
+                    }
+                    try {
+                        lineValues = csvReader.readNext();
+                    } catch (CsvMalformedLineException e) {
+                        this.writeLog("Found malformed line, skipping it: " + e);
+                        lineValues = new String[0];
+                        skipNext = true;
+                    }
+                }
+        
+                csvReader.close();
+            }
+        }
+
+        return altNames;
+    }
+
     /**
      * TODO
      */
-    public Item createAndStoreStudyIdentifier(Item study, String id, String identifierType, String identifierLink) throws Exception {
-        Item studyIdentifier = null;
-
-        if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
-            this.createAndStoreClassItem(study, "StudyIdentifier", 
-                new String[][]{{"identifierValue", id}, {"identifierType", identifierType},
-                                {"identifierLink", identifierLink}});
+    public void storeCountries() throws Exception {
+        // Store countries (no duplicates)
+        HashSet<String> seenIds = new HashSet<String>();
+        for (Item country: this.countriesMap.values()) {
+            if (!seenIds.contains(country.getIdentifier())) {
+                store(country);
+                seenIds.add(country.getIdentifier());
+            }
         }
-
-        return studyIdentifier;
     }
 
     /**
@@ -128,33 +344,22 @@ public abstract class BaseConverter extends BioFileConverter
      * 
      * 2-letter ISO code
      */
-    public Country getCountryFromField(String field, String value) throws Exception {
-        Country c = null;
+    public Item getCountry(String value) throws Exception {
+        Item country = null;
+
+        if (countriesMap.isEmpty()) {
+            throw new RuntimeException("The list of Country items is empty, you likely forgot to call loadCountries() at the start of your parser");
+        }
+
         if (!ConverterUtils.isNullOrEmptyOrBlank(value)) {
-            ClassDescriptor countryCD = this.getModel().getClassDescriptorByName("Country");
-            if (countryCD == null) {
-                throw new RuntimeException("This model does not contain a Country class");
-            }
-            
-            Query q = new Query();
-            QueryClass countryClass = new QueryClass(countryCD.getType());
-            q.addFrom(countryClass);
-            q.addToSelect(countryClass);
-            
-            QueryField qf = new QueryField(countryClass, field);
-            q.setConstraint(new SimpleConstraint(qf, ConstraintOp.EQUALS, new QueryValue(value)));
-            
-            Results res = this.os.execute(q);
-            
-            Iterator<?> resIter = res.iterator();
-            try {
-                ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-                c = (Country) rr.get(0);
-            } catch (NoSuchElementException e) {
-                this.writeLog("getCountryFromField(): couldn't find country with field \"" + field + "\" and value \"" + value + "\"");
+            value = value.toLowerCase();
+            if (this.countriesMap.containsKey(value)) {
+                country = this.countriesMap.get(value);
+            } else {
+                this.writeLog("Couldn't match country string '" + value + "' to a CV country");
             }
         }
-        return c;
+        return country;
     }
 
     /**
@@ -191,7 +396,7 @@ public abstract class BaseConverter extends BioFileConverter
             String nctID = (String) rr.get(1);
             String euctrID = (String) rr.get(2);
 
-            IDsHandler l = new IDsHandler(ctisID, nctID, euctrID);
+            IDsHandler l = new IDsHandler(this.logger, ctisID, nctID, euctrID);
 
             // Adding all combinations of entries in idsMap (1 per ID)
             if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID)) {
@@ -209,69 +414,7 @@ public abstract class BaseConverter extends BioFileConverter
     }
 
     /**
-     * Instantiate logger by creating log file and writer.
-     * This sets the logWriter instance attribute.
-     */
-    public void startLogging(String suffix) throws Exception {
-        if (!this.logDir.equals("")) {
-            String current_timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-                
-            Path logDir = Paths.get(this.logDir);
-            if (!Files.exists(logDir)) Files.createDirectories(logDir);
-
-            Path logFile = Paths.get(logDir.toString(), current_timestamp + "_" + suffix + ".log");
-            this.logWriter = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(logFile.toString()), "utf-8"));
-        } else {
-            throw new Exception("Log folder not specified");
-        }
-    }
-
-    /**
-     * Close opened log writer.
-     */
-    public void stopLogging() throws IOException {
-        if (this.logWriter != null) {
-            this.logWriter.close();
-        }
-    }
-
-    /**
-     * Write to WHO log file with timestamp.
-     * 
-     * @param text the log text
-     */
-    public void writeLog(String text) {
-        try {
-            if (this.logWriter != null) {
-                if (this.currentTrialID != null) {
-                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + this.currentTrialID + " - " + text + "\n");
-                    this.logWriter.flush();
-                } else {
-                    // TODO: temp, modify it to still log but without id?
-                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + text + "\n");
-                    this.logWriter.flush();
-                    // System.out.println("WHO - Trial ID null (cannot write logs)");
-                }
-            } else {
-                System.out.println("WHO - Log writer is null (cannot write logs)");
-            }
-        } catch(IOException e) {
-            System.out.println("WHO - Couldn't write to log file");
-        }
-    }
-
-    /**
-     * Set logDir from the corresponding source property in project.xml.
-     * Method called by InterMine.
-     * 
-     * @param logDir the path to the directory where the log file will be created
-     */
-    public void setLogDir(String logDir) {
-        this.logDir = logDir;
-    }
-
-    /**
-     * Create and store item (instance) of a class. Works for all classes except the Study class.
+     * Create and store item (instance) of a class. Works for all classes except the Study and Country classes.
      * 
      * @param mainClassItem the already created item of the main class to reference (Study)
      * @param className the name of the class to create an item of
@@ -280,21 +423,20 @@ public abstract class BaseConverter extends BioFileConverter
      */
     public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
         Item item = this.createClassItem(mainClassItem, className, kv);
-        if (item != null) {
-            store(item);
-        }
+        this.storeClassItem(mainClassItem, item);
+
         return item;
     }
 
     /**
-     * Create item (instance) of a class. Works for all classes except the Study class.
+     * Create item (instance) of a class.
      * 
-     * @param mainClassItem the already created item of the main class to reference (Study)
+     * @param itemToReference an already created item to reference (e.g. Study)
      * @param className the name of the class to create an item of
      * @param kv array of field name - field value pairs to set class item attribute values
      * @return the created item
      */
-    public Item createClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
+    public Item createClassItem(Item itemToReference, String className, String[][] kv) throws Exception {
         Item classItem = createItem(className);
 
         // Set class values from fieldName - value pairs passed as argument
@@ -305,33 +447,8 @@ public abstract class BaseConverter extends BioFileConverter
             classItem.setAttributeIfNotNull(kv[j][0], kv[j][1]);
         }
 
-        CollectionDescriptor collD = null;
-        String collectionClassName = mainClassItem.getClassName();
-        // Get reference field of class (either "study" or "linkedStudy" for data objects)
-        ReferenceDescriptor referenceD = this.getReferenceDescriptorOfClass(className);
-
-        // Get collection field of class of mainClassItem if no reference
-        if (referenceD != null) {
-            // Get reverse reference field of class (=collection field, e.g. "studyFeatures")
-            String reverseReferenceName = referenceD.getReverseReferenceFieldName();
-            
-            mainClassItem.addToCollection(reverseReferenceName, classItem);
-            String referenceName = referenceD.getName();
-            classItem.setReference(referenceName, mainClassItem);
-        } else {
-            collD = this.getCollectionDescriptorOfClassFromItem(className, collectionClassName);
-
-            if (collD != null) {
-                // Get reverse reference field of class (=collection field, e.g. "people")
-                String reverseReferenceName = collD.getReverseReferenceFieldName();
-
-                mainClassItem.addToCollection(reverseReferenceName, classItem);
-                String collectionName = collD.getName();
-                classItem.addToCollection(collectionName, mainClassItem);
-            } else {
-                this.writeLog("createAndStoreClassItem(): Failed to find a known referenceName (study or dataobject) in class "
-                             + className + " or collections of " + collectionClassName + " items");
-            }
+        if (classItem != null) {
+            this.handleReferencesAndCollections(itemToReference, classItem);
         }
 
         return classItem;
@@ -339,99 +456,103 @@ public abstract class BaseConverter extends BioFileConverter
 
     /**
      * TODO
-     * only for classes that have 1 non-cv ref
+     * overload without any item to reference
      */
-    public ReferenceDescriptor getReferenceDescriptorOfClass(String className) {
-        ReferenceDescriptor rd = null;
+    public Item createClassItem(String className, String[][] kv) throws Exception {
+        Item classItem = createItem(className);
 
-        // Get class descriptor to get reference field
-        ClassDescriptor cd = this.getModel().getClassDescriptorByName(className);
-        ReferenceDescriptor[] rdArr = cd.getReferenceDescriptors().toArray(ReferenceDescriptor[]::new);
-
-        // Find index of reference to non-CV class
-        String refName = null;
-        int i = 0;
-        boolean found = false;
-        while (!found && i < rdArr.length) {
-            refName = rdArr[i].getName();
-
-            if (refName.equalsIgnoreCase("study") || refName.equalsIgnoreCase("dataObject") || refName.equalsIgnoreCase("linkedStudy")) {
-                found = true;
-                rd = rdArr[i];
+        // Set class values from fieldName - value pairs passed as argument
+        for (int j = 0; j < kv.length; j++) {
+            if (kv[j].length != 2) {
+                throw new Exception("Key value tuple is not of length == 2");
             }
-
-            i++;
+            classItem.setAttributeIfNotNull(kv[j][0], kv[j][1]);
         }
 
-        return rd;
+        return classItem;
     }
 
-    public CollectionDescriptor getCollectionDescriptorOfClassFromItem(String className, String collectionClassName) {
-        CollectionDescriptor collD = null;
+    /**
+     * TODO
+     * Note: mainClassItem is required for overloading with CacheConverter
+     */
+    public void storeClassItem(Item mainClassItem, Item item) throws Exception {
+        if (item != null) {
+            store(item);
+        }
+    }
 
-        // Get class descriptor
-        ClassDescriptor cd = this.getModel().getClassDescriptorByName(className);
-        CollectionDescriptor[] collDArr = cd.getCollectionDescriptors().toArray(CollectionDescriptor[]::new);
+    /**
+     * TODO
+     * Items order shouldn't matter
+     */
+    public void handleReferencesAndCollections(Item itemA, Item itemB) throws Exception {
+        if (itemA != null && itemB != null) {
+            ReferenceDescriptor rdInAOfB = this.getReferenceDescriptorInItemAOfItemB(itemA, itemB);    // Can be a CollectionDescriptor
+    
+            // Reference in itemA to itemB
+            if (rdInAOfB != null) {
+                if (rdInAOfB.isCollection()) {
+                    itemA.addToCollection(rdInAOfB.getName(), itemB);
+                } else {
+                    itemA.setReference(rdInAOfB.getName(), itemB);
+                }
+    
+                // Reference in itemB to itemA
+                ReferenceDescriptor rdInBOfA = rdInAOfB.getReverseReferenceDescriptor();
+                if (rdInBOfA != null) {
+                    if (rdInBOfA.isCollection()) {
+                        itemB.addToCollection(rdInBOfA.getName(), itemA);
+                    } else {
+                        itemB.setReference(rdInBOfA.getName(), itemA);
+                    }
+                } else {
+                    this.writeLog("handleReferencesAndCollections(): shouldn't happen");
+                }
+            } else {
+                this.writeLog("handleReferencesAndCollections(): Failed to find reference in " + this.getClassDescriptor(itemA).getSimpleName()
+                                + " class of " + this.getClassDescriptor(itemB).getSimpleName() + "class");
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * Note: ReferenceDescriptor here also includes CollectionDescriptor sub-class
+     */
+    public ReferenceDescriptor getReferenceDescriptorInItemAOfItemB(Item itemA, Item itemB) throws Exception {
+        ReferenceDescriptor foundRD = null;
         
-        // Find index of collection with class name collectionClassName
-        String collName = null;
-        int i = 0;
-        boolean found = false;
-        while (!found && i < collDArr.length) {
-            collName = this.getReferencedClassName(collDArr[i]);
+        Set<ReferenceDescriptor> rds = Stream.concat(this.getClassDescriptor(itemA).getReferenceDescriptors().stream(), 
+                                                    this.getClassDescriptor(itemA).getCollectionDescriptors().stream())
+                                                    .collect(Collectors.toSet());
+        Iterator<ReferenceDescriptor> rdsIter = rds.iterator();
 
-            if (collName.equalsIgnoreCase(collectionClassName)) {
-                found = true;
-                collD = collDArr[i];
+        while (rdsIter.hasNext()) {
+            ReferenceDescriptor rd = rdsIter.next();
+            // Note: will not work as intended in case a Class has both a reference and a collection of the same Class
+            if (rd.getReferencedClassDescriptor().equals(this.getClassDescriptor(itemB))) {
+                foundRD = rd;
+                break;
             }
-
-            i++;
         }
 
-        return collD;
+        return foundRD;
     }
 
     /**
      * TODO
-     * ReferenceDescriptor.getReferencedClassName but without package name (org.intermine.model.bio.Study -> Study)
-     * @param rd
-     * @return
      */
-    public String getReferencedClassName(ReferenceDescriptor rd) {
-        String[] splitRD = rd.getReferencedClassName().split("\\.");
-        return splitRD[splitRD.length-1];
-    }
+    public Item createAndStoreStudyIdentifier(Item study, String id, String identifierType, String identifierLink) throws Exception {
+        Item studyIdentifier = null;
 
-    /**
-     * TODO
-     * Get the reverse reference field name of a class with a single reference to a study or DO item
-     * e.g. studyFeatures (collection name) from StudyFeature (class name)
-     */
-    public String getReverseReferenceNameOfClass(String className) {
-        String revRefFN = null;
-
-        ReferenceDescriptor rd = this.getReferenceDescriptorOfClass(className);
-        if (rd != null) {
-            revRefFN = rd.getReverseReferenceFieldName();
+        if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+            this.createAndStoreClassItem(study, "StudyIdentifier", 
+                new String[][]{{"identifierValue", id}, {"identifierType", identifierType},
+                                {"identifierLink", identifierLink}});
         }
 
-        return revRefFN;
-    }
-
-    /**
-     * TODO
-     * Get the reverse collection field name of a class
-     * 
-     */
-    public String getReverseCollectionNameOfClass(String className, String collectionClassName) {
-        String revRefFN = null;
-
-        CollectionDescriptor collD = this.getCollectionDescriptorOfClassFromItem(className, collectionClassName);
-        if (collD != null) {
-            revRefFN = collD.getReverseReferenceFieldName();
-        }
-
-        return revRefFN;
+        return studyIdentifier;
     }
 
     /**
@@ -449,7 +570,7 @@ public abstract class BaseConverter extends BioFileConverter
     /*
      * TODO
      */
-    public Item createAndStoreStudyCountry(Item study, String countryStr, String status, 
+    public Item createAndStoreStudyCountry(Item study, Item country, String countryStr, String status, 
         String plannedEnrolment, LocalDate cadDate, LocalDate ecdDate) throws Exception {
 
         Item studyCountry = this.createAndStoreClassItem(study, "StudyCountry", 
@@ -458,13 +579,10 @@ public abstract class BaseConverter extends BioFileConverter
                             {"compAuthorityDecisionDate", cadDate != null ? cadDate.toString() : null},
                             {"ethicsCommitteeDecisionDate", ecdDate != null ? ecdDate.toString() : null}});
 
-        Country c = this.getCountryFromField("name", countryStr);
-        if (c != null) {
-            // TODO: figure out a way to make this work
-            // studyCountry.setReference("country", String.valueOf(c.getId()));
-            ;
-        } else {
-            this.writeLog("Couldn't match country string \"" + countryStr + "\" with an existing country");
+        // Set references and collections between the Country and StudyCountry items and store the Country item
+        if (country != null) {
+            this.handleReferencesAndCollections(country, studyCountry);
+            this.storeClassItem(study, country);
         }
 
         return studyCountry;
@@ -495,15 +613,4 @@ public abstract class BaseConverter extends BioFileConverter
 
         return date;
     }
-
-    /**
-     * Clean a value according to the subclass' logic. Note: method should be static but Java does not allow abstract + static
-     * 
-     * @param s the value to clean
-     * @param strip boolean indicating whether to strip the string of any leading/trailing whitespace
-     * @return the cleaned value
-     * @see #unescapeHtml()
-     * @see #removeQuotes()
-     */
-    public abstract String cleanValue(String s, boolean strip);
 }

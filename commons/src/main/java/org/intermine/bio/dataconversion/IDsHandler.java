@@ -61,20 +61,27 @@ import org.intermine.xml.full.Item;
  */
 public class IDsHandler
 {
+    private Logger logger = null;
     public static int handlersNb = 0;
     private int id;
     public String ctisID = "";
     public String nctID = "";
     public String euctrID = "";
 
-    public IDsHandler() {
+    public IDsHandler(Logger logger) {
+        this.logger = logger;
+
         IDsHandler.handlersNb++;
         this.id = IDsHandler.handlersNb;
     }
     
-    public IDsHandler(String ctisID, String nctID, String euctrID) {
+    // No need to pass logger here since 
+    public IDsHandler(Logger logger, String ctisID, String nctID, String euctrID) {
+        this.logger = logger;
+
         IDsHandler.handlersNb++;
         this.id = IDsHandler.handlersNb;
+
         if (ctisID != null) {
             this.ctisID = ctisID;
         }
@@ -130,8 +137,8 @@ public class IDsHandler
                     if (this.ctisID.equalsIgnoreCase(this.euctrID)) {    // Parsed CTIS and EUCTR ID are the same
                         if (!this.ctisID.equalsIgnoreCase(ctisID)) { // Checking if all 4 IDs are not identical (else nothing to do)
                             // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
-                            // this.writeLog("Parsed CTIS and EUCTR IDs are identical (" + this.ctisID + 
-                            //     ") but different to previous/existing study CTIS and EUCTR IDs (" + ctisID + ", identical too), setting more recent ID as CTIS");
+                            this.logger.writeLog("Parsed CTIS and EUCTR IDs are identical (" + this.ctisID + 
+                                ") but different to previous/existing study CTIS and EUCTR IDs (" + ctisID + ", identical too), setting more recent ID as CTIS");
                             if (ctisID.compareTo(this.ctisID) > 0) {
                                 this.ctisID = ctisID;
                             } else {
@@ -143,8 +150,8 @@ public class IDsHandler
                             if (!ctisID.equalsIgnoreCase(this.ctisID) && !ctisID.equalsIgnoreCase(this.euctrID)) {
                                 // Logging if parsed IDs are not empty and different, and don't match with the previous IDs, this probably shouldn't happen
                                 // e.g. previous: CTIS2016 EUCTR2016; parsed: CTIS2014 EUCTR2012
-                                // this.writeLog("Warning: both parsed CTIS (" + this.ctisID + ") and EUCTR (" + this.euctrID + ") IDs are different" +
-                                // "from previous/existing study IDs: " + ctisID + " (CTIS and EUCTR IDs are identical)");
+                                this.logger.writeLog("Warning: both parsed CTIS (" + this.ctisID + ") and EUCTR (" + this.euctrID + ") IDs are different" +
+                                "from previous/existing study IDs: " + ctisID + " (CTIS and EUCTR IDs are identical)");
                             }   // Else nothing to do, e.g. previous: CTIS2016 EUCTR2016; parsed: CTIS2016 EUCTR2014
                         
                         } else if (this.ctisID.isEmpty()) {  // CTIS ID only is empty
@@ -164,10 +171,10 @@ public class IDsHandler
                 }
             } else {    // Previous/existing study CTIS and EUCTR ID are different, setting both of them
                 if (!this.ctisID.isEmpty() && !ctisID.equals(this.ctisID)) {  // Logging if we are overwriting an existing and different ID
-                    // this.writeLog("ctisID about to be set (" + ctisID + ") is different than parsed ID it is replacing (" + this.ctisID + ")");
+                    this.logger.writeLog("ctisID about to be set (" + ctisID + ") is different than parsed ID it is replacing (" + this.ctisID + ")");
                 }
                 if (!this.euctrID.isEmpty() && !euctrID.equals(this.euctrID)) {
-                    // this.writeLog("euctrID about to be set (" + euctrID + ") is different than parsed ID it is replacing (" + this.euctrID + ")");
+                    this.logger.writeLog("euctrID about to be set (" + euctrID + ") is different than parsed ID it is replacing (" + this.euctrID + ")");
                 }
                 this.ctisID = ctisID;
                 this.euctrID = euctrID;
@@ -183,7 +190,7 @@ public class IDsHandler
                 } else {
                     // TODO: should log case where previous/existing study EUCTR ID and parsed CTIS ID are empty, and the other 2 IDs are identical
                     if (!this.ctisID.isEmpty() && !ctisID.equals(this.ctisID)) {  // Logging if we are overwriting an existing and different ID
-                        // this.writeLog("ctisID about to be set (" + ctisID + ") is different than parsed ID it is replacing (" + this.ctisID + ")");
+                        this.logger.writeLog("ctisID about to be set (" + ctisID + ") is different than parsed ID it is replacing (" + this.ctisID + ")");
                     }
                     this.ctisID = ctisID;
                 }
@@ -193,7 +200,7 @@ public class IDsHandler
                     this.ctisID = "";
                 } else {
                     if (!this.euctrID.isEmpty() && !euctrID.equals(this.euctrID)) {
-                        // this.writeLog("euctrID about to be set (" + euctrID + ") is different than parsed ID it is replacing (" + this.euctrID + ")");
+                        this.logger.writeLog("euctrID about to be set (" + euctrID + ") is different than parsed ID it is replacing (" + this.euctrID + ")");
                     }
                     this.euctrID = euctrID;
                 }
@@ -203,7 +210,7 @@ public class IDsHandler
         // Handling NCT ID
         if (!ConverterUtils.isNullOrEmptyOrBlank(nctID)) {
             if (!this.nctID.isEmpty() && !nctID.equals(this.nctID)) {
-                // this.writeLog("nctID about to be set (" + nctID + ") is different than parsed ID it is replacing (" + this.nctID + ") (should not happen?)");
+                this.logger.writeLog("nctID about to be set (" + nctID + ") is different than parsed ID it is replacing (" + this.nctID + ") (should not happen?)");
             }
             this.nctID = nctID;
         }

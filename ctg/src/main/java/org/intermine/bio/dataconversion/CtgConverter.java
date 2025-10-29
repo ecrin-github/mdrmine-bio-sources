@@ -132,20 +132,14 @@ public class CtgConverter extends BaseConverter
         if (!ConverterUtils.isNullOrEmptyOrBlank(trialID) && !trialID.equals("NCT01027572") &&
             this.parseTrialIDs(study, trialID, otherIDs)) {
 
-            /* Adding this source */
-            // this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
+            /* Study data source */
+            this.addStudySource(study);
 
             /* Study title */
             String studyTitle = this.getAndCleanValue(lineValues, "Study Title");
             // Study acronym
             String acronym = this.getAndCleanValue(lineValues, "Acronym");
             this.parseStudyTitle(study, studyTitle, acronym);
-            
-            // TODO
-            // Item studySource = createItem("StudySource");
-            // studySource.setAttribute("sourceName", "CTG");
-            // studySource.setReference("study", study);
-            // store(studySource);
     
             // Registry trial page URL (used later for registry entry and results summary DO)
             String studyURL = this.getAndCleanValue(lineValues, "Study URL");
@@ -286,7 +280,7 @@ public class CtgConverter extends BaseConverter
         boolean continueParsing = true;
 
         // NCT ID
-        if (storedPKs.contains(mainTrialID)) {
+        if (storedPKs.contains(mainTrialID)) {  // should not happen
             continueParsing = false;
             this.writeLog("NCT ID already exists: " + mainTrialID);
         } else {
@@ -420,6 +414,14 @@ public class CtgConverter extends BaseConverter
         }
 
         return continueParsing;
+    }
+    
+    /**
+     * TODO
+     * @param study
+     */
+    public void addStudySource(Item study) throws Exception {
+        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_CTG}});
     }
 
     /**

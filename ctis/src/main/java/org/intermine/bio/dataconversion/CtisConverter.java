@@ -107,7 +107,9 @@ public class CtisConverter extends CacheConverter
 
         csvReader.close();
 
-        this.storeAllItems();   // Note: this also calls this.stopLogging
+        this.storeAllItems();
+
+        this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
@@ -126,10 +128,8 @@ public class CtisConverter extends CacheConverter
 
         // Not parsing if existing study is found and with a more recent resubmission number than the current
         if (this.parseTrialID(study, trialID)) {
-            /* Adding this source */
-            // if (!this.existingStudy()) {
-            //     this.createAndStoreClassItem(study, "StudySource", new String[][]{{"sourceName", DATA_SOURCE_NAME}});
-            // }
+            /* Study data source */
+            this.addStudySource(study);
 
             /* Study title (need to get it before protocol DO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
@@ -297,6 +297,18 @@ public class CtisConverter extends CacheConverter
         }
 
         return continueParsing;
+    }
+
+    /**
+     * TODO
+     * @param study
+     * @param protocolCode
+     * @throws Exception
+     */
+    public void addStudySource(Item study) throws Exception {
+        if (!this.existingStudy()) {
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_CTIS}});
+        }
     }
 
     /**

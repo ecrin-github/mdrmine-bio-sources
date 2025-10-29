@@ -35,10 +35,12 @@ import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
-
 import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.text.WordUtils;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
@@ -51,6 +53,8 @@ import org.intermine.xml.full.Item;
  */
 public class WhoConverter extends CacheConverter
 {
+    private static final Logger LOGGER = LogManager.getLogger("mdrmine");
+
     private static final Pattern P_NONVALID_ID = Pattern.compile(
         "(?:\\bnull\\b)|(?:\\bnill?(?:\\h*known)?\\.?)|(?:not\\h*applicable)|(?:not\\h*available)|(?:N[\\/\\.]?A\\.?)|(?:none\\.?)|(?:NCT00000000)|(?:NCT12345678)|(?:ISRCTN00000000)|(?:ISRCTN12345678)|(?:[0\\.-:\\?\\h\\*]+)",
         Pattern.CASE_INSENSITIVE);
@@ -137,6 +141,7 @@ public class WhoConverter extends CacheConverter
     public void process(Reader reader) throws Exception {
         /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
         this.startLogging("who");
+        this.loadCountries();
 
         this.fieldsToInd = this.getHeaders();
 
@@ -175,9 +180,10 @@ public class WhoConverter extends CacheConverter
 
         csvReader.close();
 
+        this.storeCountries();
         this.storeAllItems();
 
-        // this.stopLogging();
+        this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
@@ -210,6 +216,9 @@ public class WhoConverter extends CacheConverter
         // TODO EUCTR: check for additional IDs with existing study
         study = this.parseTrialIDsAndGetStudy(trialID, secondaryIDs, bridgingFlag, childs);
 
+        /* Study data source */
+        this.addStudySource(study);
+
         // TODO: study end date? -> results posted date?
         // Used for registry entry DO
         String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
@@ -226,13 +235,6 @@ public class WhoConverter extends CacheConverter
         /* Scientific title */
         String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
         this.parseTitle(study, scientificTitle, ConverterCVT.TITLE_TYPE_SCIENTIFIC);
-
-        // TODO: not working as intended
-        // Item studySource = createItem("StudySource");
-        // studySource.setAttributeIfNotNull("sourceName", "WHO");
-        // studySource.setReference("study", study);
-        // store(studySource);
-        // study.addToCollection("studySources", studySource);
 
         // TODO EUCTR: check for additional contacts with existing study
         /* Study people (public and scientific contacts) */
@@ -466,7 +468,7 @@ public class WhoConverter extends CacheConverter
         ids.add(trialID);
 
         /* Parsing of IDs */
-        IDsHandler idsH = new IDsHandler();
+        IDsHandler idsH = new IDsHandler(this.logger);
 
         Iterator<String> idsIter = ids.iterator();
         while (idsIter.hasNext()) {
@@ -514,7 +516,7 @@ public class WhoConverter extends CacheConverter
                             // TODO: handle "Outside-EU/EEA" country code
                             // Getting country from ID country code
                             if (!ConverterUtils.isNullOrEmptyOrBlank(euctrSuffix)) {
-                                this.currentCountry = this.getCountryFromField("isoAlpha2", euctrSuffix);
+                                this.currentCountry = this.getCountry(euctrSuffix);
                                 if (this.currentCountry == null) {
                                     this.writeLog("Couldn't find country from country code: " + euctrSuffix);
                                 }
@@ -740,6 +742,15 @@ public class WhoConverter extends CacheConverter
         }
 
         return study;
+    }
+
+    /**
+     * TODO
+     */
+    public void addStudySource(Item study) throws Exception {
+        if (!this.existingStudy()) {
+            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_WHO}});
+        }
     }
 
     /**
@@ -1208,60 +1219,68 @@ public class WhoConverter extends CacheConverter
     public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate, String ecdDatesStr) throws Exception {
         // TODO: only restrict date fields + enrolment to EUCTR?
         // TODO: try to normalise values
+        // TODO: parse edcDates
         // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
         String status = ConverterUtils.getValueOfItemAttribute(study, "status");
+        boolean foundCurrentCountry = false;
 
         if (!ConverterUtils.isPosWholeNumber(plannedEnrolment) || Long.valueOf(plannedEnrolment) > Integer.MAX_VALUE) {
             plannedEnrolment = null;
         }
 
-        if (!this.existingStudy()) {
-            // TODO: parse edcDates
-            // TODO: don't add duplicates (EUCTR2008-007326-19)
-            if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
-                if (countriesStr.contains(";")) {
-                    boolean foundCurrentCountry = false;
+        Set<Item> seenCountries = null; // Already cached countries (if existing study) + countries parsed
 
-                    String[] countriesList = countriesStr.split(";");
-                    for (String countryStr: countriesList) {
-                        if (!ConverterUtils.isNullOrEmptyOrBlank(countryStr)) {
-                            if (this.currentCountry != null && countryStr.equalsIgnoreCase(this.currentCountry.getName())) {    // Setting more info for current country
-                                this.createAndStoreStudyCountry(study, countryStr, status, plannedEnrolment, cadDate, null);
-                                foundCurrentCountry = true;
-                            } else {    // Regular parsing
-                                this.createAndStoreStudyCountry(study, countryStr, null, null, null, null);
-                            }
-                        }
+        if (this.existingStudy()) { // Getting already stored (cached) Country items
+            List<Item> cachedCountries = this.countries.get(study.getIdentifier());
+            if (cachedCountries != null) {
+                seenCountries = new HashSet<Item>(cachedCountries);
+            }
+        }
+
+        if (seenCountries == null) {
+            seenCountries = new HashSet<Item>();
+        }
+
+        if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
+            for (String countryName: countriesStr.split(";")) {
+                Item country = this.getCountry(countryName);
+                if (!seenCountries.contains(country)) {
+                    if (this.currentCountry != null && this.currentCountry.equals(country)) {
+                        // Setting more info for current country
+                        this.createAndStoreStudyCountry(study, country, countryName, status, plannedEnrolment, cadDate, null);
+                        foundCurrentCountry = true;
+                    } else {    // Regular parsing
+                        this.createAndStoreStudyCountry(study, country, countryName, null, null, null, null);
                     }
 
-                    // Creating country if currentCountry is set but couldn't match it with a country in the country list
-                    if (this.currentCountry != null && !foundCurrentCountry) {
-                        this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
+                    if (country != null) {
+                        seenCountries.add(country);
                     }
-                } else {
-                    this.createAndStoreStudyCountry(study, countriesStr, status, plannedEnrolment, cadDate, null);
                 }
             }
-        } else if (this.currentCountry != null) {    // Updating an existing study
-            // LocalDate ecdDate = this.parseDate(ecdDatesStr, ConverterUtils.P_DATE_MWORD_D_Y_HOUR);
+        }
 
-            Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "countryName", this.currentCountry.getName());
-            if (studyCountry != null) {
-                studyCountry.setAttributeIfNotNull("status", status);
-                studyCountry.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
-                
+        // Case where current country (from trial ID) is not found in parsed countries
+        if (this.currentCountry != null && !foundCurrentCountry) {
+            if (seenCountries.contains(this.currentCountry)) {
+                // TODO: currently not possible
+                // Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "country", this.currentCountry);
+                // studyCountry.setAttributeIfNotNull("status", status);
+                // studyCountry.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
+
                 // "dateEnrolment" is "Date of Competent Authority Decision" in EUCTR
-                if (cadDate != null) {
-                    studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate", cadDate.toString());
-                }
+                // if (cadDate != null) {
+                //     studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate", cadDate.toString());
+                // }
                 
                 // "Date of Ethics Committee Opinion" in EUCTR
                 // if (ecdDate != null) {
                 //     studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
                 // }
+                ;
             } else {
-                this.writeLog("Couldn't find StudyCountry with this current country (creating it): \"" + this.currentCountry);
-                this.createAndStoreStudyCountry(study, this.currentCountry.getName(), status, plannedEnrolment, cadDate, null);
+                this.createAndStoreStudyCountry(study, this.currentCountry, ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"), status, plannedEnrolment, cadDate, null);
+                this.writeLog("Couldn't find StudyCountry with this current country (creating it): " + ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"));
             }
         }
     }
@@ -1273,7 +1292,7 @@ public class WhoConverter extends CacheConverter
         if (!this.existingStudy()) {
             // TODO: match values with CT codes/ICD Codes
             if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
-                if (conditionsStr.contains(";")) {
+                if (conditionsStr.contains(";")) {  // TODO: Useless check, split includes full string if separator not found
                     String[] conditionsList = conditionsStr.split(";");
                     for (String conditionStr: conditionsList) {
                         if (!ConverterUtils.isNullOrEmptyOrBlank(conditionStr)) {
@@ -1675,25 +1694,8 @@ public class WhoConverter extends CacheConverter
         Item item = this.createClassItem(mainClassItem, className, kv);
 
         if (item != null) {
-            if (this.isCtg() || this.isEuctr() || this.isCtis()) {
-                // Get item map name from reference
-                String mapName = this.getReverseReferenceNameOfClass(className);
-                
-                // Get item map name from collection
-                if (mapName == null) {
-                    mapName = this.getReverseCollectionNameOfClass(className, mainClassItem.getClassName());
-                }
-                
-                if (mapName != null) {
-                    Map<String, List<Item>> itemMap = (Map<String, List<Item>>) WhoConverter.class.getSuperclass().getDeclaredField(mapName).get(this);
-                    if (itemMap != null) {
-                        this.saveToItemMap(mainClassItem, itemMap, item);
-                    } else {
-                        this.writeLog("Couldn't save item to map, class name: " + className);
-                    }
-                } else {
-                    this.writeLog("Failed to save item to map (couldn't find map), class name: " + className);
-                }
+            if (this.isCtg() || this.isEuctr() || this.isCtis()) {  // Saving in cache to itemMap
+                this.storeClassItem(mainClassItem, item);
             } else {
                 store(item);
             }
