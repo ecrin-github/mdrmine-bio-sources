@@ -1,5 +1,20 @@
 package org.intermine.bio.dataconversion;
 
+import java.io.Reader;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 /*
  * Copyright (C) 2024-2025 MDRMine
  * Modified from 2002-2019 FlyMine
@@ -16,30 +31,12 @@ import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-import org.apache.commons.text.WordUtils;
-
-import java.io.Reader;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 
 /**
  * 
  * @author
  */
-public class BiolinccConverter extends BaseConverter
-{
+public class BiolinccConverter extends BaseConverter {
     //
     private static final String DATASET_TITLE = "BioLINCC full";
     private static final String DATA_SOURCE_NAME = "BioLINCC";
@@ -52,13 +49,13 @@ public class BiolinccConverter extends BaseConverter
     private static final String AGE_PEDIATRIC = "Pediatric";
     private static final String AGE_ALL = "Both";
 
-
     private Map<String, Integer> fieldsToInd;
 
     /**
      * Constructor
+     * 
      * @param writer the ItemWriter used to handle the resultant items
-     * @param model the Model
+     * @param model  the Model
      */
     public BiolinccConverter(ItemWriter writer, Model model) {
         super(writer, model, DATA_SOURCE_NAME, DATASET_TITLE);
@@ -70,17 +67,20 @@ public class BiolinccConverter extends BaseConverter
      * {@inheritDoc}
      */
     public void process(Reader reader) throws Exception {
-        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
+        /*
+         * Opened BufferedReader is passed as argument (from
+         * FileConverterTask.execute())
+         */
         this.startLogging("biolincc");
 
         final CSVParser parser = new CSVParserBuilder()
-                                        .withSeparator(',')
-                                        // TODO check if withquotechar working, otherwise needs removeQuotes
-                                        .withQuoteChar('"')
-                                        .build();
+                .withSeparator(',')
+                // TODO check if withquotechar working, otherwise needs removeQuotes
+                .withQuoteChar('"')
+                .build();
         final CSVReader csvReader = new CSVReaderBuilder(reader)
-                                            .withCSVParser(parser)
-                                            .build();
+                .withCSVParser(parser)
+                .build();
 
         /* Headers */
         this.fieldsToInd = this.getHeaders(csvReader.readNext());
@@ -118,7 +118,7 @@ public class BiolinccConverter extends BaseConverter
         Item study = createItem("Study");
 
         /* Adding this source */
-        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", DATA_SOURCE_NAME}});
+        this.createAndStoreClassItem(study, "StudySource", new String[][] { { "name", DATA_SOURCE_NAME } });
 
         /* Study title */
         String studyName = this.getAndCleanValue(lineValues, "Study Name");
@@ -126,11 +126,11 @@ public class BiolinccConverter extends BaseConverter
         String acronym = this.getAndCleanValue(lineValues, "Acronym");
         this.parseStudyTitle(study, studyName, acronym);
 
-        // Study ID     Note: parsing ID after title to log title if ID is empty
+        // Study ID Note: parsing ID after title to log title if ID is empty
         String biolinccID = this.getAndCleanValue(lineValues, "Accession Number");
         // TODO: should not be primaryIdentifier
         this.parseID(study, biolinccID);
-        
+
         // TODO: check with other fields
         String availableResources = this.getAndCleanValue(lineValues, "Available resources");
 
@@ -163,21 +163,23 @@ public class BiolinccConverter extends BaseConverter
         // TODO: use with dataset DO for ObjDataset.consentNonCommercial
         String commercialUseDataRestrictions = this.getAndCleanValue(lineValues, "Commercial use data restrictions");
         study.setAttributeIfNotNull("testField2", commercialUseDataRestrictions);
-        
+
         // TODO: possibly same as above (for different dataset obj)?
-        String commercialUseSpecimenRestrictions = this.getAndCleanValue(lineValues, "Commercial use specimen restrictions");
+        String commercialUseSpecimenRestrictions = this.getAndCleanValue(lineValues,
+                "Commercial use specimen restrictions");
         study.setAttributeIfNotNull("testField3", commercialUseSpecimenRestrictions);
-        
+
         /* Study primary outcome(s) */
         String conclusions = this.getAndCleanValue(lineValues, "Conclusions");
         this.parseConclusions(study, conclusions);
-        
+
         /* Study conditions */
         String conditions = this.getAndCleanValue(lineValues, "Conditions");
         this.parseConditions(study, conditions);
         study.setAttributeIfNotNull("testField4", conditions);
-        
-        String dataRestrictionsBasedOnAreaOfResearch = this.getAndCleanValue(lineValues, "Data restrictions based on area of research");
+
+        String dataRestrictionsBasedOnAreaOfResearch = this.getAndCleanValue(lineValues,
+                "Data restrictions based on area of research");
         study.setAttributeIfNotNull("testField5", dataRestrictionsBasedOnAreaOfResearch);
 
         String design = this.getAndCleanValue(lineValues, "Design");
@@ -186,7 +188,8 @@ public class BiolinccConverter extends BaseConverter
         String extraStudyDetails = this.getAndCleanValue(lineValues, "Extra Study Details");
         study.setAttributeIfNotNull("testField7", extraStudyDetails);
 
-        String geneticUseAreaOfResearchRestrictions = this.getAndCleanValue(lineValues, "Genetic use area of research restrictions");
+        String geneticUseAreaOfResearchRestrictions = this.getAndCleanValue(lineValues,
+                "Genetic use area of research restrictions");
         study.setAttributeIfNotNull("testField8", geneticUseAreaOfResearchRestrictions);
 
         String geneticUseOfSpecimensAllowed = this.getAndCleanValue(lineValues, "Genetic use of specimens allowed?");
@@ -201,7 +204,8 @@ public class BiolinccConverter extends BaseConverter
         String materialTypes = this.getAndCleanValue(lineValues, "Material Types");
         String nhlbiDivision = this.getAndCleanValue(lineValues, "NHLBI Division");
         String network = this.getAndCleanValue(lineValues, "Network");
-        String nonGeneticUseSpecimenRestrictions = this.getAndCleanValue(lineValues, "Non-genetic use specimen restrictions based on area of use");
+        String nonGeneticUseSpecimenRestrictions = this.getAndCleanValue(lineValues,
+                "Non-genetic use specimen restrictions based on area of use");
         String parentStudyContactEmail = this.getAndCleanValue(lineValues, "Parent Study Contact Email");
         String parentStudyContactName = this.getAndCleanValue(lineValues, "Parent Study Contact Name");
         String participants = this.getAndCleanValue(lineValues, "Participants");
@@ -222,6 +226,7 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param biolinccID
      */
@@ -230,13 +235,14 @@ public class BiolinccConverter extends BaseConverter
             this.currentTrialID = biolinccID;
             study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
         } else {
-            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getValueOfItemAttribute(study, "displayTitle"));
+            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "displayTitle"));
         }
     }
 
     /**
      * TODO
      * Same as CTG
+     * 
      * @param study
      * @param studyTitle
      */
@@ -250,9 +256,9 @@ public class BiolinccConverter extends BaseConverter
             displayTitleSet = true;
 
             this.createAndStoreClassItem(study, "Title",
-                new String[][]{{"text", studyTitle}, {"type", ConverterCVT.TITLE_TYPE_PUBLIC}});
+                    new String[][] { { "text", studyTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
         }
-        
+
         /* Acronym */
         if (!ConverterUtils.isNullOrEmptyOrBlank(acronym)) {
             if (!displayTitleSet) {
@@ -260,9 +266,9 @@ public class BiolinccConverter extends BaseConverter
             }
 
             this.createAndStoreClassItem(study, "Title",
-                new String[][]{{"text", acronym}, {"type", ConverterCVT.TITLE_TYPE_ACRONYM}});
+                    new String[][] { { "text", acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
         }
-        
+
         // Unknown title if not set before
         if (!displayTitleSet) {
             study.setAttribute("displayTitle", ConverterCVT.TITLE_UNKNOWN);
@@ -271,6 +277,7 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param background
      * @param objectives
@@ -301,6 +308,7 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param cohortType
      */
@@ -323,7 +331,7 @@ public class BiolinccConverter extends BaseConverter
                 study.setAttributeIfNotNull("minAge", minAge);
                 study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
-            
+
             if (!ConverterUtils.isNullOrEmptyOrBlank(maxAge)) {
                 study.setAttributeIfNotNull("maxAge", maxAge);
                 study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
@@ -336,6 +344,7 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param clinicalTrialUrls
      * @return
      */
@@ -347,7 +356,7 @@ public class BiolinccConverter extends BaseConverter
             Matcher mUrl;
             String ctgUrl;
 
-            for (String url: urls) {
+            for (String url : urls) {
                 mUrl = P_URL_NCT_ID.matcher(url);
                 if (mUrl.matches()) {
                     ctgUrl = CTG_STUDY_BASE_URL + mUrl.group(1);
@@ -361,9 +370,10 @@ public class BiolinccConverter extends BaseConverter
         return new ArrayList<String>(parsedUrls);
     }
 
-    public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, String clinicalTrialUrls) throws Exception {
+    public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, String clinicalTrialUrls)
+            throws Exception {
         // Display title
-        String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
         String doDisplayTitle;
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
             doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
@@ -372,25 +382,26 @@ public class BiolinccConverter extends BaseConverter
         }
 
         /* Registry entry DO */
-        Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-            new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                            {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}});
-        
+        Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject",
+                new String[][] { { "title", doDisplayTitle }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
+                        { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
+
         /* Biolincc registry entry DO instance */
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-            new String[][]{{"url", biolinccUrl}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
-            
+        this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
+                new String[][] { { "url", biolinccUrl }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
+
         /* CTG Registry entry DO instances */
         List<String> ctgUrls = this.parseClinicalTrialUrls(clinicalTrialUrls);
-        for (String ctgUrl: ctgUrls) {
+        for (String ctgUrl : ctgUrls) {
             // TODO: system field?
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-                new String[][]{{"url", ctgUrl}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
+            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
+                    new String[][] { { "url", ctgUrl }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
         }
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param conclusions
      */
@@ -404,6 +415,7 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param conditionsStr
      * @throws Exception
@@ -412,18 +424,19 @@ public class BiolinccConverter extends BaseConverter
         // TODO: match values with CT codes/ICD Codes
         if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
             String[] conditionsList = conditionsStr.split(",");
-            for (String conditionStr: conditionsList) {
-                this.createAndStoreClassItem(study, "StudyCondition", 
-                    new String[][]{{"originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-')}});
+            for (String conditionStr : conditionsList) {
+                this.createAndStoreClassItem(study, "StudyCondition",
+                        new String[][] { { "originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-') } });
             }
         }
     }
 
     /**
-     * Get field value from array of values using a field's position-lookup Map, value is also cleaned.
+     * Get field value from array of values using a field's position-lookup Map,
+     * value is also cleaned.
      * 
      * @param lineValues the list of all values for a line in the data file
-     * @param field the name of the field to get the value of
+     * @param field      the name of the field to get the value of
      * @return the cleaned value of the field
      * @see //#cleanValue()
      */
@@ -442,6 +455,7 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param fields
      * @return map of data file field names and their corresponding column index
      * @throws Exception
@@ -455,9 +469,13 @@ public class BiolinccConverter extends BaseConverter
 
         for (int ind = 0; ind < fields.length; ind++) {
             if (ind == 0) {
-                /* Opened file is passed to this function, so we can't change the encoding on read
-                to handle the BOM \uFEFF leading character, we have to remove it ourselves.
-                The character is read differently in Docker, so we match the header field name starting with a letter. */
+                /*
+                 * Opened file is passed to this function, so we can't change the encoding on
+                 * read
+                 * to handle the BOM \uFEFF leading character, we have to remove it ourselves.
+                 * The character is read differently in Docker, so we match the header field
+                 * name starting with a letter.
+                 */
                 Matcher mHeader = P_HEADER.matcher(fields[ind]);
                 if (mHeader.find()) {
                     fieldsToInd.put(mHeader.group(0), ind);

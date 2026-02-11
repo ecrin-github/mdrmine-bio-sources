@@ -10,35 +10,33 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-
-
 /**
  * Class with MDR model CV terms
+ * 
  * @author
  */
-public class ConverterCVT
-{
+public class ConverterCVT {
     /* Registries */
-    public static final String R_ANZCTR = "ANZCTR";    // Australia + New Zealand
-    public static final String R_CHICTR = "ChiCTR";    // China
+    public static final String R_ANZCTR = "ANZCTR"; // Australia + New Zealand
+    public static final String R_CHICTR = "ChiCTR"; // China
     public static final String R_CRIS = "CRis"; // South Korea
     public static final String R_CTIS = "CTIS"; // EU (new)
-    public static final String R_CTG = "CTG";   // US
+    public static final String R_CTG = "CTG"; // US
     public static final String R_CTRI = "CTRI"; // India
     public static final String R_DRKS = "DRKS"; // German
-    public static final String R_EUCTR = "EUCTR";   // EU (old)
+    public static final String R_EUCTR = "EUCTR"; // EU (old)
     public static final String R_ICTRP = "ICTRP"; // WHO (not a registry, used for ID)
     public static final String R_IRCT = "IRCT"; // Iran
     public static final String R_ISRCTN = "ISRCTN"; // UK
-    public static final String R_ITMCTR = "ITMCTR";    // Traditional medicine
+    public static final String R_ITMCTR = "ITMCTR"; // Traditional medicine
     public static final String R_JRCT = "jRCT"; // Japan
-    public static final String R_LBCTR = "LBCTR";   // Lebanon
-    public static final String R_TCTR = "TCTR";  // Thailand
+    public static final String R_LBCTR = "LBCTR"; // Lebanon
+    public static final String R_TCTR = "TCTR"; // Thailand
     public static final String R_PACTR = "PACTR"; // Pan African
-    public static final String R_REBEC = "ReBec";   // Brazil
+    public static final String R_REBEC = "ReBec"; // Brazil
     public static final String R_REPEC = "REPEC"; // Peru
-    public static final String R_RPCEC = "RPCEC";   // Cuba
-    public static final String R_SLCTR = "SLCTR";   // Sri Lanka
+    public static final String R_RPCEC = "RPCEC"; // Cuba
+    public static final String R_SLCTR = "SLCTR"; // Sri Lanka
 
     /* Studies */
     public static final String NOT_APPLICABLE = "N/A";
@@ -53,12 +51,12 @@ public class ConverterCVT
     public static final String STATUS_ACTIVE_NOT_RECRUITING = "Active, not recruiting";
     public static final String STATUS_COMPLETED = "Completed";
     public static final String STATUS_SUSPENDED = "Suspended";
-    public static final String FEATURE_T_PHASE = "Phase";   // MDR ID: 20
-    public static final String FEATURE_T_PRIMARY_PURPOSE = "Primary purpose";   // MDR ID: 21
-    public static final String FEATURE_T_ALLOCATION = "Allocation";   // MDR ID: 22
-    public static final String FEATURE_T_INTERVENTION_MODEL = "Intervention model";   // MDR ID: 23
-    public static final String FEATURE_T_MASKING = "Masking";   // MDR ID: 24
-    public static final String FEATURE_T_TIME_PERSPECTIVE = "Time perspective";   // MDR ID: 31
+    public static final String FEATURE_T_PHASE = "Phase"; // MDR ID: 20
+    public static final String FEATURE_T_PRIMARY_PURPOSE = "Primary purpose"; // MDR ID: 21
+    public static final String FEATURE_T_ALLOCATION = "Allocation"; // MDR ID: 22
+    public static final String FEATURE_T_INTERVENTION_MODEL = "Intervention model"; // MDR ID: 23
+    public static final String FEATURE_T_MASKING = "Masking"; // MDR ID: 24
+    public static final String FEATURE_T_TIME_PERSPECTIVE = "Time perspective"; // MDR ID: 31
     public static final String FEATURE_V_EARLY_PHASE_1 = "Early Phase 1";
     public static final String FEATURE_V_RETROSPECTIVE = "Retrospective";
     public static final String FEATURE_V_RANDOMISED = "Randomised";

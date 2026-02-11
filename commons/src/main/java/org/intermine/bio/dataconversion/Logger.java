@@ -18,14 +18,12 @@ import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.format.DateTimeFormatter;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-
-
+import java.time.format.DateTimeFormatter;
 
 /**
  * TODO
+ * 
  * @author
  */
 public class Logger {
@@ -39,10 +37,11 @@ public class Logger {
         }
 
         String current_timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        
+
         // Create log dir (if not exists)
         Path logDirP = Paths.get(logDir);
-        if (!Files.exists(logDirP)) Files.createDirectories(logDirP);
+        if (!Files.exists(logDirP))
+            Files.createDirectories(logDirP);
 
         // Initialise log writer
         Path logFile = Paths.get(logDirP.toString(), current_timestamp + "_" + suffix + ".log");
@@ -58,7 +57,8 @@ public class Logger {
         try {
             if (this.logWriter != null) {
                 if (trialID != null) {
-                    this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + trialID + " - " + text + "\n");
+                    this.logWriter.write(
+                            LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + trialID + " - " + text + "\n");
                     this.logWriter.flush();
                 } else {
                     this.logWriter.write(LocalDateTime.now().format(TIMESTAMP_FORMATTER) + " - " + text + "\n");
@@ -67,7 +67,7 @@ public class Logger {
             } else {
                 System.out.println("Log writer is null (cannot write logs)");
             }
-        } catch(IOException e) {
+        } catch (IOException e) {
             System.out.println("Couldn't write to log file");
         }
     }

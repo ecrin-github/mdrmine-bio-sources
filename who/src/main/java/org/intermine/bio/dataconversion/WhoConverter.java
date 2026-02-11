@@ -19,7 +19,6 @@ import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -31,73 +30,80 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.text.WordUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
-import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.commons.text.WordUtils;
-import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.LogManager;
-
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-
 
 /**
  * Class to parse values from a WHO data file and store them as MDRMine items
+ * 
  * @author ECRIN
  */
-public class WhoConverter extends CacheConverter
-{
+public class WhoConverter extends CacheConverter {
     private static final Logger LOGGER = LogManager.getLogger("mdrmine");
 
     private static final Pattern P_NONVALID_ID = Pattern.compile(
-        "(?:\\bnull\\b)|(?:\\bnill?(?:\\h*known)?\\.?)|(?:not\\h*applicable)|(?:not\\h*available)|(?:N[\\/\\.]?A\\.?)|(?:none\\.?)|(?:NCT00000000)|(?:NCT12345678)|(?:ISRCTN00000000)|(?:ISRCTN12345678)|(?:[0\\.-:\\?\\h\\*]+)",
-        Pattern.CASE_INSENSITIVE);
+            "(?:\\bnull\\b)|(?:\\bnill?(?:\\h*known)?\\.?)|(?:not\\h*applicable)|(?:not\\h*available)|(?:N[\\/\\.]?A\\.?)|(?:none\\.?)|(?:NCT00000000)|(?:NCT12345678)|(?:ISRCTN00000000)|(?:ISRCTN12345678)|(?:[0\\.-:\\?\\h\\*]+)",
+            Pattern.CASE_INSENSITIVE);
     // TODO: "-"/"--" are none or unknown?
-    private static final Pattern P_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N\\/?A).*", Pattern.CASE_INSENSITIVE);  // N/A
+    private static final Pattern P_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N\\/?A).*",
+            Pattern.CASE_INSENSITIVE); // N/A
     private static final Pattern P_NONE = Pattern.compile(".*\\b(none|no)\\b.*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_UNKNOWN = Pattern.compile(".*\\b(unknown|not\\h*specified|not\\h*stated)\\b.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_UNKNOWN = Pattern.compile(".*\\b(unknown|not\\h*specified|not\\h*stated)\\b.*",
+            Pattern.CASE_INSENSITIVE);
     // TODO: N/A != none?
     // TODO: "-" as no limit?
     private static final Pattern P_AGE_NOT_APPLICABLE = Pattern.compile(
-        ".*(not\\h*applicable|N/?A|no\\h*limit|no|none|-2147483648).*", 
-        Pattern.CASE_INSENSITIVE);  // N/A / No limit
+            ".*(not\\h*applicable|N/?A|no\\h*limit|no|none|-2147483648).*",
+            Pattern.CASE_INSENSITIVE); // N/A / No limit
     // [number][unit] possibly with gt/lt in front (gte/lte is not interesting here)
     private static final Pattern P_AGE = Pattern.compile(
-        "[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*", 
-        Pattern.CASE_INSENSITIVE);
+            "[^0-9]*([<>][^=])?\\h*([0-9]+\\.?[0-9]*)\\h*(minute|hour|day|week|month|year|age)?.*",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern P_TYPE_INTERVENTIONAL = Pattern.compile(
-        ".*(BA\\/BE|intervention\\w*)\\b(?!.*observation).*", 
-        Pattern.CASE_INSENSITIVE);
+            ".*(BA\\/BE|intervention\\w*)\\b(?!.*observation).*",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern P_TYPE_OBSERVATIONAL = Pattern.compile(
-        ".*(PMS|factors|epidemio?logical|^observation\\w*)\\b(?!\\h+invasive).*", 
-        Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_TYPE_OTHER = Pattern.compile(".*(observational\\h+invasive|other\\w*).*", Pattern.CASE_INSENSITIVE);
+            ".*(PMS|factors|epidemio?logical|^observation\\w*)\\b(?!\\h+invasive).*",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_TYPE_OTHER = Pattern.compile(".*(observational\\h+invasive|other\\w*).*",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern P_TYPE_BASIC_SCIENCE = Pattern.compile(".*basic.*", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_TYPE_EXPANDED_ACCESS = Pattern.compile(".*expanded.*", Pattern.CASE_INSENSITIVE);
-    private static final String PHASE_NBS = "0|1|2|3|4|iv|iii|ii|i";  // No subroutines in Java Regex
+    private static final String PHASE_NBS = "0|1|2|3|4|iv|iii|ii|i"; // No subroutines in Java Regex
     private static final Pattern P_PHASE_NUMBER = Pattern.compile(
-        "^(Phase|Early\\h+phase)?[-|\\h]*(0|1|2|3|4|iv|iii|ii|i)(?>[^1234iv\\n]+\\b(0|1|2|3|4|iv|iii|ii|i))?.*", 
-        Pattern.CASE_INSENSITIVE);
+            "^(Phase|Early\\h+phase)?[-|\\h]*(0|1|2|3|4|iv|iii|ii|i)(?>[^1234iv\\n]+\\b(0|1|2|3|4|iv|iii|ii|i))?.*",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern P_PHASE_VERBOSE = Pattern.compile(
-        ".*Phase\\h*i\\):\\h*(no|yes)?.*\\(Phase\\h*ii\\):\\h*(no|yes)?.*\\(Phase\\h*iii\\):\\h*(no|yes)?.*\\(Phase\\h*iv\\):\\h*(no|yes)?.*", 
-        Pattern.CASE_INSENSITIVE);
+            ".*Phase\\h*i\\):\\h*(no|yes)?.*\\(Phase\\h*ii\\):\\h*(no|yes)?.*\\(Phase\\h*iii\\):\\h*(no|yes)?.*\\(Phase\\h*iv\\):\\h*(no|yes)?.*",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern P_FEATURE_INTERVENTIONAL = Pattern.compile(
-        "(allocation\\h*:\\h*([^.,;]*)([\\.,;]))?\\h*(intervention\\h* model\\h*:\\h*([^.,;]*)\\3)?\\h*(primary\\h*purpose\\h*:\\h*([^.,;]*)\\3)?\\h*(masking\\h*:\\h*(.*)\\3)?.*", 
-        Pattern.CASE_INSENSITIVE);
+            "(allocation\\h*:\\h*([^.,;]*)([\\.,;]))?\\h*(intervention\\h* model\\h*:\\h*([^.,;]*)\\3)?\\h*(primary\\h*purpose\\h*:\\h*([^.,;]*)\\3)?\\h*(masking\\h*:\\h*(.*)\\3)?.*",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern P_GENDER_ALL = Pattern.compile("^\\h*(all|both|b).*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_GENDER_STRUCTURED = Pattern.compile(".*(Female:\\h*(\\w+|)).*(Male:\\h*(\\w+|)).*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_GENDER_MF = Pattern.compile("^\\h*((?:<br>\\h*)?\\b(male|men|m)\\w*\\b)(.*(female|women|f)\\w*\\b)?.*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_GENDER_FM = Pattern.compile("^\\h*(\\b(female|women|f)\\w*\\b)(.*(male|men|m)\\w*\\b)?.*", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_IEC_NONE = Pattern.compile("^((?:inclusion|exclusion) criteria):\\h*(|no\\w*(?:\\h*exclusion\\h*criteria)?|\\/)\\.?$", 
-        Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_IEC_NA = Pattern.compile("^((?:inclusion|exclusion) criteria):\\h*(not\\h*applicable|n\\/?a)\\.?$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_URL = Pattern.compile("\\b[^\\s]+\\.(pdf|doc|[a-zA-Z]).*\\b", Pattern.CASE_INSENSITIVE); // TODO: improve probably
+    private static final Pattern P_GENDER_STRUCTURED = Pattern.compile(".*(Female:\\h*(\\w+|)).*(Male:\\h*(\\w+|)).*",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_GENDER_MF = Pattern.compile(
+            "^\\h*((?:<br>\\h*)?\\b(male|men|m)\\w*\\b)(.*(female|women|f)\\w*\\b)?.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_GENDER_FM = Pattern
+            .compile("^\\h*(\\b(female|women|f)\\w*\\b)(.*(male|men|m)\\w*\\b)?.*", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_IEC_NONE = Pattern.compile(
+            "^((?:inclusion|exclusion) criteria):\\h*(|no\\w*(?:\\h*exclusion\\h*criteria)?|\\/)\\.?$",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_IEC_NA = Pattern.compile(
+            "^((?:inclusion|exclusion) criteria):\\h*(not\\h*applicable|n\\/?a)\\.?$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_URL = Pattern.compile("\\b[^\\s]+\\.(pdf|doc|[a-zA-Z]).*\\b",
+            Pattern.CASE_INSENSITIVE); // TODO: improve probably
     private static final Pattern P_FIX_EUCTR = Pattern.compile("(?<!:)\\/\\/", Pattern.CASE_INSENSITIVE);
 
     private static final String IC_PREFIX = "Inclusion criteria: ";
@@ -108,16 +114,18 @@ public class WhoConverter extends CacheConverter
 
     private String headersFilePath = "";
     private Map<String, Integer> fieldsToInd;
-    private String registry;    // Registry name
-    private boolean cache;  // Caching studies that have nct/euctr/ctis id
-    // Get a study's ID used for caching from any of its other IDs - key: trial id, value: single trial id used as key in this.studies
+    private String registry; // Registry name
+    private boolean cache; // Caching studies that have nct/euctr/ctis id
+    // Get a study's ID used for caching from any of its other IDs - key: trial id,
+    // value: single trial id used as key in this.studies
     private Map<String, String> mainTrialIdMap = new HashMap<String, String>();
     private HashMap<String, IDsHandler> previousSourcesStudyIDs = null;
 
     /**
      * Constructor
+     * 
      * @param writer the ItemWriter used to handle the resultant items
-     * @param model the Model
+     * @param model  the Model
      */
     public WhoConverter(ItemWriter writer, Model model) {
         super(writer, model, DATA_SOURCE_NAME, DATASET_TITLE);
@@ -139,19 +147,22 @@ public class WhoConverter extends CacheConverter
      * {@inheritDoc}
      */
     public void process(Reader reader) throws Exception {
-        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
+        /*
+         * Opened BufferedReader is passed as argument (from
+         * FileConverterTask.execute())
+         */
         this.startLogging("who");
         this.loadCountries();
 
         this.fieldsToInd = this.getHeaders();
 
         final CSVParser parser = new CSVParserBuilder()
-                                        .withSeparator(',')
-                                        .withQuoteChar('"')
-                                        .build();
+                .withSeparator(',')
+                .withQuoteChar('"')
+                .build();
         final CSVReader csvReader = new CSVReaderBuilder(reader)
-                                            .withCSVParser(parser)
-                                            .build();
+                .withCSVParser(parser)
+                .build();
 
         boolean skipNext = false;
 
@@ -188,7 +199,8 @@ public class WhoConverter extends CacheConverter
     }
 
     /**
-     * Parse and store values as MDRMine items and attributes, from a list of values of a line of the data file.
+     * Parse and store values as MDRMine items and attributes, from a list of values
+     * of a line of the data file.
      * 
      * @param lineValues the list of raw values of a line in the data file
      */
@@ -205,14 +217,16 @@ public class WhoConverter extends CacheConverter
         /* Secondary IDs */
         String secondaryIDs = this.getAndCleanValue(lineValues, "SecondaryIDs");
 
-        // In MDR model but unused; Unclear what the various values mean - certain bridging flag/childs 
-        // values with parent or child bridged type seem to refer to the same study and not additional/children studies
+        // In MDR model but unused; Unclear what the various values mean - certain
+        // bridging flag/childs
+        // values with parent or child bridged type seem to refer to the same study and
+        // not additional/children studies
         // Treating bridgingFlag and childs as other IDs of this study
         String bridgingFlag = this.getAndCleanValue(lineValues, "Bridging_flag");
         // TODO: unused?
         String bridgedType = this.getAndCleanValue(lineValues, "Bridged_type");
         String childs = this.getAndCleanValue(lineValues, "Childs");
-        
+
         // TODO EUCTR: check for additional IDs with existing study
         study = this.parseTrialIDsAndGetStudy(trialID, secondaryIDs, bridgingFlag, childs);
 
@@ -254,13 +268,15 @@ public class WhoConverter extends CacheConverter
 
         /* Brief description 1/3 (study design) */
         if (!this.existingStudy()) {
-            // Note: using the fields currently used by the MDR to construct the briefDescription value
+            // Note: using the fields currently used by the MDR to construct the
+            // briefDescription value
             // TODO: change/improve this field?
             ConverterUtils.addToBriefDescription(study, studyDesign);
         }
 
         /* Registry entry DO */
-        // "Date on which this record was first entered in the EudraCT database:" in EUCTR
+        // "Date on which this record was first entered in the EudraCT database:" in
+        // EUCTR
         String registrationDateStr = this.getAndCleanValue(lineValues, "Date_registration");
         LocalDate registrationDate = this.parseDate(registrationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
@@ -275,10 +291,13 @@ public class WhoConverter extends CacheConverter
         String resultsDatePostedStr = this.getAndCleanValue(lineValues, "results_date_posted");
         LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, null);
         String publicationYear = resultsDatePosted != null ? String.valueOf(resultsDatePosted.getYear()) : "";
-        // study.setAttributeIfNotNull("testField1", lastUpdate != null ? lastUpdate.toString() : null);
-        // study.setAttributeIfNotNull("testField2", registrationDate != null ? registrationDate.toString() : null);
+        // study.setAttributeIfNotNull("testField1", lastUpdate != null ?
+        // lastUpdate.toString() : null);
+        // study.setAttributeIfNotNull("testField2", registrationDate != null ?
+        // registrationDate.toString() : null);
 
-        // TODO EUCTR: replace updated date + registration date + publication year if existing study + start date more recent
+        // TODO EUCTR: replace updated date + registration date + publication year if
+        // existing study + start date more recent
         // TODO: publication year wrong
         this.createAndStoreRegistryEntryDO(study, url, registrationDate, publicationYear, lastUpdate);
 
@@ -287,15 +306,17 @@ public class WhoConverter extends CacheConverter
         // TODO: handle "verbose" values, example study: SLCTR/2017/032
         String targetSize = this.getAndCleanValue(lineValues, "Target_size");
         if (ConverterUtils.isPosWholeNumber(targetSize) && !(Long.valueOf(targetSize) > Integer.MAX_VALUE)) {
-            if (!this.existingStudy() || this.newerLastUpdate) {    // Updating planned enrolment for more recent last update date
+            if (!this.existingStudy() || this.newerLastUpdate) { // Updating planned enrolment for more recent last
+                                                                 // update date
                 study.setAttributeIfNotNull("plannedEnrolment", targetSize);
             }
         }
-        
+
         /* Study actual enrolment */
         // In EUCTR: for the whole clinical trial
         String resultsActualEnrolment = this.getAndCleanValue(lineValues, "results_actual_enrollment");
-        if (ConverterUtils.isPosWholeNumber(resultsActualEnrolment) && !(Long.valueOf(resultsActualEnrolment) > Integer.MAX_VALUE)) {
+        if (ConverterUtils.isPosWholeNumber(resultsActualEnrolment)
+                && !(Long.valueOf(resultsActualEnrolment) > Integer.MAX_VALUE)) {
             if (this.newerLastUpdate) { // Updating actual enrolment for more recent last update date
                 study.setAttributeIfNotNull("actualEnrolment", resultsActualEnrolment);
             }
@@ -303,7 +324,8 @@ public class WhoConverter extends CacheConverter
 
         /* Study status */
         // TODO: normalise values
-        // TODO EUCTR: logically replace values (e.g. recruiting instead of recruitment ended) 
+        // TODO EUCTR: logically replace values (e.g. recruiting instead of recruitment
+        // ended)
         String studyStatus = this.getAndCleanValue(lineValues, "Recruitment_status");
         if (!this.existingStudy()) {
             study.setAttributeIfNotNull("status", studyStatus);
@@ -316,17 +338,22 @@ public class WhoConverter extends CacheConverter
 
         // TODO EUCTR: check for new sponsors for existing study
         if (!this.existingStudy()) {
-            /* Primary and secondary sponsors, scientific support organisation (source support)*/
+            /*
+             * Primary and secondary sponsors, scientific support organisation (source
+             * support)
+             */
             this.createAndStoreStudyOrg(study, primarySponsor, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
             // TODO: there may be multiple sponsors in this field
             this.createAndStoreStudyOrg(study, secondarySponsors, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
-            // Checking if the source support string is different than the primary and secondary sponsors + is not "please refer to primary and secondary sponsors"
-            if (!sourceSupport.toLowerCase().contains("please") && !sourceSupport.equalsIgnoreCase(primarySponsor) && !sourceSupport.equalsIgnoreCase(secondarySponsors)) {
+            // Checking if the source support string is different than the primary and
+            // secondary sponsors + is not "please refer to primary and secondary sponsors"
+            if (!sourceSupport.toLowerCase().contains("please") && !sourceSupport.equalsIgnoreCase(primarySponsor)
+                    && !sourceSupport.equalsIgnoreCase(secondarySponsors)) {
                 this.createAndStoreStudyOrg(study, sourceSupport, ConverterCVT.CONTRIBUTOR_TYPE_STUDY_FUNDER);
             }
         }
 
-        /* Ethics decision date, can be a semi colon list  */
+        /* Ethics decision date, can be a semi colon list */
         // TODO
         String ethicsApprovalDateStr = this.getAndCleanValue(lineValues, "Ethics_Approval_Date");
         // study.setAttributeIfNotNull("testField4", ethicsApprovalDateStr);
@@ -380,19 +407,23 @@ public class WhoConverter extends CacheConverter
         String secondaryOutcomes = this.getAndCleanValue(lineValues, "Secondary_Outcomes");
         // Additional info with results_adverse_events field
         String resultsAdverseEvents = this.getAndCleanValue(lineValues, "results_adverse_events");
-        // Using resultsDatePosted field to ignore some placeholder links in resultsAdverseEvents
+        // Using resultsDatePosted field to ignore some placeholder links in
+        // resultsAdverseEvents
         this.parseSecondaryOutcomes(study, secondaryOutcomes, resultsAdverseEvents, resultsDatePosted);
 
-        // TODO: unused? seems to be somewhat overlapping with study status, 
-        // most of the time value is anticipated when status is pending and actual when status is recruiting
+        // TODO: unused? seems to be somewhat overlapping with study status,
+        // most of the time value is anticipated when status is pending and actual when
+        // status is recruiting
         // In MDR WHO model but unused
         String typeEnrolment = this.getAndCleanValue(lineValues, "type_enrolment");
-        
-        // Note: retrospective studies are, at the same proportion as non-retrospective studies, interventional (= the majority) -> seems wrong?
-        // Note: field changed from "Retrospective_flag" to "Prospective_registration" as of 10/7/2025
+
+        // Note: retrospective studies are, at the same proportion as non-retrospective
+        // studies, interventional (= the majority) -> seems wrong?
+        // Note: field changed from "Retrospective_flag" to "Prospective_registration"
+        // as of 10/7/2025
         String retrospectiveFlag = this.getAndCleanValue(lineValues, "Prospective_registration");
         this.parseRetrospectiveFlag(study, retrospectiveFlag);
-        
+
         /* Results summary DO */
         String resultsUrlLink = this.getAndCleanValue(lineValues, "results_url_link");
         // TODO: check if actual results summary? may not be for EUCTR trials at least
@@ -403,16 +434,21 @@ public class WhoConverter extends CacheConverter
         // TODO: update dates if existing study and later dates
         String resultsDateCompletedStr = this.getAndCleanValue(lineValues, "results_date_completed");
         LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr, null);
-        this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsSummary, resultsDatePosted, resultsDateCompleted);
+        this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsSummary, resultsDatePosted,
+                resultsDateCompleted);
 
         /* Results */
 
-        // Not in MDR, baseline chars = Factors that describe study participants at the beginning of the study
-        // Could fall under ObjectDescription, creating a new DO? -> what would be object type? or perhaps in study's briefDescription
+        // Not in MDR, baseline chars = Factors that describe study participants at the
+        // beginning of the study
+        // Could fall under ObjectDescription, creating a new DO? -> what would be
+        // object type? or perhaps in study's briefDescription
         String resultsBaselineChar = this.getAndCleanValue(lineValues, "results_baseline_char");
-        // Not in MDR, indicates participation dropout/follow-up (flow), unused or to add to briefdescription
+        // Not in MDR, indicates participation dropout/follow-up (flow), unused or to
+        // add to briefdescription
         String resultsParticipantFlow = this.getAndCleanValue(lineValues, "results_participant_flow");
-        // Not in MDR, outcome measures text, unused or add somehow to both primary and secondary outcomes
+        // Not in MDR, outcome measures text, unused or add somehow to both primary and
+        // secondary outcomes
         String resultsOutcomeMeasures = this.getAndCleanValue(lineValues, "results_outcome_measures");
 
         /* Protocol DO */
@@ -422,7 +458,8 @@ public class WhoConverter extends CacheConverter
 
         // Indicates if there is a plan to share IPD
         String resultsIPDPlan = this.getAndCleanValue(lineValues, "results_IPD_plan");
-        // Reason to not share if no plan to share, otherwise access details/sharing plan details
+        // Reason to not share if no plan to share, otherwise access details/sharing
+        // plan details
         String resultsIPDDescription = this.getAndCleanValue(lineValues, "results_IPD_description");
         this.parseDataSharingStatement(study, resultsIPDPlan, resultsIPDDescription);
 
@@ -450,20 +487,22 @@ public class WhoConverter extends CacheConverter
     /**
      * TODO
      * TODO: method is too long
+     * 
      * @param trialID
      * @param secondaryIDs
      * @return
      * @throws Exception
      */
-    public Item parseTrialIDsAndGetStudy(String trialID, String secondaryIDs, String bridgingFlag, String childs) throws Exception {
+    public Item parseTrialIDsAndGetStudy(String trialID, String secondaryIDs, String bridgingFlag, String childs)
+            throws Exception {
         Item study = null;
         List<String> euIds = new ArrayList<String>();
         List<String> otherIDs = new ArrayList<String>();
-        
+
         // Adding trialID, secondaryIDs, bridgingFlag and childs into one set
         Set<String> ids = Stream.concat(Arrays.stream(secondaryIDs.split(";")), Arrays.stream(childs.split(";")))
-                            .map(String::strip)
-                            .collect(Collectors.toSet());
+                .map(String::strip)
+                .collect(Collectors.toSet());
         ids.add(bridgingFlag);
         ids.add(trialID);
 
@@ -477,7 +516,8 @@ public class WhoConverter extends CacheConverter
             if (!P_NONVALID_ID.matcher(id).matches()) {
                 Matcher mEu = ConverterUtils.P_EU_ID.matcher(id);
 
-                // Attempting to match against ID types that have dedicated fields (ctis, euctr, nct)
+                // Attempting to match against ID types that have dedicated fields (ctis, euctr,
+                // nct)
                 if (ConverterUtils.P_NCT_ID.matcher(id).matches()) {
                     if (idsH.nctID.isEmpty()) {
                         idsH.nctID = id;
@@ -497,20 +537,23 @@ public class WhoConverter extends CacheConverter
                                 // Setting CTIS ID without prefix and suffix
                                 idsH.ctisID = euId;
                             } else if (!idsH.ctisID.equals(euId)) {
-                                this.writeLog("CTIS id already set, existing id: " + idsH.ctisID + "; parsed id: " + euId);
+                                this.writeLog(
+                                        "CTIS id already set, existing id: " + idsH.ctisID + "; parsed id: " + euId);
                             }
                         } else {
                             this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " + id);
                         }
-                    } else if (euctrPrefix != null || euctrSuffix != null) {    // EUCTR ID
+                    } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
                         if (idsH.euctrID.isEmpty()) {
                             // Setting EUCTR ID without prefix and suffix
                             idsH.euctrID = euId;
                         } else if (idsH.euctrID.equals(euId)) {
-                            this.writeLog("EUCTR id already set, existing id: " + idsH.euctrID + "; parsed id: " + euId);
+                            this.writeLog(
+                                    "EUCTR id already set, existing id: " + idsH.euctrID + "; parsed id: " + euId);
                         }
-                        
-                        // TODO: handle case where EUCTR ID ends up different from already set ID in study found with other ID, current country discrepancy in this case
+
+                        // TODO: handle case where EUCTR ID ends up different from already set ID in
+                        // study found with other ID, current country discrepancy in this case
                         // Country code, only processing if euctrID is main ID
                         if (euctrSuffix != null && id.equals(trialID)) {
                             // TODO: handle "Outside-EU/EEA" country code
@@ -522,12 +565,13 @@ public class WhoConverter extends CacheConverter
                                 }
                             }
                         }
-                    } else {    // Undistinguishable ID
+                    } else { // Undistinguishable ID
                         if (!idsH.ctisID.isEmpty()) {
                             if (idsH.euctrID.isEmpty()) {
                                 idsH.euctrID = euId;
                             } else {
-                                this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: " + euId + "; full string of IDs: " + ids);
+                                this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: " + euId
+                                        + "; full string of IDs: " + ids);
                             }
                         } else if (!idsH.ctisID.isEmpty()) {
                             idsH.ctisID = euId;
@@ -547,12 +591,14 @@ public class WhoConverter extends CacheConverter
                 this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + ids);
             } else if (euIds.size() == 2) {
                 if (!idsH.ctisID.isEmpty() || !idsH.euctrID.isEmpty()) {
-                    this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds + "; full string of IDs: " + ids);
+                    this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds
+                            + "; full string of IDs: " + ids);
                 } else {
                     String id1 = euIds.get(0);
                     String id2 = euIds.get(1);
 
-                    // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
+                    // Assuming that the more recent ID (year + sequential part after) is the CTIS
+                    // ID, and the other is the EUCTR ID
                     if (id1.compareTo(id2) > 0) {
                         idsH.ctisID = id1;
                         idsH.euctrID = id2;
@@ -561,13 +607,15 @@ public class WhoConverter extends CacheConverter
                         idsH.euctrID = id1;
                     }
                 }
-            } else {    // 1 ID
+            } else { // 1 ID
                 if (!idsH.ctisID.isEmpty() && !idsH.euctrID.isEmpty()) {
-                    this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds + "; full string of IDs: " + ids);
+                    this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds
+                            + "; full string of IDs: " + ids);
                 } else {
                     String id1 = euIds.get(0);
 
-                    // Note: if both ctisID and euctrID have not been set before, we populate both fields hoping for a merge to correct the fields later
+                    // Note: if both ctisID and euctrID have not been set before, we populate both
+                    // fields hoping for a merge to correct the fields later
                     if (idsH.ctisID.isEmpty()) {
                         idsH.ctisID = id1;
                     }
@@ -587,28 +635,31 @@ public class WhoConverter extends CacheConverter
             IDsHandler idsList = this.previousSourcesStudyIDs.getOrDefault(parsedIDs[i], null);
             if (idsList != null) {
                 // TODO: don't log if duplicate
-                this.writeLog("Found id from previous source: " + parsedIDs[i]);
+                // this.writeLog("Found id from previous source: " + parsedIDs[i]);
                 allIdsSet.add(idsList);
             }
         }
 
-        /* 
-            All previous studies found are distinct, we need to pick the most appropriate one if multiple were found, 
-            and remove any ID that would be common with other previous studies, e.g.
-            previous study 1: CTIS2016-004754-15 NCT03059446 EUCTR2016-004754-15
-            previous study 2: CTIS() NCT02217475 EUCTR2014-003164-21
-            parsed ID: CTIS() NCT02217475 EUCTR2016-004754-15
-        */
+        /*
+         * All previous studies found are distinct, we need to pick the most appropriate
+         * one if multiple were found,
+         * and remove any ID that would be common with other previous studies, e.g.
+         * previous study 1: CTIS2016-004754-15 NCT03059446 EUCTR2016-004754-15
+         * previous study 2: CTIS() NCT02217475 EUCTR2014-003164-21
+         * parsed ID: CTIS() NCT02217475 EUCTR2016-004754-15
+         */
         if (allIdsSet.size() > 0) {
-            IDsHandler idsList; 
+            IDsHandler idsList;
             if (allIdsSet.size() == 1) {
                 idsList = allIdsSet.iterator().next();
             } else {
                 List<IDsHandler> allIdsList = new ArrayList<IDsHandler>(allIdsSet);
-                // TODO: match against title (with LevenshteinDistance) instead of arbitrarily taking 1st idsList
+                // TODO: match against title (with LevenshteinDistance) instead of arbitrarily
+                // taking 1st idsList
                 idsList = allIdsList.get(0);
 
-                // Note: if anything matches here, that means we have a "previous studies: NCT03 + 2016-, NCT02 + 2014- current study: NCT02 + 2016-" situation
+                // Note: if anything matches here, that means we have a "previous studies: NCT03
+                // + 2016-, NCT02 + 2014- current study: NCT02 + 2016-" situation
 
                 // Removing all IDs conflicting with other previous studies
                 for (int i = 1; i < allIdsList.size(); i++) {
@@ -631,39 +682,47 @@ public class WhoConverter extends CacheConverter
                 }
             }
 
-            /* Handling various cases regarding CTIS and EUCTR IDs, as they can be equal (both in previous study IDs and parsed IDs) */
+            /*
+             * Handling various cases regarding CTIS and EUCTR IDs, as they can be equal
+             * (both in previous study IDs and parsed IDs)
+             */
             idsH.updateIDs(idsList.ctisID, idsList.nctID, idsList.euctrID);
         }
 
         /* Attempting to find an existing (cached) study from the IDs we have */
-        HashSet<String> seenIds = new HashSet<String>();    // To avoid checking for the same ID multiple times
-        for (String id: idsH.getIDsList()) {
+        HashSet<String> seenIds = new HashSet<String>(); // To avoid checking for the same ID multiple times
+        for (String id : idsH.getIDsList()) {
             if (this.mainTrialIdMap.containsKey(id)) {
                 String mainId = this.mainTrialIdMap.get(id);
-                
-                if (this.existingStudy == null) {   // Regular case
+
+                if (this.existingStudy == null) { // Regular case
                     this.existingStudy = this.studies.get(mainId);
                     study = this.existingStudy;
                     this.currentTrialID = mainId;
                     seenIds.add(mainId);
-                } else if (!seenIds.contains(mainId)) { // Existing study, meaning 2 existing studies are linked by a 3rd study (=the current record being parsed)
-                    // TODO: add handling of IDs who are not euctr/ctis/nct but are in the 1st field in the WHO data
-                    // TODO: merge info from the study to be deleted with the current study before deleting it
+                } else if (!seenIds.contains(mainId)) { // Existing study, meaning 2 existing studies are linked by a
+                                                        // 3rd study (=the current record being parsed)
+                    // TODO: add handling of IDs who are not euctr/ctis/nct but are in the 1st field
+                    // in the WHO data
+                    // TODO: merge info from the study to be deleted with the current study before
+                    // deleting it
 
                     // Test if we found a different instance of the same study
                     if (!this.existingStudy.getIdentifier().equals(this.studies.get(mainId).getIdentifier())) {
                         // Deleting previously cached study and all cached items linked to that study
                         this.removeStudyAndLinkedItems(mainId);
-                        // Re-adding the entry pointing to the existing study previously found, to not break the mainTrialIdMap
+                        // Re-adding the entry pointing to the existing study previously found, to not
+                        // break the mainTrialIdMap
                         this.studies.put(mainId, this.existingStudy);
-                        this.writeLog("Found 2 different instances of the same study, ids: " + this.currentTrialID + ", " + mainId + ", deleting the second study");
+                        this.writeLog("Found 2 different instances of the same study, ids: " + this.currentTrialID
+                                + ", " + mainId + ", deleting the second study");
                     }
 
                     seenIds.add(mainId);
                 }
             }
         }
-        
+
         // Not an already existing study
         if (study == null) {
             study = createItem("Study");
@@ -672,9 +731,9 @@ public class WhoConverter extends CacheConverter
         /* Setting the various ID fields */
 
         // TODO: could be null or not?
-        String existingCtisID = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
-        String existingNctID = ConverterUtils.getValueOfItemAttribute(study, "nctID");
-        String existingEuctrID = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
+        String existingCtisID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
+        String existingNctID = ConverterUtils.getAttrValue(study, "nctID");
+        String existingEuctrID = ConverterUtils.getAttrValue(study, "euctrID");
         idsH.updateIDs(existingCtisID, existingNctID, existingEuctrID);
 
         if (!ConverterUtils.isNullOrEmptyOrBlank(idsH.ctisID)) {
@@ -707,16 +766,19 @@ public class WhoConverter extends CacheConverter
             }
         }
 
-        // Note: Not setting any other ID types as "primaryIdentifier" as there are some garbage IDs in "TrialID" field and non-unique IDs in "SecondaryIDs" field
+        // Note: Not setting any other ID types as "primaryIdentifier" as there are some
+        // garbage IDs in "TrialID" field and non-unique IDs in "SecondaryIDs" field
         // Setting currentTrialID however since it's just used for logging
         if (this.currentTrialID == null) {
-            this.writeLog("Current study has no CTIS/NCT/EUCTR ID to be used as primary identifier, using this id: " + trialID);
+            this.writeLog("Current study has no CTIS/NCT/EUCTR ID to be used as primary identifier, using this id: "
+                    + trialID);
             this.currentTrialID = trialID;
         } else {
             this.studies.put(this.currentTrialID, study);
 
-            // Adding this study's other IDs along with the main ID to be able to find it in the studies map
-            for (String id: idsH.getIDsList()) {
+            // Adding this study's other IDs along with the main ID to be able to find it in
+            // the studies map
+            for (String id : idsH.getIDsList()) {
                 if (!ConverterUtils.isNullOrEmptyOrBlank(id) && !this.mainTrialIdMap.containsKey(id)) {
                     this.mainTrialIdMap.put(id, this.currentTrialID);
                 }
@@ -725,19 +787,22 @@ public class WhoConverter extends CacheConverter
             // Caching study if currentTrialID is not null (=euctr/ctis/nct id)
             if (!this.existingStudy()) {
                 this.cache = true;
-                this.writeLog("New study, to be cached: " + this.currentTrialID);
+                // this.writeLog("New study, to be cached: " + this.currentTrialID);
             } else {
-                this.writeLog("Existing study: " + this.currentTrialID);
+                // this.writeLog("Existing study: " + this.currentTrialID);
+                ;
             }
         }
 
         // Storing other IDs
         // TODO: infer ID type
-        for (String id: otherIDs) {
-            // Adding IDs if not an existing study or not added already for an existing study
-            if (!this.existingStudy() || (this.getItemFromItemMap(study, this.studyIdentifiers, "identifierValue", id) == null)) {
-                this.createAndStoreClassItem(study, "StudyIdentifier", 
-                    new String[][]{{"identifierValue", id}});
+        for (String id : otherIDs) {
+            // Adding IDs if not an existing study or not added already for an existing
+            // study
+            if (!this.existingStudy()
+                    || (this.getItemFromItemMap(study, this.studyIdentifiers, "identifierValue", id) == null)) {
+                this.createAndStoreClassItem(study, "StudyIdentifier",
+                        new String[][] { { "identifierValue", id } });
             }
         }
 
@@ -749,7 +814,8 @@ public class WhoConverter extends CacheConverter
      */
     public void addStudySource(Item study) throws Exception {
         if (!this.existingStudy()) {
-            this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_WHO}});
+            this.createAndStoreClassItem(study, "StudySource",
+                    new String[][] { { "name", ConverterCVT.SOURCE_NAME_WHO } });
         }
     }
 
@@ -757,10 +823,11 @@ public class WhoConverter extends CacheConverter
      * TODO
      */
     public void parseTitle(Item study, String title, String titleType) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(title) && !title.equals("-") && !title.equals("_") && !title.equals(".")) {
+        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(title) && !title.equals("-")
+                && !title.equals("_") && !title.equals(".")) {
             this.createAndStoreClassItem(study, "Title",
-                new String[][]{{"text", title}, {"type", titleType}});
-            
+                    new String[][] { { "text", title }, { "type", titleType } });
+
             if (!study.hasAttribute("displayTitle")) {
                 study.setAttributeIfNotNull("displayTitle", title);
             }
@@ -768,10 +835,11 @@ public class WhoConverter extends CacheConverter
     }
 
     /**
-     * Parse Public_Contact or Scientific_Contact input fields to create StudyPeople items.
+     * Parse Public_Contact or Scientific_Contact input fields to create StudyPeople
+     * items.
      * 
-     * @param study the study item to link to study people
-     * @param lineValues the list of all values for a line in the data file
+     * @param study       the study item to link to study people
+     * @param lineValues  the list of all values for a line in the data file
      * @param contactType public or scientific contact
      */
     public void parseContact(Item study, String[] lineValues, String contactType) throws Exception {
@@ -788,7 +856,7 @@ public class WhoConverter extends CacheConverter
             } else {
                 throw new Exception("Unknown value \"" + contactType + "\" for contactType arg of parseContact()");
             }
-            
+
             String firstNamesString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Firstname"));
             if (!ConverterUtils.isNullOrEmptyOrBlank(firstNamesString)) {
                 firstNames = firstNamesString.split(";");
@@ -804,7 +872,10 @@ public class WhoConverter extends CacheConverter
                 affiliations = affiliationsString.split(";");
             }
 
-            /* Address and phone strings present in WHO are unused here since they don't appear in our model */
+            /*
+             * Address and phone strings present in WHO are unused here since they don't
+             * appear in our model
+             */
             // Using the field with the most semi-colon-separated elements for iterating
             int maxLen = Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length);
 
@@ -817,16 +888,18 @@ public class WhoConverter extends CacheConverter
                     affiliation = "";
 
                     // TODO: possible that the string ends with both semi-colons?
-                    
+
                     // First name
                     if (!ConverterUtils.isNullOrEmptyOrBlank(firstNamesString)) {
                         if (firstNamesString.endsWith(";") && i < firstNames.length) {
                             firstName = firstNames[i];
                         } else if (firstNames.length + i - maxLen >= 0) {
-                            // If the string starts with a semi-colon or not, the indexing is the same as length == maxLen if there is no semi-colon
+                            // If the string starts with a semi-colon or not, the indexing is the same as
+                            // length == maxLen if there is no semi-colon
                             firstName = firstNames[firstNames.length + i - maxLen].strip();
                         } else {
-                            this.writeLog("parseContact(): line parsing error, firstName values list is missing a value");
+                            this.writeLog(
+                                    "parseContact(): line parsing error, firstName values list is missing a value");
                         }
                     }
 
@@ -835,10 +908,12 @@ public class WhoConverter extends CacheConverter
                         if (lastNamesString.endsWith(";") && i < lastNames.length) {
                             lastName = lastNames[i];
                         } else if (lastNames.length + i - maxLen >= 0) {
-                            // If the string starts with a semi-colon or not, the indexing is the same as length == maxLen if there is no semi-colon
+                            // If the string starts with a semi-colon or not, the indexing is the same as
+                            // length == maxLen if there is no semi-colon
                             lastName = lastNames[lastNames.length + i - maxLen].strip();
                         } else {
-                            this.writeLog("parseContact(): line parsing error, lastName values list is missing a value");
+                            this.writeLog(
+                                    "parseContact(): line parsing error, lastName values list is missing a value");
                         }
                     }
 
@@ -847,10 +922,12 @@ public class WhoConverter extends CacheConverter
                         if (affiliationsString.endsWith(";") && i < affiliations.length) {
                             affiliation = affiliations[i];
                         } else if (affiliations.length + i - maxLen >= 0) {
-                            // If the string starts with a semi-colon or not, the indexing is the same as length == maxLen if there is no semi-colon
+                            // If the string starts with a semi-colon or not, the indexing is the same as
+                            // length == maxLen if there is no semi-colon
                             affiliation = affiliations[affiliations.length + i - maxLen].strip();
                         } else {
-                            this.writeLog("parseContact(): line parsing error, affiliation values list is missing a value");
+                            this.writeLog(
+                                    "parseContact(): line parsing error, affiliation values list is missing a value");
                         }
                     }
 
@@ -860,7 +937,8 @@ public class WhoConverter extends CacheConverter
                     // TODO: handle affiliation differently? (same for multiple people) NCT04163835
                     // TODO: how to avoid duplicates that are not really duplicates? NCT04163835
                     // TODO: also set organisation field?
-                    // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/af313e05f60012df56c8a6dd3cbb73a9fe1cd906/GeneralHelpers/StringFunctions.cs#L947
+                    // Check MDR code for this:
+                    // https://github.com/scanhamman/MDR_Harvester/blob/af313e05f60012df56c8a6dd3cbb73a9fe1cd906/GeneralHelpers/StringFunctions.cs#L947
                 }
             }
         }
@@ -869,20 +947,23 @@ public class WhoConverter extends CacheConverter
     /**
      * TODO
      * 
-     * @param firstName the first name value
-     * @param lastName the last name value
+     * @param firstName   the first name value
+     * @param lastName    the last name value
      * @param affiliation the affiliation value
      * @param contactType public or scientific contact
      */
-    public void createAndStoreContact(Item study, String firstName, String lastName, String affiliation, String contactType) throws Exception {
-        // TODO: attempt at separating first name/last name if one of firstName/lastName is empty?
-        // Check MDR code for this: https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
+    public void createAndStoreContact(Item study, String firstName, String lastName, String affiliation,
+            String contactType) throws Exception {
+        // TODO: attempt at separating first name/last name if one of firstName/lastName
+        // is empty?
+        // Check MDR code for this:
+        // https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
 
         String givenName = null;
         String familyName = null;
         String fullName = null;
         String contribType = null;
-        
+
         if (!ConverterUtils.isNullOrEmptyOrBlank(firstName) && !ConverterUtils.isNullOrEmptyOrBlank(lastName)) {
             givenName = firstName;
             familyName = lastName;
@@ -896,23 +977,25 @@ public class WhoConverter extends CacheConverter
         if (contactType.equalsIgnoreCase("public")) {
             contribType = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
         } else {
-            // Exception already thrown earlier so value can't be anything other than "scientific"
+            // Exception already thrown earlier so value can't be anything other than
+            // "scientific"
             contribType = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
         }
 
         // TODO: fix affiliation
         this.createAndStoreClassItem(study, "Person",
-            new String[][]{{"givenName", givenName}, {"familyName", familyName},
-                            {"fullName", fullName}, {"affiliation", affiliation}, {"contribType", contribType}});
+                new String[][] { { "givenName", givenName }, { "familyName", familyName },
+                        { "fullName", fullName }, { "affiliation", affiliation }, { "contribType", contribType } });
     }
 
     /**
      * Parse min/max age value to set age value and unit fields.
      * 
-     * @param study the study item containing the attributes to set
-     * @param ageStr the age string
-     * @param ageAttr the age attribute name to set (either minAge or maxAge)
-     * @param unitAttr the unit attribute name to set (either minAgeUnit or maxAgeUnit)
+     * @param study    the study item containing the attributes to set
+     * @param ageStr   the age string
+     * @param ageAttr  the age attribute name to set (either minAge or maxAge)
+     * @param unitAttr the unit attribute name to set (either minAgeUnit or
+     *                 maxAgeUnit)
      */
     public void parseAgeField(Item study, String ageStr, String ageAttr, String unitAttr) {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(ageStr)) {
@@ -920,7 +1003,7 @@ public class WhoConverter extends CacheConverter
             Matcher mAgeNotApplicable = P_AGE_NOT_APPLICABLE.matcher(ageStr);
             if (mAgeNotApplicable.matches()) {
                 study.setAttributeIfNotNull(ageAttr, ConverterCVT.NOT_APPLICABLE);
-            } else {    // Not stated
+            } else { // Not stated
                 Matcher mAgeNotStated = P_UNKNOWN.matcher(ageStr);
                 if (mAgeNotStated.matches()) {
                     study.setAttributeIfNotNull(ageAttr, ConverterCVT.NOT_STATED);
@@ -928,9 +1011,9 @@ public class WhoConverter extends CacheConverter
                     Matcher mAge = P_AGE.matcher(ageStr);
                     boolean successful = false;
                     if (mAge.matches()) {
-                        String g1 = mAge.group(1);  // GT or LT
-                        String g2 = mAge.group(2);  // age value
-                        String g3 = mAge.group(3);  // age unit
+                        String g1 = mAge.group(1); // GT or LT
+                        String g2 = mAge.group(2); // age value
+                        String g3 = mAge.group(3); // age unit
                         if (!(g2 == null)) {
                             if (NumberUtils.isParsable(g2)) {
                                 if (NumberUtils.isDigits(g2)) {
@@ -941,49 +1024,51 @@ public class WhoConverter extends CacheConverter
                                         ageNumber = Integer.parseInt(g2);
                                     }
 
-                                    if (g1 != null) {    // GT/LT
+                                    if (g1 != null) { // GT/LT
                                         if (ageAttr.equalsIgnoreCase("minage")) {
                                             if (g1.equals(">")) {
                                                 ageNumber++;
                                             } else {
                                                 this.writeLog("Wrong inequality sign for minAgeUnit: "
-                                                                + g1 + " full string: " + ageStr);
+                                                        + g1 + " full string: " + ageStr);
                                             }
                                         } else if (ageAttr.equalsIgnoreCase("maxage")) {
                                             if (g1.equals("<")) {
                                                 ageNumber--;
                                             } else {
                                                 this.writeLog("Wrong inequality sign for maxAgeUnit: "
-                                                                + g1 + " full string: " + ageStr);
+                                                        + g1 + " full string: " + ageStr);
                                             }
                                         }
                                     }
 
                                     study.setAttributeIfNotNull(ageAttr, String.valueOf(ageNumber));
-                                } else {    // Case where min age value is float
+                                } else { // Case where min age value is float
                                     study.setAttributeIfNotNull(ageAttr, g2);
                                 }
 
                                 // TODO: how to check unit against data?
                                 if (!(g3 == null || g3.equalsIgnoreCase("age"))) {
                                     study.setAttributeIfNotNull(unitAttr, ConverterUtils.normaliseUnit(g3));
-                                } else {    // If no unit (or unit is "age"), we assume it's years
+                                } else { // If no unit (or unit is "age"), we assume it's years
                                     study.setAttributeIfNotNull(unitAttr, "Years");
                                 }
 
                                 successful = true;
                             } else {
-                                this.writeLog("Wrong format minAge value: " 
-                                                + g2 + " full string: " + ageStr);
+                                this.writeLog("Wrong format minAge value: "
+                                        + g2 + " full string: " + ageStr);
                             }
                         }
                         if (!successful) {
-                            this.writeLog("Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
-                                ", parsed groups: -g1: " + g1 + " -g2: " + g2 + " -g3: " + g3);
+                            this.writeLog(
+                                    "Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr +
+                                            ", parsed groups: -g1: " + g1 + " -g2: " + g2 + " -g3: " + g3);
                         }
                     } else {
-                        this.writeLog("Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr + 
-                            ", no matches found");
+                        this.writeLog(
+                                "Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr +
+                                        ", no matches found");
                     }
                 }
             }
@@ -993,36 +1078,37 @@ public class WhoConverter extends CacheConverter
     /**
      * Parse study type input to set value of study type field.
      * 
-     * @param study the study item to set the study type value of
+     * @param study        the study item to set the study type value of
      * @param studyTypeStr the input study type string
      */
     public void parseStudyType(Item study, String studyTypeStr) {
 
-        if ((!this.existingStudy() || !study.hasAttribute("type")) && !ConverterUtils.isNullOrEmptyOrBlank(studyTypeStr)) {
+        if ((!this.existingStudy() || !study.hasAttribute("type"))
+                && !ConverterUtils.isNullOrEmptyOrBlank(studyTypeStr)) {
             Matcher mTypeInterventional = P_TYPE_INTERVENTIONAL.matcher(studyTypeStr);
-            if (mTypeInterventional.matches()) {    // Interventional
+            if (mTypeInterventional.matches()) { // Interventional
                 study.setAttributeIfNotNull("type", ConverterCVT.TYPE_INTERVENTIONAL);
-            } else {    // Observational
+            } else { // Observational
                 Matcher mTypeObservational = P_TYPE_OBSERVATIONAL.matcher(studyTypeStr);
                 if (mTypeObservational.matches()) {
                     study.setAttributeIfNotNull("type", ConverterCVT.TYPE_OBSERVATIONAL);
-                } else {    // Other
+                } else { // Other
                     Matcher mTypeOther = P_TYPE_OTHER.matcher(studyTypeStr);
                     if (mTypeOther.matches()) {
                         study.setAttributeIfNotNull("type", ConverterCVT.TYPE_OTHER);
-                    } else {    // Basic science
+                    } else { // Basic science
                         Matcher mTypeBasicScience = P_TYPE_BASIC_SCIENCE.matcher(studyTypeStr);
                         if (mTypeBasicScience.matches()) {
                             study.setAttributeIfNotNull("type", ConverterCVT.TYPE_BASIC_SCIENCE);
-                        } else {    // N/A
+                        } else { // N/A
                             Matcher mTypeNA = P_NOT_APPLICABLE.matcher(studyTypeStr);
                             if (mTypeNA.matches()) {
                                 study.setAttributeIfNotNull("type", ConverterCVT.NOT_APPLICABLE);
-                            } else {    // Expanded access
+                            } else { // Expanded access
                                 Matcher mTypeExpandedAcess = P_TYPE_EXPANDED_ACCESS.matcher(studyTypeStr);
                                 if (mTypeExpandedAcess.matches()) {
                                     study.setAttributeIfNotNull("type", ConverterCVT.TYPE_EXPANDED_ACCESS);
-                                } else {    // Unknown
+                                } else { // Unknown
                                     study.setAttributeIfNotNull("type", ConverterCVT.UNKNOWN);
                                 }
                             }
@@ -1036,7 +1122,7 @@ public class WhoConverter extends CacheConverter
     /**
      * Parse phase input to create a StudyFeature item.
      * 
-     * @param study the study item to link to study features
+     * @param study    the study item to link to study features
      * @param phaseStr the input phase string
      */
     public void parsePhase(Item study, String phaseStr) throws Exception {
@@ -1044,70 +1130,75 @@ public class WhoConverter extends CacheConverter
             String featureValue = null;
 
             Matcher mPhaseNumber = P_PHASE_NUMBER.matcher(phaseStr);
-            if (mPhaseNumber.matches()) {   // "Numbers" match
+            if (mPhaseNumber.matches()) { // "Numbers" match
                 String phase = mPhaseNumber.group(1);
                 String nb1 = mPhaseNumber.group(2);
                 String nb2 = mPhaseNumber.group(3);
                 if (nb1 != null) {
-                    if ((phase != null && phase.toLowerCase().contains("early")) || nb1.equals("0")) {  // Early phase 1
+                    if ((phase != null && phase.toLowerCase().contains("early")) || nb1.equals("0")) { // Early phase 1
                         featureValue = ConverterCVT.FEATURE_V_EARLY_PHASE_1;
                         if (nb2 != null) {
-                            this.writeLog("Anomaly: second number matched for early phase string, phase: " 
-                                            + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
+                            this.writeLog("Anomaly: second number matched for early phase string, phase: "
+                                    + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
                         }
-                    } else if (nb2 != null && !nb1.equalsIgnoreCase(nb2)) {   // Two phases
+                    } else if (nb2 != null && !nb1.equalsIgnoreCase(nb2)) { // Two phases
                         featureValue = "Phase " + ConverterUtils.constructMultiplePhasesString(nb1, nb2);
-                    } else {    // One phase
+                    } else { // One phase
                         featureValue = "Phase " + ConverterUtils.convertPhaseNumber(nb1);
                     }
                 } else {
-                    this.writeLog("Anomaly: matched \"numbers\" phase string but no phase number, phase: " 
-                                    + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
+                    this.writeLog("Anomaly: matched \"numbers\" phase string but no phase number, phase: "
+                            + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
                 }
             } else {
                 Matcher mPhaseVerbose = P_PHASE_VERBOSE.matcher(phaseStr);
-                if (mPhaseVerbose.matches()) {    // "Verbose" match
+                if (mPhaseVerbose.matches()) { // "Verbose" match
                     String p1 = mPhaseVerbose.group(1);
                     String p2 = mPhaseVerbose.group(2);
                     String p3 = mPhaseVerbose.group(3);
                     String p4 = mPhaseVerbose.group(4);
                     if (p1 != null || p2 != null || p3 != null || p4 != null) {
                         // Getting group indices where group is yes
-                        String[] phasesGroups = {p1, p2, p3, p4};
+                        String[] phasesGroups = { p1, p2, p3, p4 };
                         ArrayList<Integer> phasesRes = new ArrayList<Integer>();
                         for (int i = 1; i <= phasesGroups.length; i++) {
-                            if (phasesGroups[i-1] != null && phasesGroups[i-1].equalsIgnoreCase("yes")) {
+                            if (phasesGroups[i - 1] != null && phasesGroups[i - 1].equalsIgnoreCase("yes")) {
                                 phasesRes.add(i);
                             }
                         }
 
                         if (phasesRes.size() > 0) {
-                            if (phasesRes.size() == 1) {    // One phase
+                            if (phasesRes.size() == 1) { // One phase
                                 featureValue = "Phase " + String.valueOf(phasesRes.get(0));
                             } else if (phasesRes.size() == 2) { // Two phases
-                                featureValue = "Phase " + String.valueOf(phasesRes.get(0)) + "/" + String.valueOf(phasesRes.get(1));
+                                featureValue = "Phase " + String.valueOf(phasesRes.get(0)) + "/"
+                                        + String.valueOf(phasesRes.get(1));
                             } else {
-                                this.writeLog("Anomaly: matched more than 2 groups for \"verbose\" phase field, g1: " + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
+                                this.writeLog("Anomaly: matched more than 2 groups for \"verbose\" phase field, g1: "
+                                        + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
                             }
                         } else {
-                            this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: " + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
+                            this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: "
+                                    + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
                         }
                     } else {
-                        this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: " + p1 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
+                        this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: " + p1
+                                + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
                     }
                 } else {
                     Matcher mPhaseNA = P_NOT_APPLICABLE.matcher(phaseStr);
-                    if (mPhaseNA.matches()) {   // N/A
+                    if (mPhaseNA.matches()) { // N/A
                         featureValue = ConverterCVT.NOT_APPLICABLE;
-                    } else {    // Using raw value
+                    } else { // Using raw value
                         featureValue = phaseStr;
                     }
                 }
             }
 
             if (!ConverterUtils.isNullOrEmptyOrBlank(featureValue)) {
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", featureValue}});
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
+                                { "featureValue", featureValue } });
             }
         }
     }
@@ -1122,12 +1213,13 @@ public class WhoConverter extends CacheConverter
     /**
      * Parse study features input to create StudyFeature items.
      * 
-     * @param study the study item to link to study features
+     * @param study       the study item to link to study features
      * @param featuresStr the input study features string
      */
     public void parseStudyDesign(Item study, String featuresStr) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(featuresStr)) {
-            // TODO: improve parsing of study features, currently it works only for most interventional studies
+            // TODO: improve parsing of study features, currently it works only for most
+            // interventional studies
             Matcher mFeatureInterventional = P_FEATURE_INTERVENTIONAL.matcher(featuresStr);
             if (mFeatureInterventional.matches()) { // Interventional features
                 String allocation = mFeatureInterventional.group(2);
@@ -1135,17 +1227,21 @@ public class WhoConverter extends CacheConverter
                 String purpose = mFeatureInterventional.group(7);
                 String masking = mFeatureInterventional.group(9);
 
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_ALLOCATION}, {"featureValue", allocation}});
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL}, {"featureValue", model}});
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE}, {"featureValue", purpose}});
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_MASKING}, {"featureValue", masking}});
-            } else {    // Using raw value
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureValue", featuresStr}});
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_ALLOCATION },
+                                { "featureValue", allocation } });
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
+                                { "featureValue", model } });
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE },
+                                { "featureValue", purpose } });
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_MASKING },
+                                { "featureValue", masking } });
+            } else { // Using raw value
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureValue", featuresStr } });
             }
         }
     }
@@ -1153,7 +1249,8 @@ public class WhoConverter extends CacheConverter
     /**
      * TODO
      */
-    public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String resultsAdverseEvents, LocalDate resultsDatePosted) {
+    public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String resultsAdverseEvents,
+            LocalDate resultsDatePosted) {
         if (!this.existingStudy()) {
             StringBuilder constructedSecondaryOutcomes = new StringBuilder();
             if (!ConverterUtils.isNullOrEmptyOrBlank(secondaryOutcomes)) {
@@ -1161,8 +1258,8 @@ public class WhoConverter extends CacheConverter
             }
             // TODO: check that resultsDatePosted date is valid
             // Filtering out placeholder links (drks.de)
-            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsAdverseEvents) 
-                && !(resultsAdverseEvents.contains("drks.de") && resultsDatePosted != null)) {
+            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsAdverseEvents)
+                    && !(resultsAdverseEvents.contains("drks.de") && resultsDatePosted != null)) {
                 if (secondaryOutcomes.length() > 0) {
                     if (!secondaryOutcomes.endsWith(".")) {
                         constructedSecondaryOutcomes.append(".");
@@ -1172,7 +1269,7 @@ public class WhoConverter extends CacheConverter
                 constructedSecondaryOutcomes.append("Adverse events: ");
                 constructedSecondaryOutcomes.append(resultsAdverseEvents);
             }
-            
+
             if (!ConverterUtils.isNullOrEmptyOrBlank(constructedSecondaryOutcomes.toString())) {
                 study.setAttributeIfNotNull("secondaryOutcomes", constructedSecondaryOutcomes.toString());
             }
@@ -1185,27 +1282,28 @@ public class WhoConverter extends CacheConverter
      */
     public void createAndStoreStudyOrg(Item study, String studyOrgStr, String contribType) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(studyOrgStr)) {
-            // TODO: setting studyOrganisation object for now, need logic to distinguish people from orgs
+            // TODO: setting studyOrganisation object for now, need logic to distinguish
+            // people from orgs
 
             // TODO: createAndStoreClassItem needs to deal with many2many as well
 
             Matcher mNA = P_NOT_APPLICABLE.matcher(studyOrgStr);
-            if (mNA.matches()) {    // N/A
+            if (mNA.matches()) { // N/A
                 this.createAndStoreClassItem(study, "Organisation",
-                    new String[][]{{"contribType", contribType}, 
-                                    {"name", ConverterCVT.NOT_APPLICABLE}});
+                        new String[][] { { "contribType", contribType },
+                                { "name", ConverterCVT.NOT_APPLICABLE } });
             } else {
                 Matcher mNone = P_NONE.matcher(studyOrgStr);
-                if (mNone.matches()) {   // No sponsor
+                if (mNone.matches()) { // No sponsor
                     if (contribType.equals(ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR)) {
                         this.createAndStoreClassItem(study, "Organisation",
-                            new String[][]{{"contribType", contribType}, 
-                                            {"name", ConverterCVT.SPONSOR_NONE}});
+                                new String[][] { { "contribType", contribType },
+                                        { "name", ConverterCVT.SPONSOR_NONE } });
                     }
-                } else {    // Using raw value
+                } else { // Using raw value
                     this.createAndStoreClassItem(study, "Organisation",
-                        new String[][]{{"contribType", contribType}, 
-                                        {"name", studyOrgStr}});
+                            new String[][] { { "contribType", contribType },
+                                    { "name", studyOrgStr } });
                 }
             }
         }
@@ -1213,15 +1311,18 @@ public class WhoConverter extends CacheConverter
 
     /**
      * TODO
-     * @param cadDate date of competent authority decision
+     * 
+     * @param cadDate    date of competent authority decision
      * @param ecdDateStr raw date(s) string of ethics committee decision
      */
-    public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate, String ecdDatesStr) throws Exception {
+    public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate,
+            String ecdDatesStr) throws Exception {
         // TODO: only restrict date fields + enrolment to EUCTR?
         // TODO: try to normalise values
         // TODO: parse edcDates
-        // TODO: parse few values where multiple-country delimiter is comma instead of semi-colon
-        String status = ConverterUtils.getValueOfItemAttribute(study, "status");
+        // TODO: parse few values where multiple-country delimiter is comma instead of
+        // semi-colon
+        String status = ConverterUtils.getAttrValue(study, "status");
         boolean foundCurrentCountry = false;
 
         if (!ConverterUtils.isPosWholeNumber(plannedEnrolment) || Long.valueOf(plannedEnrolment) > Integer.MAX_VALUE) {
@@ -1242,14 +1343,15 @@ public class WhoConverter extends CacheConverter
         }
 
         if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
-            for (String countryName: countriesStr.split(";")) {
+            for (String countryName : countriesStr.split(";")) {
                 Item country = this.getCountry(countryName);
                 if (!seenCountries.contains(country)) {
                     if (this.currentCountry != null && this.currentCountry.equals(country)) {
                         // Setting more info for current country
-                        this.createAndStoreStudyCountry(study, country, countryName, status, plannedEnrolment, cadDate, null);
+                        this.createAndStoreStudyCountry(study, country, countryName, status, plannedEnrolment, cadDate,
+                                null);
                         foundCurrentCountry = true;
-                    } else {    // Regular parsing
+                    } else { // Regular parsing
                         this.createAndStoreStudyCountry(study, country, countryName, null, null, null, null);
                     }
 
@@ -1264,23 +1366,29 @@ public class WhoConverter extends CacheConverter
         if (this.currentCountry != null && !foundCurrentCountry) {
             if (seenCountries.contains(this.currentCountry)) {
                 // TODO: currently not possible
-                // Item studyCountry = this.getItemFromItemMap(study, this.studyCountries, "country", this.currentCountry);
+                // Item studyCountry = this.getItemFromItemMap(study, this.studyCountries,
+                // "country", this.currentCountry);
                 // studyCountry.setAttributeIfNotNull("status", status);
                 // studyCountry.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
 
                 // "dateEnrolment" is "Date of Competent Authority Decision" in EUCTR
                 // if (cadDate != null) {
-                //     studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate", cadDate.toString());
+                // studyCountry.setAttributeIfNotNull("compAuthorityDecisionDate",
+                // cadDate.toString());
                 // }
-                
+
                 // "Date of Ethics Committee Opinion" in EUCTR
                 // if (ecdDate != null) {
-                //     studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate", ecdDate.toString());
+                // studyCountry.setAttributeIfNotNull("ethicsCommitteeDecisionDate",
+                // ecdDate.toString());
                 // }
                 ;
             } else {
-                this.createAndStoreStudyCountry(study, this.currentCountry, ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"), status, plannedEnrolment, cadDate, null);
-                this.writeLog("Couldn't find StudyCountry with this current country (creating it): " + ConverterUtils.getValueOfItemAttribute(this.currentCountry, "name"));
+                this.createAndStoreStudyCountry(study, this.currentCountry,
+                        ConverterUtils.getAttrValue(this.currentCountry, "name"), status, plannedEnrolment,
+                        cadDate, null);
+                this.writeLog("Couldn't find StudyCountry with this current country (creating it): "
+                        + ConverterUtils.getAttrValue(this.currentCountry, "name"));
             }
         }
     }
@@ -1292,17 +1400,19 @@ public class WhoConverter extends CacheConverter
         if (!this.existingStudy()) {
             // TODO: match values with CT codes/ICD Codes
             if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
-                if (conditionsStr.contains(";")) {  // TODO: Useless check, split includes full string if separator not found
+                if (conditionsStr.contains(";")) { // TODO: Useless check, split includes full string if separator not
+                                                   // found
                     String[] conditionsList = conditionsStr.split(";");
-                    for (String conditionStr: conditionsList) {
+                    for (String conditionStr : conditionsList) {
                         if (!ConverterUtils.isNullOrEmptyOrBlank(conditionStr)) {
-                            this.createAndStoreClassItem(study, "StudyCondition", 
-                                new String[][]{{"originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-')}});
+                            this.createAndStoreClassItem(study, "StudyCondition",
+                                    new String[][] {
+                                            { "originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-') } });
                         }
                     }
                 } else {
-                    this.createAndStoreClassItem(study, "StudyCondition", 
-                        new String[][]{{"originalValue", WordUtils.capitalizeFully(conditionsStr, ' ', '-')}});
+                    this.createAndStoreClassItem(study, "StudyCondition",
+                            new String[][] { { "originalValue", WordUtils.capitalizeFully(conditionsStr, ' ', '-') } });
                 }
             }
         }
@@ -1314,9 +1424,9 @@ public class WhoConverter extends CacheConverter
     public void parseRetrospectiveFlag(Item study, String retrospectiveFlag) throws Exception {
         if (!ConverterUtils.isNullOrEmptyOrBlank(retrospectiveFlag) && !this.existingStudy()) {
             if (retrospectiveFlag.equalsIgnoreCase("1")) {
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE},
-                                    {"featureValue", ConverterCVT.FEATURE_V_RETROSPECTIVE}});
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE },
+                                { "featureValue", ConverterCVT.FEATURE_V_RETROSPECTIVE } });
             } else {
                 this.writeLog("Retrospective flag: value is not empty but not equal to 1: " + retrospectiveFlag);
             }
@@ -1327,15 +1437,16 @@ public class WhoConverter extends CacheConverter
      * TODO
      * TODO: should return created DO
      */
-    public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, String resultsSummary, 
-                                                  LocalDate resultsDatePosted, LocalDate resultsDateCompleted) throws Exception {
+    public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, String resultsSummary,
+            LocalDate resultsDatePosted, LocalDate resultsDateCompleted) throws Exception {
         // TODO: filter out non-urls
-        // Note: current MDR avoids duplicate with registry entry url, but maybe it makes sense to have duplicate
+        // Note: current MDR avoids duplicate with registry entry url, but maybe it
+        // makes sense to have duplicate
         // Filtering out drks.de URL with no date posted (they are placeholders)
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink) 
-            && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
+        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink)
+                && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
             // Display title
-            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
             if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
@@ -1344,14 +1455,15 @@ public class WhoConverter extends CacheConverter
             }
 
             /* Results summary DO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                                                        {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
+            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject",
+                    new String[][] { { "title", doDisplayTitle }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
             /* Instance with results URL */
             // TODO: system? (=source)
-            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 
-                                        new String[][]{{"url", resultsUrlLink}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
-            
+            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance",
+                    new String[][] { { "url", resultsUrlLink },
+                            { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
+
             // Results completed date
             this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED);
 
@@ -1370,13 +1482,14 @@ public class WhoConverter extends CacheConverter
     /**
      * TODO
      */
-    public void createAndStoreProtocolDO(Item study, String resultsUrlProtocol, String publicationYear) throws Exception {
+    public void createAndStoreProtocolDO(Item study, String resultsUrlProtocol, String publicationYear)
+            throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlProtocol)) {
             Matcher mUrl = P_URL.matcher(resultsUrlProtocol);
             if (mUrl.find()) {
                 // Display title
                 String doDisplayTitle;
-                String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+                String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
                 if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
                     doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
                 } else {
@@ -1384,20 +1497,25 @@ public class WhoConverter extends CacheConverter
                 }
 
                 /* Protocol DO */
-                // Object type: in practice, most of the time it's a link to the study page (e.g. CTIS) where there might be the study protocol
-                // TODO: follow MDR logic then? ("CSR summary" type by default and protocol if prot in url name)
+                // Object type: in practice, most of the time it's a link to the study page
+                // (e.g. CTIS) where there might be the study protocol
+                // TODO: follow MDR logic then? ("CSR summary" type by default and protocol if
+                // prot in url name)
 
                 // Access type: in practice it might not be the correct access type
-                // Note: only specifying public, not using the various public types MDR has, maybe to change
-                Item protocolDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", doDisplayTitle}, 
-                                                        {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"type", ConverterCVT.O_TYPE_STUDY_PROTOCOL}, 
-                                                        {"publicationYear", publicationYear}, {"accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC}});
+                // Note: only specifying public, not using the various public types MDR has,
+                // maybe to change
+                Item protocolDO = this.createAndStoreClassItem(study, "DataObject",
+                        new String[][] { { "title", doDisplayTitle },
+                                { "objectClass", ConverterCVT.O_CLASS_TEXT },
+                                { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
+                                { "publicationYear", publicationYear },
+                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
 
                 /* Protocol DO instance with URL */
                 // TODO: Fix euctr links
                 String protocolURL = P_FIX_EUCTR.matcher(mUrl.group(0)).replaceAll("/");
-                
+
                 String resourceType;
                 // File extension (if any) to help determine resource type
                 if (mUrl.group(1).equalsIgnoreCase("pdf")) {
@@ -1407,9 +1525,9 @@ public class WhoConverter extends CacheConverter
                 } else {
                     resourceType = ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT;
                 }
-                
-                this.createAndStoreClassItem(protocolDO, "ObjectInstance", 
-                    new String[][]{{"url", protocolURL}, {"resourceType", resourceType}});
+
+                this.createAndStoreClassItem(protocolDO, "ObjectInstance",
+                        new String[][] { { "url", protocolURL }, { "resourceType", resourceType } });
             }
         }
     }
@@ -1417,10 +1535,11 @@ public class WhoConverter extends CacheConverter
     /**
      * TODO
      */
-    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate registrationDate, String publicationYear, LocalDate lastUpdate) throws Exception {
+    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate registrationDate,
+            String publicationYear, LocalDate lastUpdate) throws Exception {
         if (!this.existingStudy()) {
             // Display title
-            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
             if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
@@ -1429,13 +1548,14 @@ public class WhoConverter extends CacheConverter
             }
 
             /* Registry entry DO */
-            Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-                new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                                {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"publicationYear", publicationYear}});
+            Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject",
+                    new String[][] { { "title", doDisplayTitle }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
+                            { "publicationYear", publicationYear } });
 
             /* Registry entry DO instance */
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-                new String[][]{{"url", entryUrl}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
+            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
+                    new String[][] { { "url", entryUrl }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
 
             // Registry entry created date
             // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
@@ -1451,16 +1571,21 @@ public class WhoConverter extends CacheConverter
         } else {
             // Update DO creation date
             if (registrationDate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
+                        ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
-                    Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_CREATED);
+                    Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",
+                            ConverterCVT.DATE_TYPE_CREATED);
                     if (creationOD != null) {
-                        String existingDateStr = ConverterUtils.getValueOfItemAttribute(creationOD, "startDate");
+                        String existingDateStr = ConverterUtils.getAttrValue(creationOD, "startDate");
                         // Updating creation date if older than known creation date
                         if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
-                            && registrationDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
-                                creationOD.setAttribute("startDate", registrationDate.toString());
-                            this.writeLog("older creation date: " + registrationDate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
+                                && registrationDate
+                                        .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
+                            creationOD.setAttribute("startDate", registrationDate.toString());
+                            this.writeLog("older creation date: " + registrationDate.toString() + ", previous: "
+                                    + existingDateStr + " -country: "
+                                    + ConverterUtils.getAttrValue(this.currentCountry, "name"));
                         }
                     }
                 }
@@ -1468,17 +1593,21 @@ public class WhoConverter extends CacheConverter
 
             // Update DO last update date
             if (lastUpdate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",  ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
+                        ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
-                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType", ConverterCVT.DATE_TYPE_UPDATED);
+                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",
+                            ConverterCVT.DATE_TYPE_UPDATED);
                     if (lastUpdateOD != null) {
-                        String existingDateStr = ConverterUtils.getValueOfItemAttribute(lastUpdateOD, "startDate");
+                        String existingDateStr = ConverterUtils.getAttrValue(lastUpdateOD, "startDate");
                         if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
-                            && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
-                                lastUpdateOD.setAttribute("startDate", lastUpdate.toString());
+                                && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
+                            lastUpdateOD.setAttribute("startDate", lastUpdate.toString());
                             // TODO: newerLastUpdate logic in separate function?
                             this.newerLastUpdate = true;
-                            this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: " + existingDateStr + " -country: " + this.currentCountry);
+                            this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: "
+                                    + existingDateStr + " -country: "
+                                    + ConverterUtils.getAttrValue(this.currentCountry, "name"));
                         }
                     }
                 }
@@ -1494,27 +1623,30 @@ public class WhoConverter extends CacheConverter
             Matcher mGenderAll = P_GENDER_ALL.matcher(genderStr);
             if (mGenderAll.matches()) {
                 study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
-            } else {    // "structured" pattern
+            } else { // "structured" pattern
 
                 Matcher mGenderStructured = P_GENDER_STRUCTURED.matcher(genderStr);
                 if (mGenderStructured.matches()) {
-                    this.setGenderFromMatches(study, mGenderStructured, genderStr, ConverterCVT.GENDER_WOMEN, ConverterCVT.GENDER_MEN, true);
-                } else {    // "Non-structured" pattern
+                    this.setGenderFromMatches(study, mGenderStructured, genderStr, ConverterCVT.GENDER_WOMEN,
+                            ConverterCVT.GENDER_MEN, true);
+                } else { // "Non-structured" pattern
 
                     Matcher mGenderMF = P_GENDER_MF.matcher(genderStr);
                     if (mGenderMF.matches()) {
-                        this.setGenderFromMatches(study, mGenderMF, genderStr, ConverterCVT.GENDER_MEN, ConverterCVT.GENDER_WOMEN, false);
+                        this.setGenderFromMatches(study, mGenderMF, genderStr, ConverterCVT.GENDER_MEN,
+                                ConverterCVT.GENDER_WOMEN, false);
                     } else {
 
                         Matcher mGenderFM = P_GENDER_FM.matcher(genderStr);
                         if (mGenderFM.matches()) {
-                            this.setGenderFromMatches(study, mGenderFM, genderStr, ConverterCVT.GENDER_WOMEN, ConverterCVT.GENDER_MEN, false);
-                        } else {    // Not specified
-                        
+                            this.setGenderFromMatches(study, mGenderFM, genderStr, ConverterCVT.GENDER_WOMEN,
+                                    ConverterCVT.GENDER_MEN, false);
+                        } else { // Not specified
+
                             Matcher mGenderNotSpecified = P_UNKNOWN.matcher(genderStr);
                             if (mGenderNotSpecified.matches()) {
                                 study.setAttributeIfNotNull("genderElig", ConverterCVT.UNKNOWN);
-                            } else {    // Raw value (shouldn't happen)
+                            } else { // Raw value (shouldn't happen)
 
                                 study.setAttributeIfNotNull("genderElig", genderStr);
                                 this.writeLog("Couldn't parse study gender (used raw value): " + genderStr);
@@ -1529,14 +1661,16 @@ public class WhoConverter extends CacheConverter
     /**
      * Set study gender field using regex group matches.
      * 
-     * @param study the study item to set the gender field of
-     * @param m the regex matcher with the groups
-     * @param genderStr the gender input string
-     * @param gender1 the value to set if (only) the first group matches
-     * @param gender2 the value to set if (only) the second group matches
-     * @param structured a boolean indicating if the regex used was structured (P_GENDER_STRUCTURED) or not (P_GENDER_MF, P_GENDER_FM)
+     * @param study      the study item to set the gender field of
+     * @param m          the regex matcher with the groups
+     * @param genderStr  the gender input string
+     * @param gender1    the value to set if (only) the first group matches
+     * @param gender2    the value to set if (only) the second group matches
+     * @param structured a boolean indicating if the regex used was structured
+     *                   (P_GENDER_STRUCTURED) or not (P_GENDER_MF, P_GENDER_FM)
      */
-    public void setGenderFromMatches(Item study, Matcher m, String genderStr, String gender1, String gender2, boolean structured) {
+    public void setGenderFromMatches(Item study, Matcher m, String genderStr, String gender1, String gender2,
+            boolean structured) {
         String g1 = m.group(2);
         String g2 = m.group(4);
         if (g1 != null && g2 != null && (!structured || (g1.equalsIgnoreCase("yes") && g2.equalsIgnoreCase("yes")))) {
@@ -1558,7 +1692,7 @@ public class WhoConverter extends CacheConverter
             StringBuilder iec = new StringBuilder();
 
             /* Inclusion criteria */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) {    // None
+            if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) { // None
                 Matcher mIcNone = P_IEC_NONE.matcher(icStr);
                 if (mIcNone.matches()) {
                     String g1None = mIcNone.group(2);
@@ -1567,18 +1701,18 @@ public class WhoConverter extends CacheConverter
                     } else {
                         iec.append(IC_PREFIX + ConverterCVT.UNKNOWN);
                     }
-                } else {    // N/A
+                } else { // N/A
                     Matcher mIcNA = P_IEC_NA.matcher(icStr);
                     if (mIcNA.matches()) {
                         iec.append(IC_PREFIX + ConverterCVT.NOT_APPLICABLE);
-                    } else {    // Raw value
+                    } else { // Raw value
                         iec.append(icStr);
                     }
                 }
             }
 
             /* Exclusion criteria */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(ecStr)) {    // None
+            if (!ConverterUtils.isNullOrEmptyOrBlank(ecStr)) { // None
                 Matcher mEcNone = P_IEC_NONE.matcher(ecStr);
 
                 String adaptedEcPrefix = "";
@@ -1595,11 +1729,11 @@ public class WhoConverter extends CacheConverter
                     } else {
                         iec.append(adaptedEcPrefix + ConverterCVT.UNKNOWN);
                     }
-                } else {    // N/A
+                } else { // N/A
                     Matcher mEcNA = P_IEC_NA.matcher(ecStr);
                     if (mEcNA.matches()) {
                         iec.append(adaptedEcPrefix + ConverterCVT.NOT_APPLICABLE);
-                    } else {    // Raw value
+                    } else { // Raw value
                         iec.append(ecStr);
                     }
                 }
@@ -1637,12 +1771,13 @@ public class WhoConverter extends CacheConverter
     }
 
     /**
-     * Get field value from array of values using a field's position-lookup Map, value is also cleaned.
+     * Get field value from array of values using a field's position-lookup Map,
+     * value is also cleaned.
      * 
      * @param lineValues the list of all values for a line in the data file
-     * @param field the name of the field to get the value of
+     * @param field      the name of the field to get the value of
      * @return the cleaned value of the field
-     * //@see cleanValue()
+     *         //@see cleanValue()
      */
     public String getAndCleanValue(String[] lineValues, String field) {
         // TODO: handle errors
@@ -1650,12 +1785,13 @@ public class WhoConverter extends CacheConverter
     }
 
     /**
-     * Get field value from array of values using a field's position-lookup Map, value is also cleaned without stripping it of leading/trailing whitespaces.
+     * Get field value from array of values using a field's position-lookup Map,
+     * value is also cleaned without stripping it of leading/trailing whitespaces.
      * 
      * @param lineValues the list of all values for a line in the data file
-     * @param field the name of the field to get the value of
+     * @param field      the name of the field to get the value of
      * @return the cleaned value of the field
-     * //@see #cleanValue()
+     *         //@see #cleanValue()
      */
     public String getAndCleanValueNoStrip(String[] lineValues, String field) {
         // TODO: handle errors
@@ -1663,12 +1799,13 @@ public class WhoConverter extends CacheConverter
     }
 
     /**
-     * Remove extra quotes, unescape HTML chars, and strip the string of any leading/trailing whitespace.
+     * Remove extra quotes, unescape HTML chars, and strip the string of any
+     * leading/trailing whitespace.
      * 
      * @param s the value to clean
      * @return the cleaned value
-     * //@see #unescapeHtml()
-     * //@see #removeQuotes()
+     *         //@see #unescapeHtml()
+     *         //@see #removeQuotes()
      */
     public String cleanValue(String s, boolean strip) {
         if (strip) {
@@ -1694,7 +1831,7 @@ public class WhoConverter extends CacheConverter
         Item item = this.createClassItem(mainClassItem, className, kv);
 
         if (item != null) {
-            if (this.isCtg() || this.isEuctr() || this.isCtis()) {  // Saving in cache to itemMap
+            if (this.isCtg() || this.isEuctr() || this.isCtis()) { // Saving in cache to itemMap
                 this.storeClassItem(mainClassItem, item);
             } else {
                 store(item);
@@ -1707,8 +1844,10 @@ public class WhoConverter extends CacheConverter
     }
 
     /**
-     * Get a dictionary (map) of the WHO data file field names linked to their corresponding column index in the data file, using a separate headers file.
-     * The headers file path is defined in the project.xml file (and set as an instance attribute of this class).
+     * Get a dictionary (map) of the WHO data file field names linked to their
+     * corresponding column index in the data file, using a separate headers file.
+     * The headers file path is defined in the project.xml file (and set as an
+     * instance attribute of this class).
      * 
      * @return map of data file field names and their corresponding column index
      */
@@ -1726,12 +1865,13 @@ public class WhoConverter extends CacheConverter
 
         if (fileContent.size() > 0) {
             String headersLine = String.join("", fileContent).strip();
-            // Deleting the invisible \FEFF unicode character at the beginning of the header file
+            // Deleting the invisible \FEFF unicode character at the beginning of the header
+            // file
             if (Integer.toHexString(headersLine.charAt(0) | 0x10000).substring(1).toLowerCase().equals("feff")) {
                 headersLine = headersLine.substring(1);
             }
             String[] fields = headersLine.split(",");
-            
+
             for (int ind = 0; ind < fields.length; ind++) {
                 fieldsToInd.put(fields[ind], ind);
             }

@@ -11,103 +11,89 @@ package org.intermine.bio.dataconversion;
  */
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.format.DateTimeFormatter;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.Set;
 
 import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.ClassDescriptor;
+import org.intermine.metadata.Model;
+import org.intermine.metadata.ReferenceDescriptor;
+import org.intermine.objectstore.ObjectStore;
+import org.intermine.objectstore.ObjectStoreFactory;
+import org.intermine.objectstore.query.Query;
+import org.intermine.objectstore.query.QueryClass;
+import org.intermine.objectstore.query.QueryField;
+import org.intermine.objectstore.query.Results;
+import org.intermine.objectstore.query.ResultsRow;
+import org.intermine.util.PropertiesUtil;
+import org.intermine.xml.full.Item;
+
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
 
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.ClassDescriptor;
-import org.intermine.metadata.CollectionDescriptor;
-import org.intermine.metadata.ConstraintOp;
-import org.intermine.metadata.Model;
-import org.intermine.metadata.ReferenceDescriptor;
-import org.intermine.model.bio.Country;
-import org.intermine.model.bio.Study;
-import org.intermine.objectstore.ObjectStore;
-import org.intermine.objectstore.ObjectStoreFactory;
-import org.intermine.objectstore.query.Query;
-import org.intermine.objectstore.query.QueryClass;
-import org.intermine.objectstore.query.QueryField;
-import org.intermine.objectstore.query.QueryValue;
-import org.intermine.objectstore.query.Results;
-import org.intermine.objectstore.query.ResultsRow;
-import org.intermine.objectstore.query.SimpleConstraint;
-import org.intermine.util.PropertiesUtil;
-import org.intermine.xml.full.Item;
-
-
-
 /**
  * Class with utility functions for converter classes
+ * 
  * @author
- * Note: this.getModel() to access model
+ *         Note: this.getModel() to access model
  */
-public abstract class BaseConverter extends BioFileConverter
-{
+public abstract class BaseConverter extends BioFileConverter {
     private String countriesFP = "";
     private String countriesAltNamesFP = "";
     private String logDir = "";
     protected Logger logger = null;
     protected String currentTrialID = null;
     protected ObjectStore os = null;
-    protected Map<String, Item> countriesMap = new HashMap<String, Item>(); // Key: country code, name, aliases (all lowercase), Value: Country Item
+    protected Map<String, Item> countriesMap = new HashMap<String, Item>(); // Key: country code, name, aliases (all
+                                                                            // lowercase), Value: Country Item
 
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
-                             String dataSetTitle) {
+            String dataSetTitle) {
         super(writer, model, dataSourceName, dataSetTitle);
         this.initObjectStore();
     }
-    
+
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
-    String dataSetTitle, String licence) {
+            String dataSetTitle, String licence) {
         super(writer, model, dataSourceName, dataSetTitle, licence);
         this.initObjectStore();
     }
-    
+
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
-    String dataSetTitle, String licence, boolean storeOntology) {
+            String dataSetTitle, String licence, boolean storeOntology) {
         super(writer, model, dataSourceName, dataSetTitle, licence, storeOntology);
         this.initObjectStore();
     }
-    
+
     public BaseConverter(ItemWriter writer, Model model) {
         super(writer, model);
         this.initObjectStore();
     }
 
     /**
-     * Clean a value according to the subclass' logic. Note: method should be static but Java does not allow abstract + static
+     * Clean a value according to the subclass' logic. Note: method should be static
+     * but Java does not allow abstract + static
      * 
-     * @param s the value to clean
-     * @param strip boolean indicating whether to strip the string of any leading/trailing whitespace
+     * @param s     the value to clean
+     * @param strip boolean indicating whether to strip the string of any
+     *              leading/trailing whitespace
      * @return the cleaned value
      * @see #unescapeHtml()
      * @see #removeQuotes()
@@ -125,7 +111,8 @@ public abstract class BaseConverter extends BioFileConverter
     }
 
     /**
-     * Set countries CV data path from the corresponding source property in project.xml.
+     * Set countries CV data path from the corresponding source property in
+     * project.xml.
      * Method called by InterMine.
      * 
      * @param countriesFP the path to the countries data file
@@ -135,10 +122,12 @@ public abstract class BaseConverter extends BioFileConverter
     }
 
     /**
-     * Set countries alternative names data path from the corresponding source property in project.xml.
+     * Set countries alternative names data path from the corresponding source
+     * property in project.xml.
      * Method called by InterMine.
      * 
-     * @param countriesAltNamesFP the path to the countries alternative names data file
+     * @param countriesAltNamesFP the path to the countries alternative names data
+     *                            file
      */
     public void setCountriesAltNamesFP(String countriesAltNamesFP) {
         this.countriesAltNamesFP = countriesAltNamesFP;
@@ -181,9 +170,9 @@ public abstract class BaseConverter extends BioFileConverter
             Properties intermineProps = PropertiesUtil.getProperties();
             Properties noPrefixProps = PropertiesUtil.stripStart(alias, intermineProps);
             String osAlias = noPrefixProps.getProperty("os");
-    
+
             this.os = ObjectStoreFactory.getObjectStore(osAlias);
-        } catch(Exception e) {
+        } catch (Exception e) {
             // TODO
             ;
         }
@@ -216,25 +205,30 @@ public abstract class BaseConverter extends BioFileConverter
         BufferedReader br = new BufferedReader(in);
 
         final CSVParser parser = new CSVParserBuilder()
-                                        .withSeparator('	')
-                                        .build();
+                .withSeparator('	')
+                .build();
         final CSVReader csvReader = new CSVReaderBuilder(br)
-                                            .withCSVParser(parser)
-                                            .build();
+                .withCSVParser(parser)
+                .build();
 
         boolean skipNext = false;
 
-        csvReader.readNext();   // Skip headers
+        csvReader.readNext(); // Skip headers
         String[] lineValues = csvReader.readNext();
 
         while (lineValues != null) {
             if (!skipNext) {
                 // Creating a Country Item for each line in the file
-                // Fields order in file for indices: Country.isoAlpha2, Country.isoAlpha3, null, null, Country.name, Country.capital, null, null, Country.continent, Country.tld, null, null, null, null, null, null, Country.geonameId, null, null
-                Item country = this.createClassItem("Country", 
-                    new String[][]{{"isoAlpha2", lineValues[0]}, {"isoAlpha3", lineValues[1]}, {"name", lineValues[4]},
-                                    {"capital", lineValues[5]}, {"continent", lineValues[8]}, {"tld", lineValues[9]}, {"geonameId", lineValues[16]}});
-                
+                // Fields order in file for indices: Country.isoAlpha2, Country.isoAlpha3, null,
+                // null, Country.name, Country.capital, null, null, Country.continent,
+                // Country.tld, null, null, null, null, null, null, Country.geonameId, null,
+                // null
+                Item country = this.createClassItem("Country",
+                        new String[][] { { "isoAlpha2", lineValues[0] }, { "isoAlpha3", lineValues[1] },
+                                { "name", lineValues[4] },
+                                { "capital", lineValues[5] }, { "continent", lineValues[8] }, { "tld", lineValues[9] },
+                                { "geonameId", lineValues[16] } });
+
                 // Adding entries in map to find Country Item based on various values
                 if (!ConverterUtils.isNullOrEmptyOrBlank(lineValues[0])) {
                     this.countriesMap.put(lineValues[0].toLowerCase(), country);
@@ -250,9 +244,10 @@ public abstract class BaseConverter extends BioFileConverter
                 if (altNames != null) {
                     List<String> aliases = altNames.getOrDefault(lineValues[0].toLowerCase(), null);
                     if (aliases == null) {
-                        this.writeLog("Warning: couldn't find any alias for country " + lineValues[4] + " with iso code " + lineValues[0].toLowerCase());
+                        this.writeLog("Warning: couldn't find any alias for country " + lineValues[4]
+                                + " with iso code " + lineValues[0].toLowerCase());
                     } else {
-                        for (String alias: aliases) {
+                        for (String alias : aliases) {
                             this.countriesMap.put(alias.toLowerCase(), country);
                         }
                     }
@@ -276,28 +271,30 @@ public abstract class BaseConverter extends BioFileConverter
         HashMap<String, List<String>> altNames = null;
 
         if (this.countriesAltNamesFP.equals("")) {
-            this.writeLog("Warning: countriesAltNamesFP property is not set in mdrmine project.xml, countries mapping will be worse");
+            this.writeLog(
+                    "Warning: countriesAltNamesFP property is not set in mdrmine project.xml, countries mapping will be worse");
         } else {
             if (!(new File(this.countriesAltNamesFP).isFile())) {
-                this.writeLog("Warning: countries alternative names file does not exist (path tested: " + this.countriesAltNamesFP + " ), countries mapping will be worse");
+                this.writeLog("Warning: countries alternative names file does not exist (path tested: "
+                        + this.countriesAltNamesFP + " ), countries mapping will be worse");
             } else {
                 altNames = new HashMap<String, List<String>>();
 
                 FileReader in = new FileReader(this.countriesAltNamesFP);
                 BufferedReader br = new BufferedReader(in);
-        
+
                 final CSVParser parser = new CSVParserBuilder()
-                                                .withSeparator(',')
-                                                .build();
+                        .withSeparator(',')
+                        .build();
                 final CSVReader csvReader = new CSVReaderBuilder(br)
-                                                    .withCSVParser(parser)
-                                                    .build();
-                
+                        .withCSVParser(parser)
+                        .build();
+
                 boolean skipNext = false;
-        
-                csvReader.readNext();   // Skip headers
+
+                csvReader.readNext(); // Skip headers
                 String[] lineValues = csvReader.readNext();
-        
+
                 while (lineValues != null) {
                     // TODO: check if line values are not empty? (should not be)
                     if (!skipNext) {
@@ -317,7 +314,7 @@ public abstract class BaseConverter extends BioFileConverter
                         skipNext = true;
                     }
                 }
-        
+
                 csvReader.close();
             }
         }
@@ -331,7 +328,7 @@ public abstract class BaseConverter extends BioFileConverter
     public void storeCountries() throws Exception {
         // Store countries (no duplicates)
         HashSet<String> seenIds = new HashSet<String>();
-        for (Item country: this.countriesMap.values()) {
+        for (Item country : this.countriesMap.values()) {
             if (!seenIds.contains(country.getIdentifier())) {
                 store(country);
                 seenIds.add(country.getIdentifier());
@@ -348,7 +345,8 @@ public abstract class BaseConverter extends BioFileConverter
         Item country = null;
 
         if (countriesMap.isEmpty()) {
-            throw new RuntimeException("The list of Country items is empty, you likely forgot to call loadCountries() at the start of your parser");
+            throw new RuntimeException(
+                    "The list of Country items is empty, you likely forgot to call loadCountries() at the start of your parser");
         }
 
         if (!ConverterUtils.isNullOrEmptyOrBlank(value)) {
@@ -385,7 +383,7 @@ public abstract class BaseConverter extends BioFileConverter
         q.addToSelect(qfCtisID);
         q.addToSelect(qfNctID);
         q.addToSelect(qfEuctrID);
-        
+
         Results res = this.os.execute(q);
         Iterator<?> resIter = res.iterator();
 
@@ -414,11 +412,14 @@ public abstract class BaseConverter extends BioFileConverter
     }
 
     /**
-     * Create and store item (instance) of a class. Works for all classes except the Study and Country classes.
+     * Create and store item (instance) of a class. Works for all classes except the
+     * Study and Country classes.
      * 
-     * @param mainClassItem the already created item of the main class to reference (Study)
-     * @param className the name of the class to create an item of
-     * @param kv array of field name - field value pairs to set class item attribute values
+     * @param mainClassItem the already created item of the main class to reference
+     *                      (Study)
+     * @param className     the name of the class to create an item of
+     * @param kv            array of field name - field value pairs to set class
+     *                      item attribute values
      * @return the created item
      */
     public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
@@ -432,8 +433,9 @@ public abstract class BaseConverter extends BioFileConverter
      * Create item (instance) of a class.
      * 
      * @param itemToReference an already created item to reference (e.g. Study)
-     * @param className the name of the class to create an item of
-     * @param kv array of field name - field value pairs to set class item attribute values
+     * @param className       the name of the class to create an item of
+     * @param kv              array of field name - field value pairs to set class
+     *                        item attribute values
      * @return the created item
      */
     public Item createClassItem(Item itemToReference, String className, String[][] kv) throws Exception {
@@ -488,8 +490,9 @@ public abstract class BaseConverter extends BioFileConverter
      */
     public void handleReferencesAndCollections(Item itemA, Item itemB) throws Exception {
         if (itemA != null && itemB != null) {
-            ReferenceDescriptor rdInAOfB = this.getReferenceDescriptorInItemAOfItemB(itemA, itemB);    // Can be a CollectionDescriptor
-    
+            ReferenceDescriptor rdInAOfB = this.getReferenceDescriptorInItemAOfItemB(itemA, itemB); // Can be a
+                                                                                                    // CollectionDescriptor
+
             // Reference in itemA to itemB
             if (rdInAOfB != null) {
                 if (rdInAOfB.isCollection()) {
@@ -497,7 +500,7 @@ public abstract class BaseConverter extends BioFileConverter
                 } else {
                     itemA.setReference(rdInAOfB.getName(), itemB);
                 }
-    
+
                 // Reference in itemB to itemA
                 ReferenceDescriptor rdInBOfA = rdInAOfB.getReverseReferenceDescriptor();
                 if (rdInBOfA != null) {
@@ -510,8 +513,9 @@ public abstract class BaseConverter extends BioFileConverter
                     this.writeLog("handleReferencesAndCollections(): shouldn't happen");
                 }
             } else {
-                this.writeLog("handleReferencesAndCollections(): Failed to find reference in " + this.getClassDescriptor(itemA).getSimpleName()
-                                + " class of " + this.getClassDescriptor(itemB).getSimpleName() + "class");
+                this.writeLog("handleReferencesAndCollections(): Failed to find reference in "
+                        + this.getClassDescriptor(itemA).getSimpleName()
+                        + " class of " + this.getClassDescriptor(itemB).getSimpleName() + "class");
             }
         }
     }
@@ -522,15 +526,16 @@ public abstract class BaseConverter extends BioFileConverter
      */
     public ReferenceDescriptor getReferenceDescriptorInItemAOfItemB(Item itemA, Item itemB) throws Exception {
         ReferenceDescriptor foundRD = null;
-        
-        Set<ReferenceDescriptor> rds = Stream.concat(this.getClassDescriptor(itemA).getReferenceDescriptors().stream(), 
-                                                    this.getClassDescriptor(itemA).getCollectionDescriptors().stream())
-                                                    .collect(Collectors.toSet());
+
+        Set<ReferenceDescriptor> rds = Stream.concat(this.getClassDescriptor(itemA).getReferenceDescriptors().stream(),
+                this.getClassDescriptor(itemA).getCollectionDescriptors().stream())
+                .collect(Collectors.toSet());
         Iterator<ReferenceDescriptor> rdsIter = rds.iterator();
 
         while (rdsIter.hasNext()) {
             ReferenceDescriptor rd = rdsIter.next();
-            // Note: will not work as intended in case a Class has both a reference and a collection of the same Class
+            // Note: will not work as intended in case a Class has both a reference and a
+            // collection of the same Class
             if (rd.getReferencedClassDescriptor().equals(this.getClassDescriptor(itemB))) {
                 foundRD = rd;
                 break;
@@ -543,13 +548,14 @@ public abstract class BaseConverter extends BioFileConverter
     /**
      * TODO
      */
-    public Item createAndStoreStudyIdentifier(Item study, String id, String identifierType, String identifierLink) throws Exception {
+    public Item createAndStoreStudyIdentifier(Item study, String id, String identifierType, String identifierLink)
+            throws Exception {
         Item studyIdentifier = null;
 
         if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
-            this.createAndStoreClassItem(study, "StudyIdentifier", 
-                new String[][]{{"identifierValue", id}, {"identifierType", identifierType},
-                                {"identifierLink", identifierLink}});
+            this.createAndStoreClassItem(study, "StudyIdentifier",
+                    new String[][] { { "identifierValue", id }, { "identifierType", identifierType },
+                            { "identifierLink", identifierLink } });
         }
 
         return studyIdentifier;
@@ -561,8 +567,8 @@ public abstract class BaseConverter extends BioFileConverter
     public Item createAndStoreObjectDate(Item dataObject, LocalDate date, String dateType) throws Exception {
         Item objectDate = null;
 
-        objectDate = this.createAndStoreClassItem(dataObject, "ObjectDate", 
-            new String[][]{{"dateType", dateType}, {"startDate", date != null ? date.toString() : null}});
+        objectDate = this.createAndStoreClassItem(dataObject, "ObjectDate",
+                new String[][] { { "dateType", dateType }, { "startDate", date != null ? date.toString() : null } });
 
         return objectDate;
     }
@@ -570,16 +576,17 @@ public abstract class BaseConverter extends BioFileConverter
     /*
      * TODO
      */
-    public Item createAndStoreStudyCountry(Item study, Item country, String countryStr, String status, 
-        String plannedEnrolment, LocalDate cadDate, LocalDate ecdDate) throws Exception {
+    public Item createAndStoreStudyCountry(Item study, Item country, String countryStr, String status,
+            String plannedEnrolment, LocalDate cadDate, LocalDate ecdDate) throws Exception {
 
-        Item studyCountry = this.createAndStoreClassItem(study, "StudyCountry", 
-            new String[][]{{"countryName", WordUtils.capitalizeFully(countryStr, ' ', '-')},
-                            {"status", status}, {"plannedEnrolment", plannedEnrolment},
-                            {"compAuthorityDecisionDate", cadDate != null ? cadDate.toString() : null},
-                            {"ethicsCommitteeDecisionDate", ecdDate != null ? ecdDate.toString() : null}});
+        Item studyCountry = this.createAndStoreClassItem(study, "StudyCountry",
+                new String[][] { { "countryName", WordUtils.capitalizeFully(countryStr, ' ', '-') },
+                        { "status", status }, { "plannedEnrolment", plannedEnrolment },
+                        { "compAuthorityDecisionDate", cadDate != null ? cadDate.toString() : null },
+                        { "ethicsCommitteeDecisionDate", ecdDate != null ? ecdDate.toString() : null } });
 
-        // Set references and collections between the Country and StudyCountry items and store the Country item
+        // Set references and collections between the Country and StudyCountry items and
+        // store the Country item
         if (country != null) {
             this.handleReferencesAndCollections(country, studyCountry);
             this.storeClassItem(study, country);
@@ -599,9 +606,9 @@ public abstract class BaseConverter extends BioFileConverter
             }
             if (date == null) { // ISO format
                 date = ConverterUtils.getDateFromString(dateStr, null);
-                if (date == null) {   // d(d)/m(m)/yyyy
+                if (date == null) { // d(d)/m(m)/yyyy
                     date = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-                    if (date == null) {   // dd month(word) yyyy
+                    if (date == null) { // dd month(word) yyyy
                         date = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
                         if (date == null) {
                             this.writeLog("parseDate(): couldn't parse date: " + dateStr);
