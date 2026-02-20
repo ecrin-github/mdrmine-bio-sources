@@ -558,7 +558,7 @@ public class WhoConverter extends CacheConverter {
                         if (euctrSuffix != null && id.equals(trialID)) {
                             // TODO: handle "Outside-EU/EEA" country code
                             // Getting country from ID country code
-                            if (!ConverterUtils.isNullOrEmptyOrBlank(euctrSuffix)) {
+                            if (!ConverterUtils.isBlankOrNull(euctrSuffix)) {
                                 this.currentCountry = this.getCountry(euctrSuffix);
                                 if (this.currentCountry == null) {
                                     this.writeLog("Couldn't find country from country code: " + euctrSuffix);
@@ -664,17 +664,17 @@ public class WhoConverter extends CacheConverter {
                 // Removing all IDs conflicting with other previous studies
                 for (int i = 1; i < allIdsList.size(); i++) {
                     IDsHandler currIdsList = allIdsList.get(i);
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(currIdsList.ctisID)) {
+                    if (!ConverterUtils.isBlankOrNull(currIdsList.ctisID)) {
                         if (idsH.ctisID.equalsIgnoreCase(currIdsList.ctisID)) {
                             idsH.ctisID = "";
                         }
                     }
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(currIdsList.nctID)) {
+                    if (!ConverterUtils.isBlankOrNull(currIdsList.nctID)) {
                         if (idsH.nctID.equalsIgnoreCase(currIdsList.nctID)) {
                             idsH.nctID = "";
                         }
                     }
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(currIdsList.euctrID)) {
+                    if (!ConverterUtils.isBlankOrNull(currIdsList.euctrID)) {
                         if (idsH.euctrID.equalsIgnoreCase(currIdsList.euctrID)) {
                             idsH.euctrID = "";
                         }
@@ -736,7 +736,7 @@ public class WhoConverter extends CacheConverter {
         String existingEuctrID = ConverterUtils.getAttrValue(study, "euctrID");
         idsH.updateIDs(existingCtisID, existingNctID, existingEuctrID);
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(idsH.ctisID)) {
+        if (!ConverterUtils.isBlankOrNull(idsH.ctisID)) {
             study.setAttribute("primaryIdentifier", idsH.ctisID);
             if (this.currentTrialID == null) {
                 this.currentTrialID = idsH.ctisID;
@@ -746,7 +746,7 @@ public class WhoConverter extends CacheConverter {
             }
         }
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(idsH.nctID)) {
+        if (!ConverterUtils.isBlankOrNull(idsH.nctID)) {
             study.setAttribute("nctID", idsH.nctID);
             if (this.currentTrialID == null) {
                 this.currentTrialID = idsH.nctID;
@@ -756,7 +756,7 @@ public class WhoConverter extends CacheConverter {
             }
         }
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(idsH.euctrID)) {
+        if (!ConverterUtils.isBlankOrNull(idsH.euctrID)) {
             study.setAttribute("euctrID", idsH.euctrID);
             if (this.currentTrialID == null) {
                 this.currentTrialID = idsH.euctrID;
@@ -779,7 +779,7 @@ public class WhoConverter extends CacheConverter {
             // Adding this study's other IDs along with the main ID to be able to find it in
             // the studies map
             for (String id : idsH.getIDsList()) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(id) && !this.mainTrialIdMap.containsKey(id)) {
+                if (!ConverterUtils.isBlankOrNull(id) && !this.mainTrialIdMap.containsKey(id)) {
                     this.mainTrialIdMap.put(id, this.currentTrialID);
                 }
             }
@@ -823,7 +823,7 @@ public class WhoConverter extends CacheConverter {
      * TODO
      */
     public void parseTitle(Item study, String title, String titleType) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(title) && !title.equals("-")
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(title) && !title.equals("-")
                 && !title.equals("_") && !title.equals(".")) {
             this.createAndStoreClassItem(study, "Title",
                     new String[][] { { "text", title }, { "type", titleType } });
@@ -858,17 +858,17 @@ public class WhoConverter extends CacheConverter {
             }
 
             String firstNamesString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Firstname"));
-            if (!ConverterUtils.isNullOrEmptyOrBlank(firstNamesString)) {
+            if (!ConverterUtils.isBlankOrNull(firstNamesString)) {
                 firstNames = firstNamesString.split(";");
             }
 
             String lastNamesString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Lastname"));
-            if (!ConverterUtils.isNullOrEmptyOrBlank(lastNamesString)) {
+            if (!ConverterUtils.isBlankOrNull(lastNamesString)) {
                 lastNames = lastNamesString.split(";");
             }
 
             String affiliationsString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Affiliation"));
-            if (!ConverterUtils.isNullOrEmptyOrBlank(affiliationsString)) {
+            if (!ConverterUtils.isBlankOrNull(affiliationsString)) {
                 affiliations = affiliationsString.split(";");
             }
 
@@ -890,7 +890,7 @@ public class WhoConverter extends CacheConverter {
                     // TODO: possible that the string ends with both semi-colons?
 
                     // First name
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(firstNamesString)) {
+                    if (!ConverterUtils.isBlankOrNull(firstNamesString)) {
                         if (firstNamesString.endsWith(";") && i < firstNames.length) {
                             firstName = firstNames[i];
                         } else if (firstNames.length + i - maxLen >= 0) {
@@ -904,7 +904,7 @@ public class WhoConverter extends CacheConverter {
                     }
 
                     // Last name
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(lastNamesString)) {
+                    if (!ConverterUtils.isBlankOrNull(lastNamesString)) {
                         if (lastNamesString.endsWith(";") && i < lastNames.length) {
                             lastName = lastNames[i];
                         } else if (lastNames.length + i - maxLen >= 0) {
@@ -918,7 +918,7 @@ public class WhoConverter extends CacheConverter {
                     }
 
                     // Affiliation (raw value from data)
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(affiliationsString)) {
+                    if (!ConverterUtils.isBlankOrNull(affiliationsString)) {
                         if (affiliationsString.endsWith(";") && i < affiliations.length) {
                             affiliation = affiliations[i];
                         } else if (affiliations.length + i - maxLen >= 0) {
@@ -964,11 +964,11 @@ public class WhoConverter extends CacheConverter {
         String fullName = null;
         String contribType = null;
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(firstName) && !ConverterUtils.isNullOrEmptyOrBlank(lastName)) {
+        if (!ConverterUtils.isBlankOrNull(firstName) && !ConverterUtils.isBlankOrNull(lastName)) {
             givenName = firstName;
             familyName = lastName;
             fullName = firstName + " " + lastName;
-        } else if (!ConverterUtils.isNullOrEmptyOrBlank(firstName)) {
+        } else if (!ConverterUtils.isBlankOrNull(firstName)) {
             fullName = firstName;
         } else {
             fullName = lastName;
@@ -998,7 +998,7 @@ public class WhoConverter extends CacheConverter {
      *                 maxAgeUnit)
      */
     public void parseAgeField(Item study, String ageStr, String ageAttr, String unitAttr) {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(ageStr)) {
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(ageStr)) {
             // Check for N/A or no limit
             Matcher mAgeNotApplicable = P_AGE_NOT_APPLICABLE.matcher(ageStr);
             if (mAgeNotApplicable.matches()) {
@@ -1084,7 +1084,7 @@ public class WhoConverter extends CacheConverter {
     public void parseStudyType(Item study, String studyTypeStr) {
 
         if ((!this.existingStudy() || !study.hasAttribute("type"))
-                && !ConverterUtils.isNullOrEmptyOrBlank(studyTypeStr)) {
+                && !ConverterUtils.isBlankOrNull(studyTypeStr)) {
             Matcher mTypeInterventional = P_TYPE_INTERVENTIONAL.matcher(studyTypeStr);
             if (mTypeInterventional.matches()) { // Interventional
                 study.setAttributeIfNotNull("type", ConverterCVT.TYPE_INTERVENTIONAL);
@@ -1126,7 +1126,7 @@ public class WhoConverter extends CacheConverter {
      * @param phaseStr the input phase string
      */
     public void parsePhase(Item study, String phaseStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(phaseStr) && (!this.existingStudy() || !this.hasPhaseFeature(study))) {
+        if (!ConverterUtils.isBlankOrNull(phaseStr) && (!this.existingStudy() || !this.hasPhaseFeature(study))) {
             String featureValue = null;
 
             Matcher mPhaseNumber = P_PHASE_NUMBER.matcher(phaseStr);
@@ -1195,7 +1195,7 @@ public class WhoConverter extends CacheConverter {
                 }
             }
 
-            if (!ConverterUtils.isNullOrEmptyOrBlank(featureValue)) {
+            if (!ConverterUtils.isBlankOrNull(featureValue)) {
                 this.createAndStoreClassItem(study, "StudyFeature",
                         new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
                                 { "featureValue", featureValue } });
@@ -1217,7 +1217,7 @@ public class WhoConverter extends CacheConverter {
      * @param featuresStr the input study features string
      */
     public void parseStudyDesign(Item study, String featuresStr) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(featuresStr)) {
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(featuresStr)) {
             // TODO: improve parsing of study features, currently it works only for most
             // interventional studies
             Matcher mFeatureInterventional = P_FEATURE_INTERVENTIONAL.matcher(featuresStr);
@@ -1253,12 +1253,12 @@ public class WhoConverter extends CacheConverter {
             LocalDate resultsDatePosted) {
         if (!this.existingStudy()) {
             StringBuilder constructedSecondaryOutcomes = new StringBuilder();
-            if (!ConverterUtils.isNullOrEmptyOrBlank(secondaryOutcomes)) {
+            if (!ConverterUtils.isBlankOrNull(secondaryOutcomes)) {
                 constructedSecondaryOutcomes.append(secondaryOutcomes);
             }
             // TODO: check that resultsDatePosted date is valid
             // Filtering out placeholder links (drks.de)
-            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsAdverseEvents)
+            if (!ConverterUtils.isBlankOrNull(resultsAdverseEvents)
                     && !(resultsAdverseEvents.contains("drks.de") && resultsDatePosted != null)) {
                 if (secondaryOutcomes.length() > 0) {
                     if (!secondaryOutcomes.endsWith(".")) {
@@ -1270,7 +1270,7 @@ public class WhoConverter extends CacheConverter {
                 constructedSecondaryOutcomes.append(resultsAdverseEvents);
             }
 
-            if (!ConverterUtils.isNullOrEmptyOrBlank(constructedSecondaryOutcomes.toString())) {
+            if (!ConverterUtils.isBlankOrNull(constructedSecondaryOutcomes.toString())) {
                 study.setAttributeIfNotNull("secondaryOutcomes", constructedSecondaryOutcomes.toString());
             }
         }
@@ -1281,12 +1281,13 @@ public class WhoConverter extends CacheConverter {
      * TODO should return created studyPeople
      */
     public void createAndStoreStudyOrg(Item study, String studyOrgStr, String contribType) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyOrgStr)) {
+        if (!ConverterUtils.isBlankOrNull(studyOrgStr)) {
             // TODO: setting studyOrganisation object for now, need logic to distinguish
             // people from orgs
 
             // TODO: createAndStoreClassItem needs to deal with many2many as well
 
+            // TODO: refactor
             Matcher mNA = P_NOT_APPLICABLE.matcher(studyOrgStr);
             if (mNA.matches()) { // N/A
                 this.createAndStoreClassItem(study, "Organisation",
@@ -1342,7 +1343,7 @@ public class WhoConverter extends CacheConverter {
             seenCountries = new HashSet<Item>();
         }
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(countriesStr)) {
+        if (!ConverterUtils.isBlankOrNull(countriesStr)) {
             for (String countryName : countriesStr.split(";")) {
                 Item country = this.getCountry(countryName);
                 if (!seenCountries.contains(country)) {
@@ -1399,12 +1400,12 @@ public class WhoConverter extends CacheConverter {
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         if (!this.existingStudy()) {
             // TODO: match values with CT codes/ICD Codes
-            if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
+            if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
                 if (conditionsStr.contains(";")) { // TODO: Useless check, split includes full string if separator not
                                                    // found
                     String[] conditionsList = conditionsStr.split(";");
                     for (String conditionStr : conditionsList) {
-                        if (!ConverterUtils.isNullOrEmptyOrBlank(conditionStr)) {
+                        if (!ConverterUtils.isBlankOrNull(conditionStr)) {
                             this.createAndStoreClassItem(study, "StudyCondition",
                                     new String[][] {
                                             { "originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-') } });
@@ -1422,7 +1423,7 @@ public class WhoConverter extends CacheConverter {
      * TODO
      */
     public void parseRetrospectiveFlag(Item study, String retrospectiveFlag) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(retrospectiveFlag) && !this.existingStudy()) {
+        if (!ConverterUtils.isBlankOrNull(retrospectiveFlag) && !this.existingStudy()) {
             if (retrospectiveFlag.equalsIgnoreCase("1")) {
                 this.createAndStoreClassItem(study, "StudyFeature",
                         new String[][] { { "featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE },
@@ -1443,12 +1444,12 @@ public class WhoConverter extends CacheConverter {
         // Note: current MDR avoids duplicate with registry entry url, but maybe it
         // makes sense to have duplicate
         // Filtering out drks.de URL with no date posted (they are placeholders)
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink)
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
             // Display title
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
@@ -1472,7 +1473,7 @@ public class WhoConverter extends CacheConverter {
                 this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
                 // Publication year
                 String publicationYear = String.valueOf(resultsDatePosted.getYear());
-                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
+                if (!ConverterUtils.isBlankOrNull(publicationYear)) {
                     resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
                 }
             }
@@ -1484,13 +1485,13 @@ public class WhoConverter extends CacheConverter {
      */
     public void createAndStoreProtocolDO(Item study, String resultsUrlProtocol, String publicationYear)
             throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlProtocol)) {
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlProtocol)) {
             Matcher mUrl = P_URL.matcher(resultsUrlProtocol);
             if (mUrl.find()) {
                 // Display title
                 String doDisplayTitle;
                 String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-                if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                     doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
                 } else {
                     doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
@@ -1541,7 +1542,7 @@ public class WhoConverter extends CacheConverter {
             // Display title
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
@@ -1579,7 +1580,7 @@ public class WhoConverter extends CacheConverter {
                     if (creationOD != null) {
                         String existingDateStr = ConverterUtils.getAttrValue(creationOD, "startDate");
                         // Updating creation date if older than known creation date
-                        if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                        if (!ConverterUtils.isBlankOrNull(existingDateStr)
                                 && registrationDate
                                         .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
                             creationOD.setAttribute("startDate", registrationDate.toString());
@@ -1600,7 +1601,7 @@ public class WhoConverter extends CacheConverter {
                             ConverterCVT.DATE_TYPE_UPDATED);
                     if (lastUpdateOD != null) {
                         String existingDateStr = ConverterUtils.getAttrValue(lastUpdateOD, "startDate");
-                        if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                        if (!ConverterUtils.isBlankOrNull(existingDateStr)
                                 && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
                             lastUpdateOD.setAttribute("startDate", lastUpdate.toString());
                             // TODO: newerLastUpdate logic in separate function?
@@ -1619,7 +1620,7 @@ public class WhoConverter extends CacheConverter {
      * TODO
      */
     public void parseGender(Item study, String genderStr) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(genderStr) && this.existingStudy()) {
+        if (!ConverterUtils.isBlankOrNull(genderStr) && this.existingStudy()) {
             Matcher mGenderAll = P_GENDER_ALL.matcher(genderStr);
             if (mGenderAll.matches()) {
                 study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
@@ -1692,11 +1693,11 @@ public class WhoConverter extends CacheConverter {
             StringBuilder iec = new StringBuilder();
 
             /* Inclusion criteria */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) { // None
+            if (!ConverterUtils.isBlankOrNull(icStr)) { // None
                 Matcher mIcNone = P_IEC_NONE.matcher(icStr);
                 if (mIcNone.matches()) {
                     String g1None = mIcNone.group(2);
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(g1None)) {
+                    if (!ConverterUtils.isBlankOrNull(g1None)) {
                         iec.append(IC_PREFIX + ConverterCVT.NONE);
                     } else {
                         iec.append(IC_PREFIX + ConverterCVT.UNKNOWN);
@@ -1712,7 +1713,7 @@ public class WhoConverter extends CacheConverter {
             }
 
             /* Exclusion criteria */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(ecStr)) { // None
+            if (!ConverterUtils.isBlankOrNull(ecStr)) { // None
                 Matcher mEcNone = P_IEC_NONE.matcher(ecStr);
 
                 String adaptedEcPrefix = "";
@@ -1724,7 +1725,7 @@ public class WhoConverter extends CacheConverter {
 
                 if (mEcNone.matches()) {
                     String g2None = mEcNone.group(2);
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(g2None)) {
+                    if (!ConverterUtils.isBlankOrNull(g2None)) {
                         iec.append(adaptedEcPrefix + ConverterCVT.NONE);
                     } else {
                         iec.append(adaptedEcPrefix + ConverterCVT.UNKNOWN);
@@ -1741,7 +1742,7 @@ public class WhoConverter extends CacheConverter {
 
             // Setting IEC string constructed from IC + EC
             String iecStr = iec.toString();
-            if (!ConverterUtils.isNullOrEmptyOrBlank(iecStr)) {
+            if (!ConverterUtils.isBlankOrNull(iecStr)) {
                 study.setAttributeIfNotNull("iec", iecStr);
             }
         }
@@ -1751,7 +1752,7 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy()) {
             StringBuilder dSSBuilder = new StringBuilder();
 
-            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsIPDPlan)) {
+            if (!ConverterUtils.isBlankOrNull(resultsIPDPlan)) {
                 dSSBuilder.append(resultsIPDPlan);
                 if (!resultsIPDPlan.endsWith(".")) {
                     dSSBuilder.append(".");
@@ -1759,12 +1760,12 @@ public class WhoConverter extends CacheConverter {
                 dSSBuilder.append(" ");
             }
 
-            if (!ConverterUtils.isNullOrEmptyOrBlank(resultsIPDDescription)) {
+            if (!ConverterUtils.isBlankOrNull(resultsIPDDescription)) {
                 dSSBuilder.append(resultsIPDDescription);
             }
 
             String dataSharingStatement = dSSBuilder.toString();
-            if (!ConverterUtils.isNullOrEmptyOrBlank(dataSharingStatement)) {
+            if (!ConverterUtils.isBlankOrNull(dataSharingStatement)) {
                 study.setAttributeIfNotNull("dataSharingStatement", dataSharingStatement);
             }
         }

@@ -1,8 +1,5 @@
 package org.intermine.bio.dataconversion;
 
-import java.time.DateTimeException;
-import java.time.LocalDate;
-
 /*
  * Copyright (C) 2024-2025 MDRMine
  *
@@ -13,6 +10,9 @@ import java.time.LocalDate;
  *
  */
 
+import java.text.ParseException;
+import java.time.DateTimeException;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -42,10 +42,13 @@ public class ConverterUtils {
     public static final DateTimeFormatter P_DATE_D_M_Y_SLASHES = DateTimeFormatter.ofPattern("d/M/uuuu");
     public static final DateTimeFormatter P_DATE_D_MWORD_Y_SPACES = DateTimeFormatter.ofPattern("d MMMM uuuu");
     public static final DateTimeFormatter P_DATE_MWORD_D_Y_HOUR = DateTimeFormatter.ofPattern("MMM d uuuu hh:mma");
+    public static final DateTimeFormatter P_DATE_M_D_Y_TIME = DateTimeFormatter.ofPattern("M/d/uuuu hh:mm:ss");
 
     /*
      * Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html
      */
+    public static final Pattern P_PUBMED_ID = Pattern.compile(".*pubmed.*\\/([^?\\/]+).*");
+    public static final Pattern P_ID_AT_END_OF_URL = Pattern.compile(".*\\/([^?\\/]+).*");
     public static final Pattern P_EU_ID = Pattern
             .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?"); // Both EUCTR and CTIS (they
                                                                                        // might have the same format)
@@ -69,14 +72,14 @@ public class ConverterUtils {
     // public static final Pattern P_SLCTR_ID = Pattern.compile();
 
     /**
-     * Check if a string is null, empty, only contains whitespaces, or is equal to
+     * Check if a string is null, empty (after trim), or is equal to
      * "NULL".
      * 
      * @return true if null or empty or only contains whitespaces or is equal to
      *         "NULL", false otherwise
      */
-    public static boolean isNullOrEmptyOrBlank(String s) {
-        return (s == null || s.isEmpty() || s.equalsIgnoreCase("NULL") || s.isBlank());
+    public static boolean isBlankOrNull(String s) {
+        return (s == null || s.trim().isEmpty() || s.equalsIgnoreCase("NULL"));
     }
 
     /**
@@ -123,6 +126,26 @@ public class ConverterUtils {
             ;
         }
         return parsedDate;
+    }
+
+    public static boolean booleanFromString(String boolStr) throws ParseException {
+        if (!ConverterUtils.isBlankOrNull(boolStr)) {
+            if (boolStr.equalsIgnoreCase("true") || boolStr.equalsIgnoreCase("false")) {
+                return true;
+            } else {
+                throw new ParseException("Unexpected value in string to convert to boolean: " + boolStr, 0);
+            }
+        }
+
+        return false;
+    }
+
+    public static String booleanToString(Boolean b) {
+        String bs = null;
+        if (b != null) {
+            bs = b.toString();
+        }
+        return bs;
     }
 
     /**
@@ -205,11 +228,11 @@ public class ConverterUtils {
      *              to the study's brief description
      */
     public static void addToBriefDescription(Item study, String text) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(text)) {
+        if (!ConverterUtils.isBlankOrNull(text)) {
             Attribute briefDescription = study.getAttribute("briefDescription");
             if (briefDescription != null) {
                 String currentDesc = briefDescription.getValue();
-                if (!ConverterUtils.isNullOrEmptyOrBlank(currentDesc)) {
+                if (!ConverterUtils.isBlankOrNull(currentDesc)) {
                     study.setAttribute("briefDescription", currentDesc + "\n" + text);
                 } else {
                     study.setAttribute("briefDescription", text);
@@ -291,7 +314,7 @@ public class ConverterUtils {
      * @return
      */
     public static String capitaliseAndReplaceCharBySpace(final String str, final char charToReplace) {
-        if (ConverterUtils.isNullOrEmptyOrBlank(str)) {
+        if (ConverterUtils.isBlankOrNull(str)) {
             return str;
         }
         String capitalised = WordUtils.capitalizeFully(str);

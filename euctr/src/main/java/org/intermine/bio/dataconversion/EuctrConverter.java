@@ -157,7 +157,7 @@ public class EuctrConverter extends CacheConverter {
                 this.currentTrialID = cleanedID;
 
                 // Getting country from ID country code
-                if (!ConverterUtils.isNullOrEmptyOrBlank(countryCode)) {
+                if (!ConverterUtils.isBlankOrNull(countryCode)) {
                     this.currentCountry = this.getCountry(countryCode);
                     if (this.currentCountry == null) {
                         this.writeLog("Couldn't find country from country code: " + countryCode);
@@ -235,7 +235,7 @@ public class EuctrConverter extends CacheConverter {
 
                 // "Not Recruiting" or "Authorised-recruitment may be ongoing or finished" or NA
                 String recruitmentStatus = this.getAndCleanValue(mainInfo, "recruitmentStatus");
-                if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(recruitmentStatus)
+                if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(recruitmentStatus)
                         && !recruitmentStatus.equalsIgnoreCase("NA")) {
                     study.setAttributeIfNotNull("status", recruitmentStatus);
                 }
@@ -470,7 +470,7 @@ public class EuctrConverter extends CacheConverter {
         if (!this.existingStudy()) {
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
@@ -483,7 +483,7 @@ public class EuctrConverter extends CacheConverter {
                             { "title", doDisplayTitle } });
 
             /* Registry entry instance */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(this.currentTrialID)) {
+            if (!ConverterUtils.isBlankOrNull(this.currentTrialID)) {
                 this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
                         new String[][] { { "url", url }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
             }
@@ -502,7 +502,7 @@ public class EuctrConverter extends CacheConverter {
                     if (creationOD != null) {
                         String existingDateStr = ConverterUtils.getAttrValue(creationOD, "startDate");
                         // Updating creation date if older than known creation date
-                        if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                        if (!ConverterUtils.isBlankOrNull(existingDateStr)
                                 && creationDate
                                         .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
                             creationOD.setAttributeIfNotNull("startDate", creationDate.toString());
@@ -597,7 +597,7 @@ public class EuctrConverter extends CacheConverter {
                 } else if (tuple.length > 2) {
                     this.writeLog("Split feature-value tuple with colon but got more than 2 values: "
                             + String.join(";", tuple));
-                } else if (!ConverterUtils.isNullOrEmptyOrBlank(tuple[1])) {
+                } else if (!ConverterUtils.isBlankOrNull(tuple[1])) {
                     switch (tuple[0].toLowerCase()) {
                         case "controlled":
                             // TODO?
@@ -758,7 +758,7 @@ public class EuctrConverter extends CacheConverter {
                 phaseValue = phaseStr;
             }
 
-            if (!ConverterUtils.isNullOrEmptyOrBlank(phaseValue)) {
+            if (!ConverterUtils.isBlankOrNull(phaseValue)) {
                 this.createAndStoreClassItem(study, "StudyFeature",
                         new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
                                 { "featureValue", phaseValue } });
@@ -779,7 +779,7 @@ public class EuctrConverter extends CacheConverter {
             throws Exception {
         if (!this.existingStudy()) {
             // Free text
-            if (!ConverterUtils.isNullOrEmptyOrBlank(hcFreetext)) {
+            if (!ConverterUtils.isBlankOrNull(hcFreetext)) {
                 this.createAndStoreClassItem(study, "StudyCondition",
                         new String[][] { { "originalValue", WordUtils.capitalizeFully(hcFreetext, ' ', '-') } });
             }
@@ -787,7 +787,7 @@ public class EuctrConverter extends CacheConverter {
             // HC Codes (MeSH tree)
             Matcher mHcCode;
             for (String hcCode : hcCodes) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(hcCode)) {
+                if (!ConverterUtils.isBlankOrNull(hcCode)) {
                     mHcCode = P_HC_CODE.matcher(hcCode);
 
                     if (mHcCode.matches()) {
@@ -813,7 +813,7 @@ public class EuctrConverter extends CacheConverter {
             // HC Keywords (MedDRA)
             Matcher mHcKeyword;
             for (String hcKw : hcKeywords) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(hcKw)) {
+                if (!ConverterUtils.isBlankOrNull(hcKw)) {
                     mHcKeyword = P_HC_KEYWORD.matcher(hcKw);
 
                     if (mHcKeyword.matches()) {
@@ -846,7 +846,7 @@ public class EuctrConverter extends CacheConverter {
         // TODO: match with CV
         String[] products = iFreetext.split("\n\n");
         for (String p : products) {
-            if (!ConverterUtils.isNullOrEmptyOrBlank(p)) {
+            if (!ConverterUtils.isBlankOrNull(p)) {
                 this.createAndStoreClassItem(study, "Topic",
                         new String[][] { { "type", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT }, { "value", p } });
             }
@@ -864,12 +864,12 @@ public class EuctrConverter extends CacheConverter {
      */
     public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, LocalDate resultsDateCompleted,
             LocalDate resultsDatePosted) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(resultsUrlLink)
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && resultsDatePosted != null) {
             // Display title
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
@@ -893,7 +893,7 @@ public class EuctrConverter extends CacheConverter {
                 this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
                 // Publication year
                 String publicationYear = String.valueOf(resultsDatePosted.getYear());
-                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
+                if (!ConverterUtils.isBlankOrNull(publicationYear)) {
                     resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
                 }
             }
@@ -914,9 +914,9 @@ public class EuctrConverter extends CacheConverter {
                 type = contact.getType();
                 firstName = contact.getFirstname();
                 affiliation = contact.getAffiliation();
-                if (!ConverterUtils.isNullOrEmptyOrBlank(firstName)) {
+                if (!ConverterUtils.isBlankOrNull(firstName)) {
 
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(type)) {
+                    if (!ConverterUtils.isBlankOrNull(type)) {
                         if (type.equalsIgnoreCase("public")) {
                             type = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
                         } else if (type.equalsIgnoreCase("scientific")) {
@@ -1052,12 +1052,12 @@ public class EuctrConverter extends CacheConverter {
             StringBuilder iec = new StringBuilder();
 
             /* Inclusion criteria */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) {
+            if (!ConverterUtils.isBlankOrNull(icStr)) {
                 iec.append(icStr);
             }
 
             /* Exclusion criteria */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(ecStr)) {
+            if (!ConverterUtils.isBlankOrNull(ecStr)) {
                 if (!iec.toString().isEmpty()) {
                     if (!iec.toString().endsWith(".")) {
                         iec.append(".");
@@ -1069,12 +1069,12 @@ public class EuctrConverter extends CacheConverter {
 
             // Setting IEC string constructed from IC + EC
             String iecStr = iec.toString();
-            if (!ConverterUtils.isNullOrEmptyOrBlank(iecStr)) {
+            if (!ConverterUtils.isBlankOrNull(iecStr)) {
                 study.setAttributeIfNotNull("iec", iecStr);
             }
 
             /* Min/max age from IC */
-            if (!ConverterUtils.isNullOrEmptyOrBlank(icStr)) {
+            if (!ConverterUtils.isBlankOrNull(icStr)) {
                 // The age criteria is at the end of the IC string
                 List<String> ageLines = ConverterUtils.getLastLines(icStr, 6);
 
@@ -1123,12 +1123,12 @@ public class EuctrConverter extends CacheConverter {
                         minAge = "";
                     }
 
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(minAge)) {
+                    if (!ConverterUtils.isBlankOrNull(minAge)) {
                         study.setAttributeIfNotNull("minAge", minAge);
                         study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
                     }
 
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(maxAge)) {
+                    if (!ConverterUtils.isBlankOrNull(maxAge)) {
                         study.setAttributeIfNotNull("maxAge", maxAge);
                         study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
                     }
@@ -1144,7 +1144,7 @@ public class EuctrConverter extends CacheConverter {
      * @param genderStr
      */
     public void parseGender(Item study, String genderStr) {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(genderStr)) {
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(genderStr)) {
             Matcher mGender = P_GENDER.matcher(genderStr);
             if (mGender.matches()) {
                 String f = mGender.group(1);
@@ -1269,11 +1269,11 @@ public class EuctrConverter extends CacheConverter {
      * @throws Exception
      */
     public void createAndStoreProtocolDO(Item study, String protocolCode) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isNullOrEmptyOrBlank(protocolCode)) {
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(protocolCode)) {
             // Display title
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
             } else {
                 doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
@@ -1303,7 +1303,7 @@ public class EuctrConverter extends CacheConverter {
         if (!this.existingStudy()) {
             for (String org : sourceSupports) {
                 // TODO: match with CV
-                if (!ConverterUtils.isNullOrEmptyOrBlank(org)) {
+                if (!ConverterUtils.isBlankOrNull(org)) {
                     this.createAndStoreClassItem(study, "Organisation",
                             new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_STUDY_FUNDER },
                                     { "name", org } });
@@ -1327,12 +1327,12 @@ public class EuctrConverter extends CacheConverter {
                 for (EuctrEthicsReview er : ethicsReviews) {
                     String erStatus = er.getStatus();
 
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(erStatus)) {
+                    if (!ConverterUtils.isBlankOrNull(erStatus)) {
                         studyCountry.setAttributeIfNotNull("status", erStatus);
                     }
 
                     String erApprovalDateStr = er.getApprovalDate();
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(erApprovalDateStr)) {
+                    if (!ConverterUtils.isBlankOrNull(erApprovalDateStr)) {
                         LocalDate erApprovalDate = ConverterUtils.getDateFromString(erApprovalDateStr,
                                 ConverterUtils.P_DATE_D_M_Y_SLASHES);
                         if (erApprovalDate != null) {

@@ -144,7 +144,7 @@ public class CtisConverter extends CacheConverter {
 
             /* Study title (need to get it before protocol DO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
-            if (!ConverterUtils.isNullOrEmptyOrBlank(trialTitle)) {
+            if (!ConverterUtils.isBlankOrNull(trialTitle)) {
                 study.setAttributeIfNotNull("displayTitle", trialTitle);
                 this.createAndStoreClassItem(study, "Title",
                         new String[][] { { "text", trialTitle }, { "type", ConverterCVT.TITLE_TYPE_SCIENTIFIC } });
@@ -339,14 +339,14 @@ public class CtisConverter extends CacheConverter {
      * https://www.bfarm.de/SharedDocs/Downloads/DE/Arzneimittel/KlinischePruefung/EudraCT_EU-CTR_QuA.pdf?__blob=publicationFile
      */
     public void parseProtocolCode(Item study, String protocolCode) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(protocolCode)) {
+        if (!ConverterUtils.isBlankOrNull(protocolCode)) {
             // TODO: Try to get URL from euclinicaltrials.eu/ctis-public/view/[trial ID]?
             // protocol can be in trial documents tab
 
             // Display title
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
             } else {
                 doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
@@ -378,7 +378,7 @@ public class CtisConverter extends CacheConverter {
      */
     public void parseStudyCountries(Item study, String locationAndRecruitmentStatus) throws Exception {
         // TODO: normalise values
-        if (!ConverterUtils.isNullOrEmptyOrBlank(locationAndRecruitmentStatus)) {
+        if (!ConverterUtils.isBlankOrNull(locationAndRecruitmentStatus)) {
             String[] colonSeparatedValues = locationAndRecruitmentStatus.split(":");
 
             if (colonSeparatedValues.length > 1) {
@@ -431,7 +431,7 @@ public class CtisConverter extends CacheConverter {
         boolean notEmpty = false; // Used for setting value if no string couldn't be used but at least one of the
                                   // string is N/A
         boolean alreadyParsed = false;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(ageRangeSecondaryIdentifier)) {
+        if (!ConverterUtils.isBlankOrNull(ageRangeSecondaryIdentifier)) {
             notEmpty = true;
             Matcher mAgeNASecondary = P_NOT_APPLICABLE.matcher(ageRangeSecondaryIdentifier);
             if (!mAgeNASecondary.matches()) {
@@ -439,7 +439,7 @@ public class CtisConverter extends CacheConverter {
                 this.parseAgeRangeSecondaryIdentifier(study, ageRangeSecondaryIdentifier);
             }
         }
-        if (!alreadyParsed && !ConverterUtils.isNullOrEmptyOrBlank(ageGroup)) {
+        if (!alreadyParsed && !ConverterUtils.isBlankOrNull(ageGroup)) {
             notEmpty = true;
             Matcher mAgeNAPrimary = P_NOT_APPLICABLE.matcher(ageGroup);
             if (!mAgeNAPrimary.matches()) {
@@ -542,7 +542,7 @@ public class CtisConverter extends CacheConverter {
                 String a1 = mAgePrimary.group(1);
                 String a2 = mAgePrimary.group(2);
                 String u = mAgePrimary.group(3);
-                if (ConverterUtils.isNullOrEmptyOrBlank(u)) {
+                if (ConverterUtils.isBlankOrNull(u)) {
                     if (a1.toLowerCase().contains("utero")) {
                         minAge = ConverterCVT.AGE_IN_UTERO;
                     } else {
@@ -551,7 +551,7 @@ public class CtisConverter extends CacheConverter {
                     }
                 } else {
                     try {
-                        if (!ConverterUtils.isNullOrEmptyOrBlank(a2)) {
+                        if (!ConverterUtils.isBlankOrNull(a2)) {
                             if (maxAge == null || (!maxAge.equals(ConverterCVT.NONE)
                                     && Integer.parseInt(a2) > Integer.parseInt(maxAge))) {
                                 maxAge = a2;
@@ -621,7 +621,7 @@ public class CtisConverter extends CacheConverter {
      */
     public void parseGender(Item study, String gender) {
         gender = gender.toLowerCase();
-        if (!ConverterUtils.isNullOrEmptyOrBlank(gender)) {
+        if (!ConverterUtils.isBlankOrNull(gender)) {
             if (gender.contains(ConverterCVT.GENDER_MEN.toLowerCase())) {
                 if (gender.contains(ConverterCVT.GENDER_WOMEN.toLowerCase())) {
                     study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
@@ -651,7 +651,7 @@ public class CtisConverter extends CacheConverter {
     public void parseStudyConditions(Item study, String studyConditions) throws Exception {
         // TODO: separate multiple conditions somehow?
         // TODO: match with MedDRA/other medical terms
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyConditions)) {
+        if (!ConverterUtils.isBlankOrNull(studyConditions)) {
             this.createAndStoreClassItem(study, "StudyCondition",
                     new String[][] { { "originalValue", studyConditions },
                             { "originalCTType", ConverterCVT.CV_MEDDRA } });
@@ -703,7 +703,7 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parseTrialPhase(Item study, String trialPhase) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(trialPhase)) {
+        if (!ConverterUtils.isBlankOrNull(trialPhase)) {
             Matcher mPhases = P_PHASES.matcher(trialPhase);
             if (mPhases.matches()) {
                 String p1 = mPhases.group(1);
@@ -727,7 +727,7 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parseProduct(Item study, String product) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(product)) {
+        if (!ConverterUtils.isBlankOrNull(product)) {
             // Setting interventions field as well
             study.setAttribute("interventions", product);
 
@@ -762,7 +762,7 @@ public class CtisConverter extends CacheConverter {
 
         // Check study status to add ethics approval notification
         // TODO: no info of decision date in model if not authorised
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyStatus)
+        if (!ConverterUtils.isBlankOrNull(studyStatus)
                 && !studyStatus.toLowerCase().equals("not authorised")
                 && !studyStatus.toLowerCase().equals("revoked")) {
 
@@ -772,7 +772,7 @@ public class CtisConverter extends CacheConverter {
                 // Display title
                 String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
                 String doDisplayTitle;
-                if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+                if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                     doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
                 } else {
                     doDisplayTitle = ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
@@ -808,7 +808,7 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parseSponsors(Item study, String sponsors, String sponsorTypes) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(sponsors)) {
+        if (!ConverterUtils.isBlankOrNull(sponsors)) {
             HashSet<String> seenSponsors = new HashSet<String>();
             String sponsor;
             String type;
@@ -840,7 +840,7 @@ public class CtisConverter extends CacheConverter {
     public void createAndStoreRegistryEntryDO(Item study, LocalDate lastUpdated) throws Exception {
         String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
         String doDisplayTitle;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
             doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
@@ -853,7 +853,7 @@ public class CtisConverter extends CacheConverter {
                         { "title", doDisplayTitle } });
 
         /* Registry entry instance */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(this.currentTrialID)) {
+        if (!ConverterUtils.isBlankOrNull(this.currentTrialID)) {
             // Instance with constructed URL
             this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
                     new String[][] { { "url", REGISTRY_ENTRY_BASE_URL + this.currentTrialID },

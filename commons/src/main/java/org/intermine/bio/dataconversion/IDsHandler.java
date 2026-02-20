@@ -129,7 +129,7 @@ public class IDsHandler {
          * Handling various cases regarding CTIS and EUCTR IDs, as they can be equal
          * (both in previous/existing study IDs and parsed IDs)
          */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID) && !ConverterUtils.isNullOrEmptyOrBlank(euctrID)) {
+        if (!ConverterUtils.isBlankOrNull(ctisID) && !ConverterUtils.isBlankOrNull(euctrID)) {
             if (ctisID.equalsIgnoreCase(euctrID)) { // previous/existing study CTIS and EUCTR ID are the same
                 if (this.ctisID.isEmpty() && this.euctrID.isEmpty()) { // Parsed IDs are both empty, setting both of
                                                                        // them
@@ -200,7 +200,7 @@ public class IDsHandler {
             }
         } else { // One of the previous IDs is empty
             // TODO: should really overwrite IDs if different or not? probably yes
-            if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID)) { // Previous/existing study EUCTR ID is empty
+            if (!ConverterUtils.isBlankOrNull(ctisID)) { // Previous/existing study EUCTR ID is empty
                 // Case where all IDs are identical but one of the previous/existing study IDs
                 // is empty, meaning it's carrying the info that the ID set
                 // is specifically only for this field (in this case CTIS), so we set the parsed
@@ -218,7 +218,7 @@ public class IDsHandler {
                     }
                     this.ctisID = ctisID;
                 }
-            } else if (!ConverterUtils.isNullOrEmptyOrBlank(euctrID)) { // previous/existing study CTIS ID is empty
+            } else if (!ConverterUtils.isBlankOrNull(euctrID)) { // previous/existing study CTIS ID is empty
                 // Same case as above but with empty previous/existing study CTIS ID instead
                 if (euctrID.equalsIgnoreCase(this.euctrID) && this.euctrID.equalsIgnoreCase(this.ctisID)) {
                     this.ctisID = "";
@@ -233,7 +233,7 @@ public class IDsHandler {
         }
 
         // Handling NCT ID
-        if (!ConverterUtils.isNullOrEmptyOrBlank(nctID)) {
+        if (!ConverterUtils.isBlankOrNull(nctID)) {
             if (!this.nctID.isEmpty() && !nctID.equals(this.nctID)) {
                 this.logger.writeLog("nctID about to be set (" + nctID
                         + ") is different than parsed ID it is replacing (" + this.nctID + ") (should not happen?)");

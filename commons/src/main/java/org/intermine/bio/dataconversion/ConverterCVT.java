@@ -77,13 +77,18 @@ public class ConverterCVT {
     public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
 
     /* Objects */
+    public static final String O_TYPE_BIOSPECIMEN = "Biospecimen data";
+    public static final String O_TYPE_ICF = "Informed consent form";
+    public static final String O_TYPE_IPD = "Individual partipant data";
+    public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
+    public static final String O_TYPE_STATISTICAL_ANALYSIS_PLAN = "Statistical analysis plan";
+    public static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
     public static final String O_TYPE_TRIAL_REGISTRY_ENTRY = "Trial registry entry";
     public static final String O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY = "Trial registry results summary";
-    public static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
-    public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
-    public static final String O_TYPE_INFORMED_CONSENT_FORM = "Informed consent form";
-    public static final String O_TYPE_STATISTICAL_ANALYSIS_PLAN = "Statistical analysis plan";
+    public static final String O_TYPE_WEBSITE = "Website";
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
+    public static final String O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD = "Case by case download";
+    public static final String O_CLASS_DATASET = "Dataset";
     public static final String O_CLASS_TEXT = "Text";
     public static final String O_RESOURCE_TYPE_PDF = "PDF";
     public static final String O_RESOURCE_TYPE_WORD_DOC = "Word doc";

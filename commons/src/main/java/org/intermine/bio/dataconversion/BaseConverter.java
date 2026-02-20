@@ -186,6 +186,22 @@ public abstract class BaseConverter extends BioFileConverter {
         return this.getModel().getClassDescriptorByName(item.getClassName());
     }
 
+    public Set<ClassDescriptor> getAllDescriptors(Item item) {
+        ClassDescriptor itemCD = this.getClassDescriptor(item);
+        if (itemCD == null) {
+            this.writeLog("Error: getClassDescriptor() return a null ClassDescriptor");
+            return null;
+        } else {
+            Set<ClassDescriptor> allCDs = itemCD.getAllSuperDescriptors();
+            if (allCDs != null) {
+                allCDs.add(itemCD);
+            } else {
+                this.writeLog("Error: getAllSuperDescriptors() returned null and not an empty Set (shouldn't happen?)");
+            }
+            return allCDs;
+        }
+    }
+
     /**
      * TODO
      * populates countriesMap
@@ -230,13 +246,13 @@ public abstract class BaseConverter extends BioFileConverter {
                                 { "geonameId", lineValues[16] } });
 
                 // Adding entries in map to find Country Item based on various values
-                if (!ConverterUtils.isNullOrEmptyOrBlank(lineValues[0])) {
+                if (!ConverterUtils.isBlankOrNull(lineValues[0])) {
                     this.countriesMap.put(lineValues[0].toLowerCase(), country);
                 }
-                if (!ConverterUtils.isNullOrEmptyOrBlank(lineValues[1])) {
+                if (!ConverterUtils.isBlankOrNull(lineValues[1])) {
                     this.countriesMap.put(lineValues[1].toLowerCase(), country);
                 }
-                if (!ConverterUtils.isNullOrEmptyOrBlank(lineValues[4])) {
+                if (!ConverterUtils.isBlankOrNull(lineValues[4])) {
                     this.countriesMap.put(lineValues[4].toLowerCase(), country);
                 }
 
@@ -349,7 +365,7 @@ public abstract class BaseConverter extends BioFileConverter {
                     "The list of Country items is empty, you likely forgot to call loadCountries() at the start of your parser");
         }
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(value)) {
+        if (!ConverterUtils.isBlankOrNull(value)) {
             value = value.toLowerCase();
             if (this.countriesMap.containsKey(value)) {
                 country = this.countriesMap.get(value);
@@ -397,13 +413,13 @@ public abstract class BaseConverter extends BioFileConverter {
             IDsHandler l = new IDsHandler(this.logger, ctisID, nctID, euctrID);
 
             // Adding all combinations of entries in idsMap (1 per ID)
-            if (!ConverterUtils.isNullOrEmptyOrBlank(ctisID)) {
+            if (!ConverterUtils.isBlankOrNull(ctisID)) {
                 idsMap.put(ctisID, l);
             }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(nctID)) {
+            if (!ConverterUtils.isBlankOrNull(nctID)) {
                 idsMap.put(nctID, l);
             }
-            if (!ConverterUtils.isNullOrEmptyOrBlank(euctrID)) {
+            if (!ConverterUtils.isBlankOrNull(euctrID)) {
                 idsMap.put(euctrID, l);
             }
         }
@@ -515,7 +531,7 @@ public abstract class BaseConverter extends BioFileConverter {
             } else {
                 this.writeLog("handleReferencesAndCollections(): Failed to find reference in "
                         + this.getClassDescriptor(itemA).getSimpleName()
-                        + " class of " + this.getClassDescriptor(itemB).getSimpleName() + "class");
+                        + " class of " + this.getClassDescriptor(itemB).getSimpleName() + " class");
             }
         }
     }
@@ -527,16 +543,19 @@ public abstract class BaseConverter extends BioFileConverter {
     public ReferenceDescriptor getReferenceDescriptorInItemAOfItemB(Item itemA, Item itemB) throws Exception {
         ReferenceDescriptor foundRD = null;
 
-        Set<ReferenceDescriptor> rds = Stream.concat(this.getClassDescriptor(itemA).getReferenceDescriptors().stream(),
-                this.getClassDescriptor(itemA).getCollectionDescriptors().stream())
+        Set<ReferenceDescriptor> rds = Stream.concat(this.getClassDescriptor(itemA).getAllReferenceDescriptors().stream(),
+                this.getClassDescriptor(itemA).getAllCollectionDescriptors().stream())
                 .collect(Collectors.toSet());
         Iterator<ReferenceDescriptor> rdsIter = rds.iterator();
+
+        // B ClassDescriptor + super classes CDs (for now not more useful than just B CD but who knows)
+        Set<ClassDescriptor> bCDs = this.getAllDescriptors(itemB);
 
         while (rdsIter.hasNext()) {
             ReferenceDescriptor rd = rdsIter.next();
             // Note: will not work as intended in case a Class has both a reference and a
             // collection of the same Class
-            if (rd.getReferencedClassDescriptor().equals(this.getClassDescriptor(itemB))) {
+            if (bCDs.contains(rd.getReferencedClassDescriptor())) {
                 foundRD = rd;
                 break;
             }
@@ -552,7 +571,7 @@ public abstract class BaseConverter extends BioFileConverter {
             throws Exception {
         Item studyIdentifier = null;
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+        if (!ConverterUtils.isBlankOrNull(id)) {
             this.createAndStoreClassItem(study, "StudyIdentifier",
                     new String[][] { { "identifierValue", id }, { "identifierType", identifierType },
                             { "identifierLink", identifierLink } });
@@ -600,21 +619,26 @@ public abstract class BaseConverter extends BioFileConverter {
      */
     public LocalDate parseDate(String dateStr, DateTimeFormatter df) {
         LocalDate date = null;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(dateStr)) {
+        if (!ConverterUtils.isBlankOrNull(dateStr)) {
+            // Test the passed formatter
             if (df != null) {
                 date = ConverterUtils.getDateFromString(dateStr, df);
             }
-            if (date == null) { // ISO format
-                date = ConverterUtils.getDateFromString(dateStr, null);
-                if (date == null) { // d(d)/m(m)/yyyy
-                    date = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-                    if (date == null) { // dd month(word) yyyy
-                        date = ConverterUtils.getDateFromString(dateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
-                        if (date == null) {
-                            this.writeLog("parseDate(): couldn't parse date: " + dateStr);
-                        }
+
+            // Test other various patterns (null is ISO format)
+            if (date == null) {
+                DateTimeFormatter[] patterns = {null, ConverterUtils.P_DATE_D_M_Y_SLASHES, ConverterUtils.P_DATE_D_MWORD_Y_SPACES, 
+                    ConverterUtils.P_DATE_MWORD_D_Y_HOUR, ConverterUtils.P_DATE_M_D_Y_TIME};
+                for (DateTimeFormatter pattern: patterns) {
+                    date = ConverterUtils.getDateFromString(dateStr, pattern);
+                    if (date != null) {
+                        break;
                     }
                 }
+            }
+
+            if (date == null) {
+                this.writeLog("parseDate(): couldn't parse date: " + dateStr);
             }
         }
 

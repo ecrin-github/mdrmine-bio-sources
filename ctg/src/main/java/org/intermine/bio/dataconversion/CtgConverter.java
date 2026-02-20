@@ -130,7 +130,7 @@ public class CtgConverter extends BaseConverter {
         // Not storing study if trialID is blank or is the trial that is not parsed
         // properly or is a trial with an ID that is already linked to another study
         // TODO: if studies with blank trial IDs exist, check otherIDs then?
-        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID) && !trialID.equals("NCT01027572") &&
+        if (!ConverterUtils.isBlankOrNull(trialID) && !trialID.equals("NCT01027572") &&
                 this.parseTrialIDs(study, trialID, otherIDs)) {
 
             /* Study data source */
@@ -296,7 +296,7 @@ public class CtgConverter extends BaseConverter {
         }
 
         // Other IDs
-        if (!ConverterUtils.isNullOrEmptyOrBlank(otherIDsStr) && continueParsing) {
+        if (!ConverterUtils.isBlankOrNull(otherIDsStr) && continueParsing) {
             // study.setAttributeIfNotNull("testField1", otherIDsStr);
             boolean ctisIdSet = false;
             boolean euctrIdSet = false;
@@ -419,7 +419,7 @@ public class CtgConverter extends BaseConverter {
             String ctisID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
             for (String id : new String[] { nctID, ctisID, euctrID }) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+                if (!ConverterUtils.isBlankOrNull(id)) {
                     this.storedPKs.add(id);
                 }
             }
@@ -448,7 +448,7 @@ public class CtgConverter extends BaseConverter {
 
         // TODO: && !title.equals("-") && !title.equals("_") && !title.equals(".") ?
         /* Public title */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyTitle)) {
+        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
             study.setAttributeIfNotNull("displayTitle", studyTitle);
             displayTitleSet = true;
 
@@ -457,7 +457,7 @@ public class CtgConverter extends BaseConverter {
         }
 
         /* Acronym */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(acronym)) {
+        if (!ConverterUtils.isBlankOrNull(acronym)) {
             if (!displayTitleSet) {
                 study.setAttributeIfNotNull("displayTitle", acronym);
             }
@@ -479,13 +479,13 @@ public class CtgConverter extends BaseConverter {
      * @param briefSummary
      */
     public void parseBriefSummary(Item study, String briefSummary) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(briefSummary)) {
+        if (!ConverterUtils.isBlankOrNull(briefSummary)) {
             study.setAttribute("briefDescription", briefSummary);
         }
     }
 
     public void parseStatus(Item study, String status) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(status)) {
+        if (!ConverterUtils.isBlankOrNull(status)) {
             // TODO: normalisation
             String cleanedStatus = ConverterUtils.capitaliseAndReplaceCharBySpace(status, '_');
             if (cleanedStatus.equals("Active not recruiting")) { // Temporary
@@ -503,10 +503,10 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parseConditions(Item study, String conditionsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
+        if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
             String[] conditions = conditionsStr.split("\\|");
             for (String condition : conditions) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(condition)) {
+                if (!ConverterUtils.isBlankOrNull(condition)) {
                     // TODO: link/normalise with CV
                     this.createAndStoreClassItem(study, "StudyCondition",
                             new String[][] { { "originalValue", WordUtils.capitalizeFully(condition, ' ', '-') } });
@@ -523,14 +523,14 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parseInterventions(Item study, String interventionsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(interventionsStr)) {
+        if (!ConverterUtils.isBlankOrNull(interventionsStr)) {
             // TODO: formatting
             study.setAttributeIfNotNull("interventions", interventionsStr);
 
             String[] interventions = interventionsStr.split("\\|");
             String[] tuple;
             for (String intervention : interventions) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(intervention)) {
+                if (!ConverterUtils.isBlankOrNull(intervention)) {
                     tuple = intervention.split(": ");
                     if (tuple.length == 2) {
                         // TODO: link/normalise with CV
@@ -554,7 +554,7 @@ public class CtgConverter extends BaseConverter {
      * @param primaryOutcomes
      */
     public void parsePrimaryOutcomes(Item study, String primaryOutcomes) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(primaryOutcomes)) {
+        if (!ConverterUtils.isBlankOrNull(primaryOutcomes)) {
             study.setAttributeIfNotNull("primaryOutcome", primaryOutcomes);
         }
     }
@@ -570,11 +570,11 @@ public class CtgConverter extends BaseConverter {
         // TODO: capitalise?
         StringBuilder outcomesSb = new StringBuilder();
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(secondaryOutcomes)) {
+        if (!ConverterUtils.isBlankOrNull(secondaryOutcomes)) {
             outcomesSb.append(secondaryOutcomes);
         }
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(otherOutcomes)) {
+        if (!ConverterUtils.isBlankOrNull(otherOutcomes)) {
             if (!outcomesSb.toString().isEmpty()) {
                 if (!outcomesSb.toString().endsWith(".")) {
                     outcomesSb.append(".");
@@ -595,7 +595,7 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parseSponsor(Item study, String sponsor) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(sponsor)) {
+        if (!ConverterUtils.isBlankOrNull(sponsor)) {
             // TODO: differentiate people from orgs + link to CV
             this.createAndStoreClassItem(study, "Organisation",
                     new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR }, { "name", sponsor } });
@@ -610,7 +610,7 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parseCollaborators(Item study, String collaboratorsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(collaboratorsStr)) {
+        if (!ConverterUtils.isBlankOrNull(collaboratorsStr)) {
             String[] collaborators = collaboratorsStr.split("\\|");
             for (String collaborator : collaborators) {
                 // TODO: differentiate people from orgs (if any) + link to CV
@@ -628,7 +628,7 @@ public class CtgConverter extends BaseConverter {
      * @param gender
      */
     public void parseGender(Item study, String gender) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(gender)) {
+        if (!ConverterUtils.isBlankOrNull(gender)) {
             if (gender.equalsIgnoreCase(ConverterCVT.GENDER_ALL)) {
                 study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
             } else if (gender.equalsIgnoreCase(ConverterCVT.GENDER_WOMEN)) {
@@ -648,7 +648,7 @@ public class CtgConverter extends BaseConverter {
      * @param ageStr
      */
     public void parseAge(Item study, String ageStr) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(ageStr)) {
+        if (!ConverterUtils.isBlankOrNull(ageStr)) {
             int minAge = Integer.MAX_VALUE;
             int maxAge = Integer.MIN_VALUE;
 
@@ -702,7 +702,7 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parsePhases(Item study, String phasesStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(phasesStr)) {
+        if (!ConverterUtils.isBlankOrNull(phasesStr)) {
             Matcher mPhase = P_PHASE.matcher(phasesStr);
             if (mPhase.matches()) {
                 String phaseValue = "";
@@ -740,7 +740,7 @@ public class CtgConverter extends BaseConverter {
      * @param enrolment
      */
     public void parseEnrolment(Item study, String enrolment) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(enrolment)) {
+        if (!ConverterUtils.isBlankOrNull(enrolment)) {
             String studyStatus = ConverterUtils.getAttrValue(study, "status");
             // Note: Enrolment can also be actual enrolment for suspended status (and
             // perhaps others as well),
@@ -762,7 +762,7 @@ public class CtgConverter extends BaseConverter {
      * @param studyType
      */
     public void parseStudyType(Item study, String studyType) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyType)) {
+        if (!ConverterUtils.isBlankOrNull(studyType)) {
             study.setAttributeIfNotNull("type", ConverterUtils.capitaliseAndReplaceCharBySpace(studyType, '_'));
         }
     }
@@ -775,7 +775,7 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parseStudyDesign(Item study, String studyDesign) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDesign)) {
+        if (!ConverterUtils.isBlankOrNull(studyDesign)) {
             // Observational studies always have "Observational Model: |Time Perspective: p"
             // as study design value
             if (!studyDesign.startsWith("Observational")) {
@@ -852,7 +852,7 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parseLocations(Item study, String locationsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(locationsStr)) {
+        if (!ConverterUtils.isBlankOrNull(locationsStr)) {
             String[] splitLocations = locationsStr.split("\\|");
             String[] splitLocation;
             String countryName, cityName, facility;
@@ -894,7 +894,7 @@ public class CtgConverter extends BaseConverter {
                         this.writeLog("Unexpected number of substrings in split location: " + location);
                     }
 
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(countryName)) {
+                    if (!ConverterUtils.isBlankOrNull(countryName)) {
                         this.createAndStoreClassItem(study, "Location",
                                 new String[][] { { "countryName", countryName }, { "cityName", cityName },
                                         { "facility", facility } });
@@ -934,7 +934,7 @@ public class CtgConverter extends BaseConverter {
      * @throws Exception
      */
     public void parseStudyDocuments(Item study, String studyDocuments) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDocuments)) {
+        if (!ConverterUtils.isBlankOrNull(studyDocuments)) {
             String[] splitDocuments = studyDocuments.split("\\|");
             HashMap<String, List<String>> instances = new HashMap<String, List<String>>();
 
@@ -949,10 +949,10 @@ public class CtgConverter extends BaseConverter {
                     // Adding URL to list with objects of found types, one document may combine
                     // multiple types, one study may have multiple instances of the same object type
                     if (g1Lower.contains("informed consent form")) {
-                        if (!instances.containsKey(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM)) {
-                            instances.put(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM, new ArrayList<String>());
+                        if (!instances.containsKey(ConverterCVT.O_TYPE_ICF)) {
+                            instances.put(ConverterCVT.O_TYPE_ICF, new ArrayList<String>());
                         }
-                        instances.get(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM).add(g2);
+                        instances.get(ConverterCVT.O_TYPE_ICF).add(g2);
                     }
                     if (g1Lower.contains("study protocol")) {
                         if (!instances.containsKey(ConverterCVT.O_TYPE_STUDY_PROTOCOL)) {
@@ -1001,7 +1001,7 @@ public class CtgConverter extends BaseConverter {
             throws Exception {
         String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
         String doDisplayTitle;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
             doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
@@ -1015,7 +1015,7 @@ public class CtgConverter extends BaseConverter {
         // TODO: publication year?
 
         /* Registry entry instance */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(this.currentTrialID)) {
+        if (!ConverterUtils.isBlankOrNull(this.currentTrialID)) {
             this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
                     new String[][] { { "url", entryUrl }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
         }
@@ -1048,7 +1048,7 @@ public class CtgConverter extends BaseConverter {
             LocalDate lastUpdate) throws Exception {
 
         // Using results field (yes/no) to create or not results summary DO
-        if (studyResults.equalsIgnoreCase("yes") && !ConverterUtils.isNullOrEmptyOrBlank(entryURL)
+        if (studyResults.equalsIgnoreCase("yes") && !ConverterUtils.isBlankOrNull(entryURL)
                 && resultsFirstPosted != null) {
             // Constructing results URL by prepending results suffix to entry URL
             String resultsURLLink = entryURL + "?tab=results";
@@ -1056,7 +1056,7 @@ public class CtgConverter extends BaseConverter {
             // Display title
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
@@ -1084,7 +1084,7 @@ public class CtgConverter extends BaseConverter {
                 this.createAndStoreObjectDate(resultsSummaryDO, resultsFirstPosted, ConverterCVT.DATE_TYPE_AVAILABLE);
                 // Publication year
                 String publicationYear = String.valueOf(resultsFirstPosted.getYear());
-                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
+                if (!ConverterUtils.isBlankOrNull(publicationYear)) {
                     resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
                 }
             }
@@ -1138,7 +1138,7 @@ public class CtgConverter extends BaseConverter {
      * @return
      */
     public static String normaliseDateString(String dateString) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(dateString) && dateString.length() == 7) {
+        if (!ConverterUtils.isBlankOrNull(dateString) && dateString.length() == 7) {
             dateString = dateString + "-01";
         }
         return dateString;

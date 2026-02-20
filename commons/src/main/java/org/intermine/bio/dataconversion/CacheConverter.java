@@ -91,7 +91,7 @@ public abstract class CacheConverter extends BaseConverter {
             } else { // Checking if the parsed start date is later than the already set one (if it
                      // exists)
                 String existingDateStr = ConverterUtils.getAttrValue(study, "startDate");
-                if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                if (!ConverterUtils.isBlankOrNull(existingDateStr)
                         && startDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
                     setDate = true;
                 }
@@ -116,7 +116,7 @@ public abstract class CacheConverter extends BaseConverter {
             } else { // Checking if the parsed end date is later than the already set one (if it
                      // exists)
                 String existingDateStr = ConverterUtils.getAttrValue(study, "endDate");
-                if (!ConverterUtils.isNullOrEmptyOrBlank(existingDateStr)
+                if (!ConverterUtils.isBlankOrNull(existingDateStr)
                         && endDate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
                     setDate = true;
                 }
