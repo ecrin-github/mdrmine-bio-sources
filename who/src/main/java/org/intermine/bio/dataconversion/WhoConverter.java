@@ -234,7 +234,7 @@ public class WhoConverter extends CacheConverter {
         this.addStudySource(study);
 
         // TODO: study end date? -> results posted date?
-        // Used for registry entry DO
+        // Used for registry entry SO
         String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
         LocalDate lastUpdate = this.parseDate(lastUpdateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
 
@@ -266,15 +266,15 @@ public class WhoConverter extends CacheConverter {
         String studyDesign = this.getAndCleanValue(lineValues, "study_design");
         this.parseStudyDesign(study, studyDesign);
 
-        /* Brief description 1/3 (study design) */
+        /* Description 1/3 (study design) */
         if (!this.existingStudy()) {
             // Note: using the fields currently used by the MDR to construct the
-            // briefDescription value
+            // description value
             // TODO: change/improve this field?
-            ConverterUtils.addToBriefDescription(study, studyDesign);
+            ConverterUtils.addToDescription(study, studyDesign);
         }
 
-        /* Registry entry DO */
+        /* Registry entry SO */
         // "Date on which this record was first entered in the EudraCT database:" in
         // EUCTR
         String registrationDateStr = this.getAndCleanValue(lineValues, "Date_registration");
@@ -371,9 +371,9 @@ public class WhoConverter extends CacheConverter {
         String interventions = this.getAndCleanValue(lineValues, "Interventions");
         study.setAttributeIfNotNull("interventions", interventions);
 
-        /* Brief description 2/3 (interventions) */
+        /* Description 2/3 (interventions) */
         if (!this.existingStudy()) {
-            ConverterUtils.addToBriefDescription(study, interventions);
+            ConverterUtils.addToDescription(study, interventions);
         }
 
         /* Min age */
@@ -397,9 +397,9 @@ public class WhoConverter extends CacheConverter {
         String primaryOutcome = this.getAndCleanValue(lineValues, "Primary_Outcome");
         study.setAttributeIfNotNull("primaryOutcome", primaryOutcome);
 
-        /* Brief description 3/3 (primary outcome) */
+        /* Description 3/3 (primary outcome) */
         if (!this.existingStudy()) {
-            ConverterUtils.addToBriefDescription(study, primaryOutcome);
+            ConverterUtils.addToDescription(study, primaryOutcome);
         }
 
         /* Secondary outcomes */
@@ -424,7 +424,7 @@ public class WhoConverter extends CacheConverter {
         String retrospectiveFlag = this.getAndCleanValue(lineValues, "Prospective_registration");
         this.parseRetrospectiveFlag(study, retrospectiveFlag);
 
-        /* Results summary DO */
+        /* Results summary SO */
         String resultsUrlLink = this.getAndCleanValue(lineValues, "results_url_link");
         // TODO: check if actual results summary? may not be for EUCTR trials at least
         String resultsSummary = this.getAndCleanValue(lineValues, "results_summary");
@@ -441,17 +441,17 @@ public class WhoConverter extends CacheConverter {
 
         // Not in MDR, baseline chars = Factors that describe study participants at the
         // beginning of the study
-        // Could fall under ObjectDescription, creating a new DO? -> what would be
-        // object type? or perhaps in study's briefDescription
+        // Could fall under ObjectDescription, creating a new SO? -> what would be
+        // object type? or perhaps in study description
         String resultsBaselineChar = this.getAndCleanValue(lineValues, "results_baseline_char");
         // Not in MDR, indicates participation dropout/follow-up (flow), unused or to
-        // add to briefdescription
+        // add to description
         String resultsParticipantFlow = this.getAndCleanValue(lineValues, "results_participant_flow");
         // Not in MDR, outcome measures text, unused or add somehow to both primary and
         // secondary outcomes
         String resultsOutcomeMeasures = this.getAndCleanValue(lineValues, "results_outcome_measures");
 
-        /* Protocol DO */
+        /* Protocol SO */
         String resultsUrlProtocol = this.getAndCleanValue(lineValues, "results_url_protocol");
         // TODO: publication year irrelevant?
         this.createAndStoreProtocolDO(study, resultsUrlProtocol, publicationYear);
@@ -1436,7 +1436,7 @@ public class WhoConverter extends CacheConverter {
 
     /**
      * TODO
-     * TODO: should return created DO
+     * TODO: should return created SO
      */
     public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, String resultsSummary,
             LocalDate resultsDatePosted, LocalDate resultsDateCompleted) throws Exception {
@@ -1455,28 +1455,22 @@ public class WhoConverter extends CacheConverter {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
-            /* Results summary DO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject",
-                    new String[][] { { "title", doDisplayTitle }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
-            /* Instance with results URL */
-            // TODO: system? (=source)
-            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance",
-                    new String[][] { { "url", resultsUrlLink },
-                            { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
-
-            // Results completed date
-            this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED);
-
-            // Results posted date
+            // Publication year
+            String publicationYear = null;
             if (resultsDatePosted != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
-                // Publication year
-                String publicationYear = String.valueOf(resultsDatePosted.getYear());
-                if (!ConverterUtils.isBlankOrNull(publicationYear)) {
-                    resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
-                }
+                publicationYear = String.valueOf(resultsDatePosted.getYear());
             }
+
+            /* Results summary SO */
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "displayTitle", doDisplayTitle }, 
+                            { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
+                            { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
+                            { "publicationYear", publicationYear },
+                            { "accessUrl", resultsUrlLink },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
         }
     }
 
@@ -1497,23 +1491,12 @@ public class WhoConverter extends CacheConverter {
                     doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
                 }
 
-                /* Protocol DO */
+                /* Protocol SO */
                 // Object type: in practice, most of the time it's a link to the study page
                 // (e.g. CTIS) where there might be the study protocol
                 // TODO: follow MDR logic then? ("CSR summary" type by default and protocol if
                 // prot in url name)
 
-                // Access type: in practice it might not be the correct access type
-                // Note: only specifying public, not using the various public types MDR has,
-                // maybe to change
-                Item protocolDO = this.createAndStoreClassItem(study, "DataObject",
-                        new String[][] { { "title", doDisplayTitle },
-                                { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                                { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
-                                { "publicationYear", publicationYear },
-                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
-
-                /* Protocol DO instance with URL */
                 // TODO: Fix euctr links
                 String protocolURL = P_FIX_EUCTR.matcher(mUrl.group(0)).replaceAll("/");
 
@@ -1527,8 +1510,16 @@ public class WhoConverter extends CacheConverter {
                     resourceType = ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT;
                 }
 
-                this.createAndStoreClassItem(protocolDO, "ObjectInstance",
-                        new String[][] { { "url", protocolURL }, { "resourceType", resourceType } });
+                // Access type: in practice it might not be the correct access type
+                // Note: only specifying public, not using the various public types MDR has,
+                // maybe to change
+                this.createAndStoreClassItem(study, "StudyObject",
+                        new String[][] { { "displayTitle", doDisplayTitle },
+                                { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
+                                { "publicationYear", publicationYear },
+                                { "accessUrl", protocolURL },
+                                { "urlTargetType", resourceType },
+                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
             }
         }
     }
@@ -1548,68 +1539,50 @@ public class WhoConverter extends CacheConverter {
                 doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
 
-            /* Registry entry DO */
-            Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject",
-                    new String[][] { { "title", doDisplayTitle }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                            { "publicationYear", publicationYear } });
-
-            /* Registry entry DO instance */
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
-                    new String[][] { { "url", entryUrl }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
-
-            // Registry entry created date
-            // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
-            // TODO: created or made available?
-            if (registrationDate != null) {
-                this.createAndStoreObjectDate(doRegistryEntry, registrationDate, ConverterCVT.DATE_TYPE_CREATED);
-            }
-
-            // Last update
-            if (lastUpdate != null) {
-                this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
+            /* Registry entry SO */
+            if (!ConverterUtils.isBlankOrNull(entryUrl)) {
+                this.createAndStoreClassItem(study, "StudyObject",
+                        new String[][] { { "displayTitle", doDisplayTitle }, 
+                                // TODO: created or published?
+                                // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
+                                { "dateCreated", registrationDate != null ? registrationDate.toString() : null },
+                                { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+                                { "publicationYear", publicationYear },
+                                { "accessUrl", entryUrl },
+                                { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                                { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                                { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
             }
         } else {
-            // Update DO creation date
+            // Update SO creation date
             if (registrationDate != null) {
                 Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
                         ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
-                if (doRegistryEntry != null) {
-                    Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",
-                            ConverterCVT.DATE_TYPE_CREATED);
-                    if (creationOD != null) {
-                        String existingDateStr = ConverterUtils.getAttrValue(creationOD, "startDate");
-                        // Updating creation date if older than known creation date
-                        if (!ConverterUtils.isBlankOrNull(existingDateStr)
-                                && registrationDate
-                                        .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
-                            creationOD.setAttribute("startDate", registrationDate.toString());
-                            this.writeLog("older creation date: " + registrationDate.toString() + ", previous: "
-                                    + existingDateStr + " -country: "
-                                    + ConverterUtils.getAttrValue(this.currentCountry, "name"));
-                        }
-                    }
-                }
-            }
 
-            // Update DO last update date
-            if (lastUpdate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
-                        ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
-                    Item lastUpdateOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",
-                            ConverterCVT.DATE_TYPE_UPDATED);
-                    if (lastUpdateOD != null) {
-                        String existingDateStr = ConverterUtils.getAttrValue(lastUpdateOD, "startDate");
-                        if (!ConverterUtils.isBlankOrNull(existingDateStr)
-                                && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) > 0) {
-                            lastUpdateOD.setAttribute("startDate", lastUpdate.toString());
-                            // TODO: newerLastUpdate logic in separate function?
-                            this.newerLastUpdate = true;
-                            this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: "
-                                    + existingDateStr + " -country: "
-                                    + ConverterUtils.getAttrValue(this.currentCountry, "name"));
-                        }
+                    // dateCreated
+                    String existingDateCreatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateCreated");
+                    // Updating creation date if older than known creation date or there was no previous date
+                    if (!ConverterUtils.isBlankOrNull(existingDateCreatedStr) || registrationDate
+                                    .compareTo(ConverterUtils.getDateFromString(existingDateCreatedStr, null)) < 0) {
+                        doRegistryEntry.setAttributeIfNotNull("dateCreated", registrationDate.toString());
+
+                        this.writeLog("older creation date: " + registrationDate.toString() + ", previous: "
+                                + existingDateCreatedStr + " -country: "
+                                + ConverterUtils.getAttrValue(this.currentCountry, "name"));
+                    }
+
+                    // dateUpdated
+                    String existingDateUpdatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateUpdated");
+                    if (!ConverterUtils.isBlankOrNull(existingDateUpdatedStr)
+                            && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateUpdatedStr, null)) > 0) {
+                        doRegistryEntry.setAttributeIfNotNull("dateUpdated", lastUpdate.toString());
+
+                        // TODO: newerLastUpdate logic in separate function?
+                        this.newerLastUpdate = true;
+                        this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: "
+                                + existingDateUpdatedStr + " -country: "
+                                + ConverterUtils.getAttrValue(this.currentCountry, "name"));
                     }
                 }
             }
@@ -1750,23 +1723,19 @@ public class WhoConverter extends CacheConverter {
 
     public void parseDataSharingStatement(Item study, String resultsIPDPlan, String resultsIPDDescription) {
         if (!this.existingStudy()) {
-            StringBuilder dSSBuilder = new StringBuilder();
-
-            if (!ConverterUtils.isBlankOrNull(resultsIPDPlan)) {
-                dSSBuilder.append(resultsIPDPlan);
-                if (!resultsIPDPlan.endsWith(".")) {
-                    dSSBuilder.append(".");
-                }
-                dSSBuilder.append(" ");
+            if (!ConverterUtils.isBlankOrNull(resultsIPDPlan)) {    // Also checks for "NULL"
+                study.setAttributeIfNotNull("planToShareIPD", resultsIPDPlan);
             }
-
             if (!ConverterUtils.isBlankOrNull(resultsIPDDescription)) {
-                dSSBuilder.append(resultsIPDDescription);
+                study.setAttributeIfNotNull("dataSharingStatement", resultsIPDDescription);
+            }
+        } else {
+            if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "planToShareIPD"))) {
+                study.setAttributeIfNotNull("planToShareIPD", resultsIPDPlan);
             }
 
-            String dataSharingStatement = dSSBuilder.toString();
-            if (!ConverterUtils.isBlankOrNull(dataSharingStatement)) {
-                study.setAttributeIfNotNull("dataSharingStatement", dataSharingStatement);
+            if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "dataSharingStatement"))) {
+                study.setAttributeIfNotNull("dataSharingStatement", resultsIPDDescription);
             }
         }
     }

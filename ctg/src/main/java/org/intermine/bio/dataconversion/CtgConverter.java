@@ -143,14 +143,14 @@ public class CtgConverter extends BaseConverter {
             this.parseStudyTitle(study, studyTitle, acronym);
 
             // Registry trial page URL (used later for registry entry and results summary
-            // DO)
+            // SO)
             String studyURL = this.getAndCleanValue(lineValues, "Study URL");
 
             /* Study status */
             String studyStatus = this.getAndCleanValue(lineValues, "Study Status");
             this.parseStatus(study, studyStatus);
 
-            /* Study brief description */
+            /* Study description */
             String briefSummary = this.getAndCleanValue(lineValues, "Brief Summary");
             this.parseBriefSummary(study, briefSummary);
 
@@ -241,10 +241,10 @@ public class CtgConverter extends BaseConverter {
             LocalDate resultsFirstPosted = ConverterUtils.getDateFromString(resultsFirstPostedStr, null);
             // study.setAttributeIfNotNull("testField6", resultsFirstPostedStr);
 
-            /* Trial registry entry DO */
+            /* Trial registry entry SO */
             this.createAndStoreRegistryEntryDO(study, studyURL, firstPosted, lastUpdatePosted);
 
-            /* Trial results summary DO */
+            /* Trial results summary SO */
             this.createAndStoreResultsSummaryDO(study, studyResults, studyURL, completionDate, primaryCompletionDate,
                     resultsFirstPosted, lastUpdatePosted);
 
@@ -480,7 +480,7 @@ public class CtgConverter extends BaseConverter {
      */
     public void parseBriefSummary(Item study, String briefSummary) {
         if (!ConverterUtils.isBlankOrNull(briefSummary)) {
-            study.setAttribute("briefDescription", briefSummary);
+            study.setAttribute("description", briefSummary);
         }
     }
 
@@ -971,19 +971,19 @@ public class CtgConverter extends BaseConverter {
                 }
             }
 
-            // Adding one DO per type (if any instance exist), and adding as many instances
+            // Adding one SO per type (if any instance exist), and adding as many instances
             // as different URLs for the same object type
             for (Map.Entry<String, List<String>> entry : instances.entrySet()) {
                 String objectType = entry.getKey();
                 List<String> urls = entry.getValue();
-                // Document DO
-                Item documentDO = this.createAndStoreClassItem(study, "DataObject",
-                        new String[][] { { "type", objectType }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                                { "title", objectType } });
-
+                // Document SO
+                // TODO: urlTargetType?
                 for (String url : urls) {
-                    // DO Instance with direct URL
-                    this.createAndStoreClassItem(documentDO, "ObjectInstance", new String[][] { { "url", url } });
+                    this.createAndStoreClassItem(study, "StudyObject",
+                            new String[][] { { "type", objectType },
+                                    { "accessUrl", url },
+                                    { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC }, // TODO: check if true
+                                    { "displayTitle", objectType } });
                 }
             }
         }
@@ -1007,27 +1007,17 @@ public class CtgConverter extends BaseConverter {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
-        /* Trial registry entry DO */
-        Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject",
-                new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                        { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                        { "title", doDisplayTitle } });
+        /* Trial registry entry SO */
         // TODO: publication year?
-
-        /* Registry entry instance */
-        if (!ConverterUtils.isBlankOrNull(this.currentTrialID)) {
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
-                    new String[][] { { "url", entryUrl }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
-        }
-
-        /* Object created date */
-        if (firstPosted != null) {
-            this.createAndStoreObjectDate(doRegistryEntry, firstPosted, ConverterCVT.DATE_TYPE_AVAILABLE);
-        }
-
-        // Last update
-        if (lastUpdate != null) {
-            this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
+        if (!ConverterUtils.isBlankOrNull(entryUrl)) {
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
+                            { "datePublished", firstPosted != null ? firstPosted.toString() : null },
+                            { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+                            { "accessUrl", entryUrl },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "displayTitle", doDisplayTitle } });
         }
     }
 
@@ -1047,7 +1037,7 @@ public class CtgConverter extends BaseConverter {
             LocalDate completionDate, LocalDate primaryCompletionDate, LocalDate resultsFirstPosted,
             LocalDate lastUpdate) throws Exception {
 
-        // Using results field (yes/no) to create or not results summary DO
+        // Using results field (yes/no) to create or not results summary SO
         if (studyResults.equalsIgnoreCase("yes") && !ConverterUtils.isBlankOrNull(entryURL)
                 && resultsFirstPosted != null) {
             // Constructing results URL by prepending results suffix to entry URL
@@ -1062,37 +1052,33 @@ public class CtgConverter extends BaseConverter {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
-            /* Results summary DO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject",
-                    new String[][] { { "title", doDisplayTitle }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
-            /* Instance with results URL */
-            // TODO: system? (=source)
-            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance",
-                    new String[][] { { "url", resultsURLLink },
-                            { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
-
             // Results completed date
+            LocalDate resultsCompletedDate = null;
             if (completionDate != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, completionDate, ConverterCVT.DATE_TYPE_CREATED);
+                resultsCompletedDate = completionDate;
             } else if (primaryCompletionDate != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, primaryCompletionDate, ConverterCVT.DATE_TYPE_CREATED);
+                resultsCompletedDate = primaryCompletionDate;
             }
 
-            // Results posted date
+            // Publication year
+            String publicationYear = null;
             if (resultsFirstPosted != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, resultsFirstPosted, ConverterCVT.DATE_TYPE_AVAILABLE);
-                // Publication year
-                String publicationYear = String.valueOf(resultsFirstPosted.getYear());
-                if (!ConverterUtils.isBlankOrNull(publicationYear)) {
-                    resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
-                }
+                // TODO: handle errors
+                publicationYear = String.valueOf(resultsFirstPosted.getYear());
             }
 
-            // Last update
-            if (lastUpdate != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
-            }
+            /* Results summary SO */
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "displayTitle", doDisplayTitle },
+                            { "dateCreated", resultsCompletedDate != null ? resultsCompletedDate.toString() : null },
+                            // Note: was ConverterCVT.DATE_TYPE_AVAILABLE before model change
+                            { "datePublished", resultsFirstPosted != null ? resultsFirstPosted.toString() : null },
+                            { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+                            { "publicationYear", publicationYear },
+                            { "accessUrl", resultsURLLink },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
         }
     }
 

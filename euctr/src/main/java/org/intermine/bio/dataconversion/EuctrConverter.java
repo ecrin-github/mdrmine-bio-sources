@@ -178,7 +178,7 @@ public class EuctrConverter extends CacheConverter {
                 }
 
                 // TODO: make title object
-                /* Study title (need to get it before registry entry DO) */
+                /* Study title (need to get it before registry entry SO) */
                 String publicTitle = this.getAndCleanValue(mainInfo, "publicTitle");
                 String scientificTitle = this.getAndCleanValue(mainInfo, "scientificTitle");
                 String scientificAcronym = this.getAndCleanValue(mainInfo, "scientificAcronym");
@@ -204,7 +204,7 @@ public class EuctrConverter extends CacheConverter {
                 String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
                 LocalDate dateRegistration = this.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
-                /* Trial registry entry DO */
+                /* Trial registry entry SO */
                 this.createAndStoreRegistryEntryDO(study, dateRegistration, trialUrl);
 
                 /* Study people: primary sponsor */
@@ -294,12 +294,12 @@ public class EuctrConverter extends CacheConverter {
                 // Results summary here is actually more of a general trial summary than a
                 // results summary
                 String resultsSummary = this.getAndCleanValue(mainInfo, "resultsSummary");
-                study.setAttributeIfNotNull("briefDescription", resultsSummary);
+                study.setAttributeIfNotNull("description", resultsSummary);
 
                 String resultsDatePostedStr = this.getAndCleanValue(mainInfo, "resultsDatePosted");
                 LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
-                /* Results summary DO */
+                /* Results summary SO */
                 this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsDateCompleted, resultsDatePosted);
 
                 // Unused, always empty
@@ -476,40 +476,31 @@ public class EuctrConverter extends CacheConverter {
                 doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
 
-            /* Trial registry entry DO */
-            Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject",
-                    new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                            { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                            { "title", doDisplayTitle } });
-
-            /* Registry entry instance */
-            if (!ConverterUtils.isBlankOrNull(this.currentTrialID)) {
-                this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
-                        new String[][] { { "url", url }, { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
+            /* Trial registry entry SO */
+            if (!ConverterUtils.isBlankOrNull(url)) {
+                Item doRegistryEntry = this.createAndStoreClassItem(study, "StudyObject",
+                        new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
+                                { "dateCreated", creationDate != null ? creationDate.toString() : null },
+                                { "accessUrl", url },
+                                { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                                { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                                { "displayTitle", doDisplayTitle } });
             }
-
-            /* Object created date */
-            // TODO: available?
-            this.createAndStoreObjectDate(doRegistryEntry, creationDate, ConverterCVT.DATE_TYPE_CREATED);
         } else {
-            // Update DO creation date
+            // Update SO creation date
             if (creationDate != null) {
                 Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
                         ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
                 if (doRegistryEntry != null) {
-                    Item creationOD = this.getItemFromItemMap(doRegistryEntry, this.objectDates, "dateType",
-                            ConverterCVT.DATE_TYPE_CREATED);
-                    if (creationOD != null) {
-                        String existingDateStr = ConverterUtils.getAttrValue(creationOD, "startDate");
-                        // Updating creation date if older than known creation date
-                        if (!ConverterUtils.isBlankOrNull(existingDateStr)
-                                && creationDate
-                                        .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
-                            creationOD.setAttributeIfNotNull("startDate", creationDate.toString());
-                            // Using record registration date as "newer last update"
-                            // TODO: use a different variable (name)?
-                            this.newerLastUpdate = true;
-                        }
+                    String existingDateStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateCreated");
+                    // Updating creation date if older than known creation date or there was no
+                    // previous date
+                    if (!ConverterUtils.isBlankOrNull(existingDateStr) || creationDate
+                            .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
+                        doRegistryEntry.setAttributeIfNotNull("dateCreated", creationDate.toString());
+                        // Using record registration date as "newer last update"
+                        // TODO: use a different variable (name)?
+                        this.newerLastUpdate = true;
                     }
                 }
             }
@@ -875,28 +866,23 @@ public class EuctrConverter extends CacheConverter {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
-            /* Results summary DO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject",
-                    new String[][] { { "title", doDisplayTitle }, { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
-            /* Instance with results URL */
-            // TODO: system? (=source)
-            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance",
-                    new String[][] { { "url", resultsUrlLink },
-                            { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
-
-            // Results completed date (trial end date)
-            this.createAndStoreObjectDate(resultsSummaryDO, resultsDateCompleted, ConverterCVT.DATE_TYPE_CREATED);
-
-            // Results posted date
+            // Publication year
+            String publicationYear = null;
             if (resultsDatePosted != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, resultsDatePosted, ConverterCVT.DATE_TYPE_AVAILABLE);
-                // Publication year
-                String publicationYear = String.valueOf(resultsDatePosted.getYear());
-                if (!ConverterUtils.isBlankOrNull(publicationYear)) {
-                    resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
-                }
+                publicationYear = String.valueOf(resultsDatePosted.getYear());
             }
+
+            /* Results summary SO */
+            Item resultsSummaryDO = this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "displayTitle", doDisplayTitle },
+                            { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
+                            // Note: was ConverterCVT.DATE_TYPE_AVAILABLE before model change
+                            { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
+                            { "publicationYear", publicationYear },
+                            { "accessUrl", resultsUrlLink },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
         }
     }
 
@@ -965,7 +951,7 @@ public class EuctrConverter extends CacheConverter {
          * <attribute name="orcid" type="java.lang.String"/>
          * <collection name="studies" referenced-type="Study"
          * reverse-reference="people"/>
-         * <collection name="objects" referenced-type="DataObject"
+         * <collection name="objects" referenced-type="StudyObject"
          * reverse-reference="people"/>
          * <collection name="affiliations" referenced-type="Organisation"
          * reverse-reference="people"/>
@@ -1238,7 +1224,7 @@ public class EuctrConverter extends CacheConverter {
                                                                                                // seen and "dummy" IDs
                     issAuth = secIdObj.getIssuingAuthority();
 
-                    // Creating protocol DO if ID is of type "Sponsor Protocol Code"
+                    // Creating protocol SO if ID is of type "Sponsor Protocol Code"
                     if (issAuth.equalsIgnoreCase(ISS_AUTH_PROTOCOL_CODE)) {
                         this.createAndStoreProtocolDO(study, secId);
                     } else {
@@ -1279,16 +1265,12 @@ public class EuctrConverter extends CacheConverter {
                 doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
             }
 
-            /* Protocol DO */
-            Item protocolDO = this.createAndStoreClassItem(study, "DataObject",
-                    new String[][] { { "objectClass", ConverterCVT.O_CLASS_TEXT },
+            /* Protocol SO */
+            Item protocolDO = this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "objectId", protocolCode },
+                            { "primaryIdentifierType", ConverterCVT.ID_TYPE_SPONSOR },
                             { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
-                            { "title", doDisplayTitle } });
-
-            /* Protocol code ObjectIdentifier */
-            this.createAndStoreClassItem(protocolDO, "ObjectIdentifier",
-                    new String[][] { { "identifierValue", protocolCode },
-                            { "identifierType", ConverterCVT.ID_TYPE_SPONSOR } });
+                            { "displayTitle", doDisplayTitle } });
         }
     }
 

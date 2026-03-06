@@ -21,6 +21,8 @@ public abstract class CacheConverter extends BaseConverter {
     protected Item currentCountry; // When parsing existing EUCTR study, country associated with country code
 
     /* Saving all items for later modification and storing at the end */
+    // Warning: map variable names need to match collection names in model (TODO: be more precise)
+
     // Cache of studies, key is primary identifier (not Item or DB id)
     protected Map<String, Item> studies = new HashMap<String, Item>();
     // Study-related classes
@@ -28,17 +30,14 @@ public abstract class CacheConverter extends BaseConverter {
     protected Map<String, List<Item>> studyCountries = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> countries = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studyICDs = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studySources = new HashMap<String, List<Item>>();
-    // DOs
+    // SOs
     protected Map<String, List<Item>> objects = new HashMap<String, List<Item>>();
-    // DO-related classes
-    protected Map<String, List<Item>> objectDates = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectDescriptions = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectIdentifiers = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> objectInstances = new HashMap<String, List<Item>>();
-    // Common to Study and DOs (key can be study id or DO id)
+    // SO-related maps
+    protected Map<String, List<Item>> datasets = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> biosamples = new HashMap<String, List<Item>>();
+    // Common to Study and SOs (key can be study id or DO id)
     // TODO: all items lists?
     protected Map<String, List<Item>> locations = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> organisations = new HashMap<String, List<Item>>();
@@ -157,11 +156,9 @@ public abstract class CacheConverter extends BaseConverter {
      */
     public void storeAllItems() throws Exception {
         List<Map<String, List<Item>>> itemMaps = Arrays.asList(
-                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers,
-                this.studySources,
+                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers, this.studySources,
                 this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics,
-                this.objects, this.relationships,
-                this.objectDates, this.objectDescriptions, this.objectIdentifiers, this.objectInstances);
+                this.objects, this.relationships);
 
         for (Map<String, List<Item>> itemMap : itemMaps) {
             for (List<Item> items : itemMap.values()) {
@@ -203,7 +200,6 @@ public abstract class CacheConverter extends BaseConverter {
         this.studyConditions = null;
         this.studyCountries = null;
         this.studyFeatures = null;
-        this.studyICDs = null;
         this.studyIdentifiers = null;
         this.studySources = null;
         this.locations = null;
@@ -214,10 +210,6 @@ public abstract class CacheConverter extends BaseConverter {
         this.topics = null;
         this.objects = null;
         this.relationships = null;
-        this.objectDates = null;
-        this.objectDescriptions = null;
-        this.objectIdentifiers = null;
-        this.objectInstances = null;
     }
 
     /**
@@ -228,16 +220,13 @@ public abstract class CacheConverter extends BaseConverter {
     public void removeStudyAndLinkedItems(String mainTrialID) {
         // Maps where key is or can be study ID (-objects)
         List<Map<String, List<Item>>> studyMaps = Arrays.asList(
-                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyICDs, this.studyIdentifiers,
-                this.studySources,
-                this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics,
-                this.relationships);
+                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers, this.studySources,
+                this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.relationships);
 
         // Maps where key is or can be object ID
         List<Map<String, List<Item>>> objectMaps = Arrays.asList(
-                this.objectDates, this.objectDescriptions, this.objectIdentifiers, this.objectInstances,
-                this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics,
-                this.relationships);
+                this.locations, this.organisations, this.people, 
+                this.relationships, this.titles, this.topics, this.relationships);
 
         Item study = this.studies.get(mainTrialID);
         String studyId = study.getIdentifier();
