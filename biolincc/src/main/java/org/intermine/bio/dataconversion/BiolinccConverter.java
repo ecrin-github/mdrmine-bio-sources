@@ -1,24 +1,21 @@
 package org.intermine.bio.dataconversion;
 
-import java.io.Reader;
-import java.text.ParseException;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.management.ObjectInstance;
-
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.text.WordUtils;
-import org.apache.xalan.xsltc.compiler.sym;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
+
+import java.io.Reader;
+import java.text.ParseException;
+import java.time.LocalDate;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /*
  * Copyright (C) 2024-2025 MDRMine
@@ -31,12 +28,6 @@ import org.intermine.xml.full.Item;
  *
  */
 
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
-
 /**
  * 
  * @author
@@ -45,6 +36,7 @@ public class BiolinccConverter extends BaseConverter {
     //
     private static final String DATASET_TITLE = "BioLINCC full";
     private static final String DATA_SOURCE_NAME = "BioLINCC";
+    private static final String DATA_SOURCE_DESC = "Biologic Specimen and Data Repository Information Coordinating Center (NIH)";
 
     private static final Pattern P_HEADER = Pattern.compile("\\w+.*");
     private static final Pattern P_STUDY_YEARS = Pattern.compile("^([\\d+]{4}|Ongoing).*([\\d+]{4}|Ongoing).*$");
@@ -127,9 +119,6 @@ public class BiolinccConverter extends BaseConverter {
 
     public void parseAndStoreTrial(String[] lineValues) throws Exception {
         Item study = createItem("Study");
-
-        /* Adding this source */
-        this.createAndStoreClassItem(study, "StudySource", new String[][] { { "name", DATA_SOURCE_NAME } });
 
         /* Study title */
         String studyName = this.getAndCleanValue(lineValues, "Study Name");
@@ -600,11 +589,11 @@ public class BiolinccConverter extends BaseConverter {
 
         /* ObjDataset (IPD) */
         // TODO: deidentType?
-        this.createAndStoreClassItem(ipdDO, "ObjDataset",
-                new String[][] { { "restrictCommercial", ConverterUtils.booleanToString(restrictCommercial) },
-                        { "restrictGeo", "True" }, // See above
-                        { "restrictResearchType", ConverterUtils.booleanToString(restrictResearchType) },
-                        { "consentDetails", consentDetailsSb.toString() } });
+        this.createAndStoreClassItem(ipdDO, "PrivacyDetail",
+        new String[][] { { "restrictCommercial", ConverterUtils.booleanToString(restrictCommercial) },
+                { "restrictGeo", "True" }, // See above
+                { "restrictResearchType", ConverterUtils.booleanToString(restrictResearchType) },
+                { "consentDetails", consentDetailsSb.toString() } });
     }
 
     public void parseBiospecimen(Item study, String specificConsentRestrictions,
@@ -690,7 +679,7 @@ public class BiolinccConverter extends BaseConverter {
 
         /* ObjDataset (IPD) */
         // TODO: deidentType?
-        this.createAndStoreClassItem(biospecimenDO, "ObjDataset",
+        this.createAndStoreClassItem(biospecimenDO, "PrivacyDetail",
                 new String[][] { { "restrictCommercial", ConverterUtils.booleanToString(restrictCommercial) },
                         { "restrictGeo", "True" }, // See above
                         { "restrictResearchType", ConverterUtils.booleanToString(restrictResearchType) },
