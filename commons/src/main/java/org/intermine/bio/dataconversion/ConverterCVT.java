@@ -10,35 +10,33 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-
-
 /**
  * Class with MDR model CV terms
+ * 
  * @author
  */
-public class ConverterCVT
-{
+public class ConverterCVT {
     /* Registries */
-    public static final String R_ANZCTR = "ANZCTR";    // Australia + New Zealand
-    public static final String R_CHICTR = "ChiCTR";    // China
+    public static final String R_ANZCTR = "ANZCTR"; // Australia + New Zealand
+    public static final String R_CHICTR = "ChiCTR"; // China
     public static final String R_CRIS = "CRis"; // South Korea
     public static final String R_CTIS = "CTIS"; // EU (new)
-    public static final String R_CTG = "CTG";   // US
+    public static final String R_CTG = "CTG"; // US
     public static final String R_CTRI = "CTRI"; // India
     public static final String R_DRKS = "DRKS"; // German
-    public static final String R_EUCTR = "EUCTR";   // EU (old)
+    public static final String R_EUCTR = "EUCTR"; // EU (old)
     public static final String R_ICTRP = "ICTRP"; // WHO (not a registry, used for ID)
     public static final String R_IRCT = "IRCT"; // Iran
     public static final String R_ISRCTN = "ISRCTN"; // UK
-    public static final String R_ITMCTR = "ITMCTR";    // Traditional medicine
+    public static final String R_ITMCTR = "ITMCTR"; // Traditional medicine
     public static final String R_JRCT = "jRCT"; // Japan
-    public static final String R_LBCTR = "LBCTR";   // Lebanon
-    public static final String R_TCTR = "TCTR";  // Thailand
+    public static final String R_LBCTR = "LBCTR"; // Lebanon
+    public static final String R_TCTR = "TCTR"; // Thailand
     public static final String R_PACTR = "PACTR"; // Pan African
-    public static final String R_REBEC = "ReBec";   // Brazil
+    public static final String R_REBEC = "ReBec"; // Brazil
     public static final String R_REPEC = "REPEC"; // Peru
-    public static final String R_RPCEC = "RPCEC";   // Cuba
-    public static final String R_SLCTR = "SLCTR";   // Sri Lanka
+    public static final String R_RPCEC = "RPCEC"; // Cuba
+    public static final String R_SLCTR = "SLCTR"; // Sri Lanka
 
     /* Studies */
     public static final String NOT_APPLICABLE = "N/A";
@@ -53,12 +51,12 @@ public class ConverterCVT
     public static final String STATUS_ACTIVE_NOT_RECRUITING = "Active, not recruiting";
     public static final String STATUS_COMPLETED = "Completed";
     public static final String STATUS_SUSPENDED = "Suspended";
-    public static final String FEATURE_T_PHASE = "Phase";   // MDR ID: 20
-    public static final String FEATURE_T_PRIMARY_PURPOSE = "Primary purpose";   // MDR ID: 21
-    public static final String FEATURE_T_ALLOCATION = "Allocation";   // MDR ID: 22
-    public static final String FEATURE_T_INTERVENTION_MODEL = "Intervention model";   // MDR ID: 23
-    public static final String FEATURE_T_MASKING = "Masking";   // MDR ID: 24
-    public static final String FEATURE_T_TIME_PERSPECTIVE = "Time perspective";   // MDR ID: 31
+    public static final String FEATURE_T_PHASE = "Phase"; // MDR ID: 20
+    public static final String FEATURE_T_PRIMARY_PURPOSE = "Primary purpose"; // MDR ID: 21
+    public static final String FEATURE_T_ALLOCATION = "Allocation"; // MDR ID: 22
+    public static final String FEATURE_T_INTERVENTION_MODEL = "Intervention model"; // MDR ID: 23
+    public static final String FEATURE_T_MASKING = "Masking"; // MDR ID: 24
+    public static final String FEATURE_T_TIME_PERSPECTIVE = "Time perspective"; // MDR ID: 31
     public static final String FEATURE_V_EARLY_PHASE_1 = "Early Phase 1";
     public static final String FEATURE_V_RETROSPECTIVE = "Retrospective";
     public static final String FEATURE_V_RANDOMISED = "Randomised";
@@ -79,14 +77,18 @@ public class ConverterCVT
     public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
 
     /* Objects */
+    public static final String ACCESS_TYPE_PUBLIC = "Public";
+    public static final String O_TYPE_BIOSPECIMEN = "Biospecimen data";
+    public static final String O_TYPE_ICF = "Informed consent form";
+    public static final String O_TYPE_IPD = "Individual partipant data";
+    public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
+    public static final String O_TYPE_STATISTICAL_ANALYSIS_PLAN = "Statistical analysis plan";
+    public static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
     public static final String O_TYPE_TRIAL_REGISTRY_ENTRY = "Trial registry entry";
     public static final String O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY = "Trial registry results summary";
-    public static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
-    public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
-    public static final String O_TYPE_INFORMED_CONSENT_FORM = "Informed consent form";
-    public static final String O_TYPE_STATISTICAL_ANALYSIS_PLAN = "Statistical analysis plan";
+    public static final String O_TYPE_WEBSITE = "Website";
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
-    public static final String O_CLASS_TEXT = "Text";
+    public static final String O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD = "Case by case download";
     public static final String O_RESOURCE_TYPE_PDF = "PDF";
     public static final String O_RESOURCE_TYPE_WORD_DOC = "Word doc";
     public static final String O_RESOURCE_TYPE_WEB_TEXT = "Web text";

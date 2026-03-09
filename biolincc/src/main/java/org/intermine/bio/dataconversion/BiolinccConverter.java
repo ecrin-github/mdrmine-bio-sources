@@ -1,5 +1,23 @@
 package org.intermine.bio.dataconversion;
 
+import java.io.Reader;
+import java.text.ParseException;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.apache.commons.text.WordUtils;
+import org.apache.xalan.xsltc.compiler.sym;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 /*
  * Copyright (C) 2024-2025 MDRMine
  * Modified from 2002-2019 FlyMine
@@ -16,49 +34,37 @@ import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-import org.apache.commons.text.WordUtils;
-
-import java.io.Reader;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 
 /**
  * 
  * @author
  */
-public class BiolinccConverter extends BaseConverter
-{
+public class BiolinccConverter extends BaseConverter {
     //
     private static final String DATASET_TITLE = "BioLINCC full";
     private static final String DATA_SOURCE_NAME = "BioLINCC";
 
     private static final Pattern P_HEADER = Pattern.compile("\\w+.*");
-    private static final Pattern P_URL_NCT_ID = Pattern.compile(".*\\/([^?]+).*");
+    private static final Pattern P_STUDY_YEARS = Pattern.compile("^([\\d+]{4}|Ongoing).*([\\d+]{4}|Ongoing).*$");
 
     private static final String CTG_STUDY_BASE_URL = "https://clinicaltrials.gov/study/";
     private static final String AGE_ADULT = "Adult";
     private static final String AGE_PEDIATRIC = "Pediatric";
     private static final String AGE_ALL = "Both";
+    private static final String STUDY_YEAR_ONGOING = "Ongoing";
+    private static final String STUDY_TYPE_CLINICAL_TRIAL = "Clinical Trial";
+    private static final String STUDY_TYPE_EPIDEMIOLOGY_STUDY = "Epidemiology Study";
+    private static final String STUDY_TYPE_MIXED = "Clinical Trial/Epidemiology Study";
+    private static final String STUDY_TYPE_PROGRAM_EVALUATION = "Program Evaluation";
 
-
+    private Set<String> seenNctIds = new HashSet<String>();
     private Map<String, Integer> fieldsToInd;
 
     /**
      * Constructor
+     * 
      * @param writer the ItemWriter used to handle the resultant items
-     * @param model the Model
+     * @param model  the Model
      */
     public BiolinccConverter(ItemWriter writer, Model model) {
         super(writer, model, DATA_SOURCE_NAME, DATASET_TITLE);
@@ -70,17 +76,20 @@ public class BiolinccConverter extends BaseConverter
      * {@inheritDoc}
      */
     public void process(Reader reader) throws Exception {
-        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
+        /*
+         * Opened BufferedReader is passed as argument (from
+         * FileConverterTask.execute())
+         */
         this.startLogging("biolincc");
 
         final CSVParser parser = new CSVParserBuilder()
-                                        .withSeparator(',')
-                                        // TODO check if withquotechar working, otherwise needs removeQuotes
-                                        .withQuoteChar('"')
-                                        .build();
+                .withSeparator(',')
+                // TODO check if withquotechar working, otherwise needs removeQuotes
+                .withQuoteChar('"')
+                .build();
         final CSVReader csvReader = new CSVReaderBuilder(reader)
-                                            .withCSVParser(parser)
-                                            .build();
+                .withCSVParser(parser)
+                .build();
 
         /* Headers */
         this.fieldsToInd = this.getHeaders(csvReader.readNext());
@@ -118,7 +127,7 @@ public class BiolinccConverter extends BaseConverter
         Item study = createItem("Study");
 
         /* Adding this source */
-        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", DATA_SOURCE_NAME}});
+        this.createAndStoreClassItem(study, "StudySource", new String[][] { { "name", DATA_SOURCE_NAME } });
 
         /* Study title */
         String studyName = this.getAndCleanValue(lineValues, "Study Name");
@@ -126,13 +135,10 @@ public class BiolinccConverter extends BaseConverter
         String acronym = this.getAndCleanValue(lineValues, "Acronym");
         this.parseStudyTitle(study, studyName, acronym);
 
-        // Study ID     Note: parsing ID after title to log title if ID is empty
+        // Study ID Note: parsing ID after title to log title if ID is empty
+        /* StudyIdentifier: BioLINCC ID */
         String biolinccID = this.getAndCleanValue(lineValues, "Accession Number");
-        // TODO: should not be primaryIdentifier
         this.parseID(study, biolinccID);
-        
-        // TODO: check with other fields
-        String availableResources = this.getAndCleanValue(lineValues, "Available resources");
 
         // Unused, not in our model? (says if biolincc study or not)
         String collectionType = this.getAndCleanValue(lineValues, "Collection Type");
@@ -140,7 +146,7 @@ public class BiolinccConverter extends BaseConverter
         String background = this.getAndCleanValue(lineValues, "Background");
         String objectives = this.getAndCleanValue(lineValues, "Objectives");
         // TODO: other fields to construct description?
-        this.constructBriefDescription(study, background, objectives);
+        this.constructDescription(study, background, objectives);
 
         /* BioLINCC registry entry */
         String biolinccUrl = this.getAndCleanValue(lineValues, "BioLINCC URL");
@@ -150,71 +156,121 @@ public class BiolinccConverter extends BaseConverter
 
         /* CTG registry entries */
         String clinicalTrialUrls = this.getAndCleanValue(lineValues, "Clinical trial urls");
-        study.setAttributeIfNotNull("testField1", clinicalTrialUrls);
+        // study.setAttributeIfNotNull("testField3", clinicalTrialUrls);
 
-        /* Registry entry DOs */
-        // TODO: merge trial possibly (based on clinicalTrialUrls)
+        /* Registry entry SOs */
+        // Also sets Study.nctID (should probably be moved outside of this function)
         this.createAndStoreRegistryEntryDO(study, biolinccUrl, clinicalTrialUrls);
 
         /* Study age IC */
         String cohortType = this.getAndCleanValue(lineValues, "Cohort type");
         this.parseAge(study, cohortType);
 
-        // TODO: use with dataset DO for ObjDataset.consentNonCommercial
-        String commercialUseDataRestrictions = this.getAndCleanValue(lineValues, "Commercial use data restrictions");
-        study.setAttributeIfNotNull("testField2", commercialUseDataRestrictions);
-        
-        // TODO: possibly same as above (for different dataset obj)?
-        String commercialUseSpecimenRestrictions = this.getAndCleanValue(lineValues, "Commercial use specimen restrictions");
-        study.setAttributeIfNotNull("testField3", commercialUseSpecimenRestrictions);
-        
         /* Study primary outcome(s) */
         String conclusions = this.getAndCleanValue(lineValues, "Conclusions");
         this.parseConclusions(study, conclusions);
-        
+
         /* Study conditions */
         String conditions = this.getAndCleanValue(lineValues, "Conditions");
         this.parseConditions(study, conditions);
-        study.setAttributeIfNotNull("testField4", conditions);
-        
-        String dataRestrictionsBasedOnAreaOfResearch = this.getAndCleanValue(lineValues, "Data restrictions based on area of research");
-        study.setAttributeIfNotNull("testField5", dataRestrictionsBasedOnAreaOfResearch);
 
+        // TODO: unused free text
         String design = this.getAndCleanValue(lineValues, "Design");
-        study.setAttributeIfNotNull("testField6", design);
+        // study.setAttributeIfNotNull("testField1", design);
 
-        String extraStudyDetails = this.getAndCleanValue(lineValues, "Extra Study Details");
-        study.setAttributeIfNotNull("testField7", extraStudyDetails);
-
-        String geneticUseAreaOfResearchRestrictions = this.getAndCleanValue(lineValues, "Genetic use area of research restrictions");
-        study.setAttributeIfNotNull("testField8", geneticUseAreaOfResearchRestrictions);
-
-        String geneticUseOfSpecimensAllowed = this.getAndCleanValue(lineValues, "Genetic use of specimens allowed?");
-        study.setAttributeIfNotNull("testField9", geneticUseOfSpecimensAllowed);
-
-        String hivStudyClassification = this.getAndCleanValue(lineValues, "HIV study classification");
-        String hasSpecimens = this.getAndCleanValue(lineValues, "Has Specimens");
-        String hasStudyDatasets = this.getAndCleanValue(lineValues, "Has Study Datasets");
-        String irbApprovalRequiredForData = this.getAndCleanValue(lineValues, "IRB approval required for data");
-        String ingestionStatus = this.getAndCleanValue(lineValues, "Ingestion Status");
+        // Unused, "Has Specimens" and "Has Study Datasets" have the same information
+        String availableResources = this.getAndCleanValue(lineValues, "Available resources");
+        // Unused, unsure what this indicates
         String isPublicUseDataset = this.getAndCleanValue(lineValues, "Is public use dataset");
+
+        // Used for both clinical datasets and specimens datasets
+        String specificConsentRestrictions = this.getAndCleanValue(lineValues, "Specific Consent Restrictions");
+
+        /* StudyObject + IPDDataset for clinical data */
+        String commercialUseDataRestrictions = this.getAndCleanValue(lineValues, "Commercial use data restrictions");
+        String dataRestrictionsBasedOnAreaOfResearch = this.getAndCleanValue(lineValues,
+                "Data restrictions based on area of research");
+        String irbApprovalRequiredForData = this.getAndCleanValue(lineValues, "IRB approval required for data");
+        String studyOpenDateData = this.getAndCleanValue(lineValues, "Study Open Date (Data)");
+        String hasStudyDatasets = this.getAndCleanValue(lineValues, "Has Study Datasets");
+        try {
+            if (ConverterUtils.booleanFromString(hasStudyDatasets)) {
+                this.parseClinicalDatasets(study, specificConsentRestrictions, commercialUseDataRestrictions,
+                        dataRestrictionsBasedOnAreaOfResearch,
+                        irbApprovalRequiredForData, studyOpenDateData);
+            }
+        } catch (ParseException e) {
+            this.writeLog("Error: unexpected value in 'Has Study Datasets': " + hasStudyDatasets);
+        }
+
+        /* StudyObject + IPDDataset for biospecimens */
+        String commercialUseSpecimenRestrictions = this.getAndCleanValue(lineValues,
+                "Commercial use specimen restrictions");
+        String nonGeneticUseSpecimenRestrictions = this.getAndCleanValue(lineValues,
+                "Non-genetic use specimen restrictions based on area of use");
+        String geneticUseAreaOfResearchRestrictions = this.getAndCleanValue(lineValues,
+                "Genetic use area of research restrictions");
+        String geneticUseOfSpecimensAllowed = this.getAndCleanValue(lineValues, "Genetic use of specimens allowed?");
         String materialTypes = this.getAndCleanValue(lineValues, "Material Types");
+        String studyOpenDateSpecimens = this.getAndCleanValue(lineValues, "Study Open Date (Specimens)");
+        String hasSpecimens = this.getAndCleanValue(lineValues, "Has Specimens");
+        try {
+            if (ConverterUtils.booleanFromString(hasSpecimens)) {
+                this.parseBiospecimen(study, specificConsentRestrictions, commercialUseSpecimenRestrictions,
+                        nonGeneticUseSpecimenRestrictions, geneticUseAreaOfResearchRestrictions,
+                        geneticUseOfSpecimensAllowed, materialTypes, studyOpenDateSpecimens);
+            }
+        } catch (ParseException e) {
+            this.writeLog("Error: unexpected value in 'Has Specimens': " + hasSpecimens);
+        }
+
+        // Unused
+        String extraStudyDetails = this.getAndCleanValue(lineValues, "Extra Study Details");
+
+        // TODO: StudyCondition?
+        String hivStudyClassification = this.getAndCleanValue(lineValues, "HIV study classification");
+
+        // ? Unused
+        String ingestionStatus = this.getAndCleanValue(lineValues, "Ingestion Status");
+
+        // TODO: create Organisation item?
         String nhlbiDivision = this.getAndCleanValue(lineValues, "NHLBI Division");
+
+        /* Organisation: clinical trial network/research program */
         String network = this.getAndCleanValue(lineValues, "Network");
-        String nonGeneticUseSpecimenRestrictions = this.getAndCleanValue(lineValues, "Non-genetic use specimen restrictions based on area of use");
+        this.parseNetwork(study, network);
+
+        /* Person: scientific contact */
         String parentStudyContactEmail = this.getAndCleanValue(lineValues, "Parent Study Contact Email");
         String parentStudyContactName = this.getAndCleanValue(lineValues, "Parent Study Contact Name");
+        this.parseStudyContact(study, parentStudyContactEmail, parentStudyContactName);
+
+        /* Study IEC */
+        // TODO: also contains number of participants
         String participants = this.getAndCleanValue(lineValues, "Participants");
+        this.parseIEC(study, participants);
+
         String publicationUrls = this.getAndCleanValue(lineValues, "Publication urls");
         String publications = this.getAndCleanValue(lineValues, "Publications");
+        // study.setAttributeIfNotNull("testField6", publicationUrls);
+        // study.setAttributeIfNotNull("testField7", publications);
+        this.parsePublications(study, publicationUrls, publications);
+
+        // TODO: use for Relationship items (for now not really possible)
         String relatedStudies = this.getAndCleanValue(lineValues, "Related studies");
-        String specificConsentRestrictions = this.getAndCleanValue(lineValues, "Specific Consent Restrictions");
-        String studyOpenDateData = this.getAndCleanValue(lineValues, "Study Open Date (Data)");
-        String studyOpenDateSpecimens = this.getAndCleanValue(lineValues, "Study Open Date (Specimens)");
+        // study.setAttributeIfNotNull("testField2", relatedStudies);
+
+        /* Study website SO */
         String studyWebsite = this.getAndCleanValue(lineValues, "Study Website");
+        this.parseStudyWebsite(study, studyWebsite);
+
+        /* Study start and end dates */
         String studyYears = this.getAndCleanValue(lineValues, "Study Years");
         String studyPeriod = this.getAndCleanValue(lineValues, "Study period");
+        this.parseStudyYears(study, studyYears, studyPeriod);
+
         String studyType = this.getAndCleanValue(lineValues, "Study type");
+        this.parseStudyType(study, studyType);
 
         store(study);
         this.currentTrialID = null;
@@ -222,47 +278,49 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param biolinccID
      */
-    public void parseID(Item study, String biolinccID) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(biolinccID)) {
+    public void parseID(Item study, String biolinccID) throws Exception {
+        if (!ConverterUtils.isBlankOrNull(biolinccID)) {
+            this.createAndStoreClassItem(study, "StudyIdentifier",
+                    new String[][] { { "identifierValue", biolinccID } });
             this.currentTrialID = biolinccID;
-            study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
         } else {
-            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getValueOfItemAttribute(study, "displayTitle"));
+            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "displayTitle"));
         }
     }
 
     /**
      * TODO
      * Same as CTG
+     * 
      * @param study
      * @param studyTitle
      */
     public void parseStudyTitle(Item study, String studyTitle, String acronym) throws Exception {
         boolean displayTitleSet = false;
 
-        // TODO: filter out garb values if any?
         /* Public title */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyTitle)) {
+        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
             study.setAttributeIfNotNull("displayTitle", studyTitle);
             displayTitleSet = true;
 
             this.createAndStoreClassItem(study, "Title",
-                new String[][]{{"text", studyTitle}, {"type", ConverterCVT.TITLE_TYPE_PUBLIC}});
+                    new String[][] { { "text", studyTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
         }
-        
+
         /* Acronym */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(acronym)) {
+        if (!ConverterUtils.isBlankOrNull(acronym)) {
             if (!displayTitleSet) {
                 study.setAttributeIfNotNull("displayTitle", acronym);
             }
 
             this.createAndStoreClassItem(study, "Title",
-                new String[][]{{"text", acronym}, {"type", ConverterCVT.TITLE_TYPE_ACRONYM}});
+                    new String[][] { { "text", acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
         }
-        
+
         // Unknown title if not set before
         if (!displayTitleSet) {
             study.setAttribute("displayTitle", ConverterCVT.TITLE_UNKNOWN);
@@ -271,21 +329,22 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param background
      * @param objectives
      */
-    public void constructBriefDescription(Item study, String background, String objectives) {
+    public void constructDescription(Item study, String background, String objectives) {
         StringBuilder sb = new StringBuilder();
 
         // Background
-        if (!ConverterUtils.isNullOrEmptyOrBlank(background)) {
+        if (!ConverterUtils.isBlankOrNull(background)) {
             sb.append("Background: ");
             sb.append(background);
         }
 
         // Objectives
-        if (!ConverterUtils.isNullOrEmptyOrBlank(objectives)) {
+        if (!ConverterUtils.isBlankOrNull(objectives)) {
             if (!sb.toString().isEmpty()) {
                 if (!sb.toString().endsWith(".")) {
                     sb.append(".");
@@ -296,16 +355,17 @@ public class BiolinccConverter extends BaseConverter
             sb.append(background);
         }
 
-        study.setAttributeIfNotNull("briefDescription", sb.toString());
+        study.setAttributeIfNotNull("description", sb.toString());
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param cohortType
      */
     public void parseAge(Item study, String cohortType) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(cohortType)) {
+        if (!ConverterUtils.isBlankOrNull(cohortType)) {
             String minAge = "";
             String maxAge = "";
 
@@ -319,12 +379,12 @@ public class BiolinccConverter extends BaseConverter
             }
 
             // TODO: none on no minimum?
-            if (!ConverterUtils.isNullOrEmptyOrBlank(minAge)) {
+            if (!ConverterUtils.isBlankOrNull(minAge)) {
                 study.setAttributeIfNotNull("minAge", minAge);
                 study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
-            
-            if (!ConverterUtils.isNullOrEmptyOrBlank(maxAge)) {
+
+            if (!ConverterUtils.isBlankOrNull(maxAge)) {
                 study.setAttributeIfNotNull("maxAge", maxAge);
                 study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
@@ -336,21 +396,37 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * Also sets Study.nctID
+     * 
+     * @param study
      * @param clinicalTrialUrls
      * @return
      */
-    public List<String> parseClinicalTrialUrls(String clinicalTrialUrls) {
+    public List<String> parseClinicalTrialUrls(Item study, String clinicalTrialUrls) {
         Set<String> parsedUrls = new HashSet<String>();
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(clinicalTrialUrls)) {
+        if (!ConverterUtils.isBlankOrNull(clinicalTrialUrls)) {
             String[] urls = clinicalTrialUrls.split(", ");
             Matcher mUrl;
             String ctgUrl;
 
-            for (String url: urls) {
-                mUrl = P_URL_NCT_ID.matcher(url);
+            for (String url : urls) {
+                mUrl = ConverterUtils.P_ID_AT_END_OF_URL.matcher(url);
                 if (mUrl.matches()) {
-                    ctgUrl = CTG_STUDY_BASE_URL + mUrl.group(1);
+                    String nctId = mUrl.group(1);
+                    if (!this.seenNctIds.contains(nctId)) {
+                        this.seenNctIds.add(nctId);
+                        if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "nctID"))) {
+                            study.setAttribute("nctID", nctId);
+                        } else {
+                            this.writeLog("NCT ID found (" + nctId + ") for study which already has an NCT ID: "
+                                    + ConverterUtils.getAttrValue(study, "nctID"));
+                        }
+                    } else {
+                        this.writeLog("NCT ID already seen: " + nctId);
+                    }
+
+                    ctgUrl = CTG_STUDY_BASE_URL + nctId;
                     parsedUrls.add(ctgUrl);
                 } else {
                     this.writeLog("Failed to match CTG URL: " + url);
@@ -361,36 +437,42 @@ public class BiolinccConverter extends BaseConverter
         return new ArrayList<String>(parsedUrls);
     }
 
-    public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, String clinicalTrialUrls) throws Exception {
+    public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, String clinicalTrialUrls)
+            throws Exception {
         // Display title
-        String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
         String doDisplayTitle;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
             doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
-        /* Registry entry DO */
-        Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-            new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                            {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}});
-        
-        /* Biolincc registry entry DO instance */
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-            new String[][]{{"url", biolinccUrl}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
-            
-        /* CTG Registry entry DO instances */
-        List<String> ctgUrls = this.parseClinicalTrialUrls(clinicalTrialUrls);
-        for (String ctgUrl: ctgUrls) {
-            // TODO: system field?
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-                new String[][]{{"url", ctgUrl}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
+        /* BioLINCC Registry entry SO */
+        if (!ConverterUtils.isBlankOrNull(biolinccUrl)) {
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "displayTitle", doDisplayTitle },
+                            { "accessUrl", biolinccUrl },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
+        }
+
+        /* CTG Registry entry SOs */
+        List<String> ctgUrls = this.parseClinicalTrialUrls(study, clinicalTrialUrls);
+        for (String ctgUrl : ctgUrls) {
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "displayTitle", doDisplayTitle },
+                            { "accessUrl", ctgUrl },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
         }
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param conclusions
      */
@@ -404,26 +486,296 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param conditionsStr
      * @throws Exception
      */
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         // TODO: match values with CT codes/ICD Codes
-        if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
+        if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
             String[] conditionsList = conditionsStr.split(",");
-            for (String conditionStr: conditionsList) {
-                this.createAndStoreClassItem(study, "StudyCondition", 
-                    new String[][]{{"originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-')}});
+            for (String conditionStr : conditionsList) {
+                this.createAndStoreClassItem(study, "StudyCondition",
+                        new String[][] { { "originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-') } });
             }
         }
     }
 
     /**
-     * Get field value from array of values using a field's position-lookup Map, value is also cleaned.
+     * TODO
+     * 
+     * @param study
+     * @param studyYearsStr
+     * @throws Exception
+     */
+    public void parseStudyYears(Item study, String studyYearsStr, String studyPeriodStr) throws Exception {
+        // TODO: studyPeriodStr is unused, usually more precise than study years but
+        // somewhat free text
+
+        if (!ConverterUtils.isBlankOrNull(studyYearsStr)) {
+            Matcher mStudyYears = P_STUDY_YEARS.matcher(studyYearsStr);
+            if (mStudyYears.matches()) {
+                String startYear = mStudyYears.group(1);
+                // TODO: for now setting start date as first day of year
+                study.setAttribute("startDate", startYear + "-01-01");
+
+                String endYear = mStudyYears.group(2);
+                if (!endYear.equalsIgnoreCase(BiolinccConverter.STUDY_YEAR_ONGOING)) { // TODO: ongoing should be a
+                                                                                       // valid value too
+                    // TODO: for now setting end date as last day of year
+                    study.setAttribute("endDate", endYear + "-12-31");
+                }
+            } else {
+                this.writeLog("Failed to find study years in string: " + studyYearsStr);
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param specificConsentRestrictions
+     * @param commercialUseDataRestrictions
+     * @param dataRestrictionsBasedOnAreaOfResearch
+     * @param irbApprovalRequiredForData
+     * @param studyOpenDateData
+     * @throws Exception
+     */
+    public void parseClinicalDatasets(Item study, String specificConsentRestrictions,
+            String commercialUseDataRestrictions,
+            String dataRestrictionsBasedOnAreaOfResearch,
+            String irbApprovalRequiredForData, String studyOpenDateData) throws Exception {
+
+        // Publication year for IPD SO
+        LocalDate publicationDate = null;
+        String publicationYear = null;
+        if (!ConverterUtils.isBlankOrNull(studyOpenDateData)) {
+            publicationDate = this.parseDate(studyOpenDateData, ConverterUtils.P_DATE_M_D_Y_TIME);
+            try {
+                publicationYear = Integer.toString(publicationDate.getYear());
+            } catch (Exception e) {
+                this.writeLog("Failed to parse 'Study Open Date (Data)' date: " + studyOpenDateData);
+            }
+        }
+
+        /* IPD StudyObject */
+        // Note: Last updated date is on the BioLINCC website but not the data exported
+        // TODO: access details?
+        // TODO: access URL?
+        // TODO: lang code en by default?
+        // TODO: managingOrg NHLBI?
+        Item ipdDO = this.createAndStoreClassItem(study, "StudyObject",
+                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_IPD },
+                        { "datePublished", publicationDate != null ? publicationDate.toString() : null },
+                        { "type", ConverterCVT.O_TYPE_IPD },
+                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
+                        { "publicationYear", publicationYear } });
+
+        // Consent details
+        StringBuilder consentDetailsSb = new StringBuilder();
+
+        // Consent details: geographical restrictions for NIH data
+        consentDetailsSb.append(
+                "Geographical restrictions: NIH is prohibiting access to NIH Controlled-Access Data Repositories and associated data by institutions located in countries of concern. ");
+        consentDetailsSb.append(
+                "These countries include China (including Hong Kong and Macau), Russia, Iran, North Korea, Cuba, and Venezuela (NOT-OD-25-083). \n");
+
+        // IRB approval details, See Table 3.1 here:
+        // https://biolincc.nhlbi.nih.gov/media/BioLINCC_User_Guide_05Jan2026.pdf
+        Boolean restrictIrb = ConverterUtils.booleanFromString(irbApprovalRequiredForData);
+        consentDetailsSb.append("An Institutional Review Board from the applicant's institution must ");
+        if (restrictIrb != null && restrictIrb) {
+            consentDetailsSb.append("perform a review of the project and issue an approval. \n");
+        } else {
+            consentDetailsSb.append("declare that the research project is exempt from review. \n");
+        }
+
+        // Consent details: specific restrictions
+        consentDetailsSb.append(specificConsentRestrictions);
+
+        /* IPDDataset */
+        // TODO: normalized values for yes / no / n/a?
+        this.createAndStoreClassItem(ipdDO, "IPDDataset",
+                new String[][] { { "restrictCommercial", commercialUseDataRestrictions },
+                        { "restrictGeo", "Yes" }, // See above
+                        { "restrictResearchType", dataRestrictionsBasedOnAreaOfResearch },
+                        { "consentDetails", consentDetailsSb.toString() } });
+    }
+
+    public void parseBiospecimen(Item study, String specificConsentRestrictions,
+            String commercialUseSpecimenRestrictions,
+            String nonGeneticUseSpecimenRestrictions, String geneticUseAreaOfResearchRestrictions,
+            String geneticUseOfSpecimensAllowed, String materialTypes, String studyOpenDateSpecimens) throws Exception {
+
+        // Publication year for Biospecimen SO
+        LocalDate publicationDate = null;
+        String publicationYear = null;
+        if (!ConverterUtils.isBlankOrNull(studyOpenDateSpecimens)) {
+            publicationDate = this.parseDate(studyOpenDateSpecimens, ConverterUtils.P_DATE_M_D_Y_TIME);
+            try {
+                publicationYear = Integer.toString(publicationDate.getYear());
+            } catch (Exception e) {
+                this.writeLog("Failed to parse 'Study Open Date (Specimens)' date: " + studyOpenDateSpecimens);
+            }
+        }
+
+        /* Biospecimen StudyObject */
+        // Note: Last updated date is on the BioLINCC website but not the data exported
+        // TODO: access details?
+        // TODO: lang code en by default?
+        // TODO: managingOrg NHLBI?
+        String details = (!ConverterUtils.isBlankOrNull(materialTypes) ? "Material types: " + materialTypes : null);
+        Item biospecimenDO = this.createAndStoreClassItem(study, "StudyObject",
+                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_BIOSPECIMEN },
+                        { "datePublished", publicationDate != null ? publicationDate.toString() : null },
+                        { "details", details },
+                        { "type", ConverterCVT.O_TYPE_BIOSPECIMEN },
+                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
+                        { "publicationYear", publicationYear } });
+
+        // Consent details
+        StringBuilder consentDetailsSb = new StringBuilder();
+
+        // Consent details: geographical restrictions for NIH data
+        consentDetailsSb.append(
+                "Geographical restrictions: NIH is prohibiting access to NIH Controlled-Access Data Repositories and associated data by institutions located in countries of concern. ");
+        consentDetailsSb.append(
+                "These countries include China (including Hong Kong and Macau), Russia, Iran, North Korea, Cuba, and Venezuela (NOT-OD-25-083). \n");
+
+        // Consent details: specific restrictions
+        consentDetailsSb.append(specificConsentRestrictions);
+
+        /* Biosample */
+        // TODO: normalized values for yes / no / n/a?
+        this.createAndStoreClassItem(biospecimenDO, "Biosample",
+                new String[][] { { "restrictCommercial", commercialUseSpecimenRestrictions },
+                        { "restrictGeo", "Yes" }, // See above
+                        { "restrictResearchTypeNonGenetic", nonGeneticUseSpecimenRestrictions },
+                        { "restrictResearchTypeGenetic", geneticUseAreaOfResearchRestrictions },
+                        { "geneticUseAllowed", geneticUseOfSpecimensAllowed },
+                        { "consentDetails", consentDetailsSb.toString() } });
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param networkStr
+     * @throws Exception
+     */
+    public void parseNetwork(Item study, String networkStr) throws Exception {
+        // TODO: contribType?
+        this.createAndStoreClassItem(study, "Organisation",
+                new String[][] { { "name", networkStr }, { "type", "Network" } });
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param parentStudyContactEmail
+     * @param parentStudyContactName
+     * @throws Exception
+     */
+    public void parseStudyContact(Item study, String parentStudyContactEmail, String parentStudyContactName)
+            throws Exception {
+        if (!ConverterUtils.isBlankOrNull(parentStudyContactName)) {
+            // Note: email is not in the model so parentStudyContactEmail is unused
+            this.createAndStoreClassItem(study, "Person",
+                    new String[][] { { "fullName", parentStudyContactName },
+                            { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT } });
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param participantsStr
+     */
+    public void parseIEC(Item study, String participantsStr) {
+        study.setAttributeIfNotNull("iec", participantsStr);
+    }
+
+    public void parsePublications(Item study, String publicationUrls, String publications) throws Exception {
+        // Note: publications is unused (see wiki)
+        if (!ConverterUtils.isBlankOrNull(publicationUrls)) {
+            String[] urls = publicationUrls.split(", ");
+            Matcher mUrl;
+            String pubmedId;
+
+            // TODO: log if doesn't match/check that it's an actual pubmed url?
+            for (String url : urls) {
+                mUrl = ConverterUtils.P_PUBMED_ID.matcher(url);
+                if (mUrl.matches()) {
+                    pubmedId = mUrl.group(1);
+                    if (!ConverterUtils.isBlankOrNull(pubmedId)) {
+                        this.createAndStoreClassItem(study, "Publication",
+                                new String[][] { { "pubMedId", pubmedId } });
+                    }
+                } else {
+                    this.writeLog("Failed to match PubMed ID in url: " + url);
+                }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param studyWebsiteStr
+     * @throws Exception
+     */
+    public void parseStudyWebsite(Item study, String studyWebsiteStr) throws Exception {
+        // TODO: last updated
+        // TODO: managing org?
+        if (!ConverterUtils.isBlankOrNull(studyWebsiteStr)) {
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "displayTitle", "Study (or clinical trial network) website" },
+                            { "accessUrl", studyWebsiteStr },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "type", ConverterCVT.O_TYPE_WEBSITE } });
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param studyTypeStr
+     */
+    public void parseStudyType(Item study, String studyTypeStr) {
+        if (!ConverterUtils.isBlankOrNull(studyTypeStr)) {
+            String type = null;
+
+            if (studyTypeStr.equalsIgnoreCase(STUDY_TYPE_CLINICAL_TRIAL)) {
+                type = ConverterCVT.TYPE_INTERVENTIONAL;
+            } else if (studyTypeStr.equalsIgnoreCase(STUDY_TYPE_EPIDEMIOLOGY_STUDY)) {
+                type = ConverterCVT.TYPE_OBSERVATIONAL;
+            } else if (studyTypeStr.equalsIgnoreCase(STUDY_TYPE_MIXED)) { // TODO: could have a "mixed" value?
+                type = ConverterCVT.UNKNOWN;
+            } else if (studyTypeStr.equalsIgnoreCase(STUDY_TYPE_PROGRAM_EVALUATION)) {
+                type = ConverterCVT.TYPE_OTHER;
+            }
+
+            if (type != null) {
+                study.setAttribute("type", type);
+            } else {
+                this.writeLog("Unknown study type: " + studyTypeStr);
+            }
+        }
+    }
+
+    /**
+     * Get field value from array of values using a field's position-lookup Map,
+     * value is also cleaned.
      * 
      * @param lineValues the list of all values for a line in the data file
-     * @param field the name of the field to get the value of
+     * @param field      the name of the field to get the value of
      * @return the cleaned value of the field
      * @see //#cleanValue()
      */
@@ -442,6 +794,7 @@ public class BiolinccConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param fields
      * @return map of data file field names and their corresponding column index
      * @throws Exception
@@ -455,9 +808,13 @@ public class BiolinccConverter extends BaseConverter
 
         for (int ind = 0; ind < fields.length; ind++) {
             if (ind == 0) {
-                /* Opened file is passed to this function, so we can't change the encoding on read
-                to handle the BOM \uFEFF leading character, we have to remove it ourselves.
-                The character is read differently in Docker, so we match the header field name starting with a letter. */
+                /*
+                 * Opened file is passed to this function, so we can't change the encoding on
+                 * read
+                 * to handle the BOM \uFEFF leading character, we have to remove it ourselves.
+                 * The character is read differently in Docker, so we match the header field
+                 * name starting with a letter.
+                 */
                 Matcher mHeader = P_HEADER.matcher(fields[ind]);
                 if (mHeader.find()) {
                     fieldsToInd.put(mHeader.group(0), ind);

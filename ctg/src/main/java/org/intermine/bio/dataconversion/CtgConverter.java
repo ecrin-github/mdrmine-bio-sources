@@ -1,7 +1,5 @@
 package org.intermine.bio.dataconversion;
 
-
-
 /*
  * Copyright (C) 2024-2025 MDRMine
  * Modified from 2002-2019 FlyMine
@@ -15,9 +13,7 @@ package org.intermine.bio.dataconversion;
 
 import java.io.Reader;
 import java.time.LocalDate;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -29,29 +25,28 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 
-
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
 
 /**
  * 
  * @author
  */
-public class CtgConverter extends BaseConverter
-{
+public class CtgConverter extends BaseConverter {
     //
     private static final String DATASET_TITLE = "CTG-Studies";
     private static final String DATA_SOURCE_NAME = "CTG";
 
-    private static final Pattern P_PHASE = Pattern.compile("(NA)|(early_)?phase(\\d)(?:\\|phase(\\d))?", Pattern.CASE_INSENSITIVE);
+    private static final Pattern P_PHASE = Pattern.compile("(NA)|(early_)?phase(\\d)(?:\\|phase(\\d))?",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern P_DOC = Pattern.compile("(.*?),\\h*(http\\S+)\\h*", Pattern.CASE_INSENSITIVE);
 
     private static final String AGE_CHILD = "CHILD";
@@ -59,12 +54,14 @@ public class CtgConverter extends BaseConverter
     private static final String AGE_OLDER_ADULT = "OLDER_ADULT";
 
     private Map<String, Integer> fieldsToInd;
-    private HashSet<String> storedPKs = new HashSet<String>();  // Storing all NCT, EUCTR, and CTIS id to avoid duplicate errors
+    private HashSet<String> storedPKs = new HashSet<String>(); // Storing all NCT, EUCTR, and CTIS id to avoid duplicate
+                                                               // errors
 
     /**
      * Constructor
+     * 
      * @param writer the ItemWriter used to handle the resultant items
-     * @param model the Model
+     * @param model  the Model
      */
     public CtgConverter(ItemWriter writer, Model model) {
         super(writer, model, DATA_SOURCE_NAME, DATASET_TITLE);
@@ -76,16 +73,19 @@ public class CtgConverter extends BaseConverter
      * {@inheritDoc}
      */
     public void process(Reader reader) throws Exception {
-        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
+        /*
+         * Opened BufferedReader is passed as argument (from
+         * FileConverterTask.execute())
+         */
         this.startLogging("ctg");
 
         final CSVParser parser = new CSVParserBuilder()
-                                        .withSeparator(',')
-                                        // .withQuoteChar('"')
-                                        .build();
+                .withSeparator(',')
+                // .withQuoteChar('"')
+                .build();
         final CSVReader csvReader = new CSVReaderBuilder(reader)
-                                            .withCSVParser(parser)
-                                            .build();
+                .withCSVParser(parser)
+                .build();
 
         /* Headers */
         this.fieldsToInd = this.getHeaders(csvReader);
@@ -103,7 +103,7 @@ public class CtgConverter extends BaseConverter
             } else {
                 skipNext = false;
             }
-            
+
             try {
                 nextLine = csvReader.readNext();
             } catch (CsvMalformedLineException e) {
@@ -127,10 +127,11 @@ public class CtgConverter extends BaseConverter
         /* Secondary IDs (EUCTR, CTIS, Protocol code, etc.) */
         String otherIDs = this.getAndCleanValue(lineValues, "Other IDs");
 
-        // Not storing study if trialID is blank or is the trial that is not parsed properly or is a trial with an ID that is already linked to another study
+        // Not storing study if trialID is blank or is the trial that is not parsed
+        // properly or is a trial with an ID that is already linked to another study
         // TODO: if studies with blank trial IDs exist, check otherIDs then?
-        if (!ConverterUtils.isNullOrEmptyOrBlank(trialID) && !trialID.equals("NCT01027572") &&
-            this.parseTrialIDs(study, trialID, otherIDs)) {
+        if (!ConverterUtils.isBlankOrNull(trialID) && !trialID.equals("NCT01027572") &&
+                this.parseTrialIDs(study, trialID, otherIDs)) {
 
             /* Study data source */
             this.addStudySource(study);
@@ -140,43 +141,44 @@ public class CtgConverter extends BaseConverter
             // Study acronym
             String acronym = this.getAndCleanValue(lineValues, "Acronym");
             this.parseStudyTitle(study, studyTitle, acronym);
-    
-            // Registry trial page URL (used later for registry entry and results summary DO)
+
+            // Registry trial page URL (used later for registry entry and results summary
+            // SO)
             String studyURL = this.getAndCleanValue(lineValues, "Study URL");
-            
+
             /* Study status */
             String studyStatus = this.getAndCleanValue(lineValues, "Study Status");
             this.parseStatus(study, studyStatus);
-    
-            /* Study brief description */
+
+            /* Study description */
             String briefSummary = this.getAndCleanValue(lineValues, "Brief Summary");
             this.parseBriefSummary(study, briefSummary);
-    
+
             // TODO: use this to parse results or not?
             String studyResults = this.getAndCleanValue(lineValues, "Study Results");
-    
+
             /* Study conditions */
             String conditions = this.getAndCleanValue(lineValues, "Conditions");
             this.parseConditions(study, conditions);
-    
+
             /* Study topics */
             String interventions = this.getAndCleanValue(lineValues, "Interventions");
             this.parseInterventions(study, interventions);
             // study.setAttributeIfNotNull("testField2", interventions);
-    
+
             /* Primary outcomes */
             String primaryOutcomeMeasures = this.getAndCleanValue(lineValues, "Primary Outcome Measures");
             this.parsePrimaryOutcomes(study, primaryOutcomeMeasures);
-            
+
             /* Secondary outcomes */
             String secondaryOutcomeMeasures = this.getAndCleanValue(lineValues, "Secondary Outcome Measures");
             String otherOutcomeMeasures = this.getAndCleanValue(lineValues, "Other Outcome Measures");
             this.parseSecondaryOutcomes(study, secondaryOutcomeMeasures, otherOutcomeMeasures);
-    
+
             /* Trial sponsor */
             String sponsor = this.getAndCleanValue(lineValues, "Sponsor");
             this.parseSponsor(study, sponsor);
-            
+
             /* Trial collaborating organisations */
             String collaborators = this.getAndCleanValue(lineValues, "Collaborators");
             this.parseCollaborators(study, collaborators);
@@ -184,7 +186,7 @@ public class CtgConverter extends BaseConverter
             /* Gender */
             String gender = this.getAndCleanValue(lineValues, "Sex");
             this.parseGender(study, gender);
-            
+
             /* Min/max age */
             String age = this.getAndCleanValue(lineValues, "Age");
             this.parseAge(study, age);
@@ -200,23 +202,25 @@ public class CtgConverter extends BaseConverter
             // Unused (see wiki)
             String funderType = this.getAndCleanValue(lineValues, "Funder Type");
             // study.setAttributeIfNotNull("testField3", funderType);
-            
+
             /* Study type */
             String studyType = this.getAndCleanValue(lineValues, "Study Type");
             this.parseStudyType(study, studyType);
-            
+
             /* Study features */
             String studyDesign = this.getAndCleanValue(lineValues, "Study Design");
             this.parseStudyDesign(study, studyDesign);
-            
+
             /* Study start date */
             String startDateStr = CtgConverter.normaliseDateString(this.getAndCleanValue(lineValues, "Start Date"));
             this.parseStartDate(study, startDateStr);
-            
+
             /* Study end date */
             // Last primary outcome measure data collection date
-            String primaryCompletionDateStr = CtgConverter.normaliseDateString(this.getAndCleanValue(lineValues, "Primary Completion Date"));
-            String completionDateStr = CtgConverter.normaliseDateString(this.getAndCleanValue(lineValues, "Completion Date"));
+            String primaryCompletionDateStr = CtgConverter
+                    .normaliseDateString(this.getAndCleanValue(lineValues, "Primary Completion Date"));
+            String completionDateStr = CtgConverter
+                    .normaliseDateString(this.getAndCleanValue(lineValues, "Completion Date"));
             // Last data collection (all outcome measures) date
             LocalDate primaryCompletionDate = ConverterUtils.getDateFromString(primaryCompletionDateStr, null);
             LocalDate completionDate = ConverterUtils.getDateFromString(completionDateStr, null);
@@ -226,32 +230,33 @@ public class CtgConverter extends BaseConverter
             String firstPostedStr = this.getAndCleanValue(lineValues, "First Posted");
             LocalDate firstPosted = ConverterUtils.getDateFromString(firstPostedStr, null);
             // study.setAttributeIfNotNull("testField4", firstPostedStr);
-            
+
             // Record last update date
             String lastUpdatePostedStr = this.getAndCleanValue(lineValues, "Last Update Posted");
             LocalDate lastUpdatePosted = ConverterUtils.getDateFromString(lastUpdatePostedStr, null);
             // study.setAttributeIfNotNull("testField5", lastUpdatePostedStr);
-            
+
             // Results posted (available) date
             String resultsFirstPostedStr = this.getAndCleanValue(lineValues, "Results First Posted");
             LocalDate resultsFirstPosted = ConverterUtils.getDateFromString(resultsFirstPostedStr, null);
             // study.setAttributeIfNotNull("testField6", resultsFirstPostedStr);
 
-            /* Trial registry entry DO */
+            /* Trial registry entry SO */
             this.createAndStoreRegistryEntryDO(study, studyURL, firstPosted, lastUpdatePosted);
 
-            /* Trial results summary DO */
-            this.createAndStoreResultsSummaryDO(study, studyResults, studyURL, completionDate, primaryCompletionDate, resultsFirstPosted, lastUpdatePosted);
-            
+            /* Trial results summary SO */
+            this.createAndStoreResultsSummaryDO(study, studyResults, studyURL, completionDate, primaryCompletionDate,
+                    resultsFirstPosted, lastUpdatePosted);
+
             /* Study locations */
             String locations = this.getAndCleanValue(lineValues, "Locations");
             this.parseLocations(study, locations);
             // study.setAttributeIfNotNull("testField7", locations);
-            
+
             String studyDocuments = this.getAndCleanValue(lineValues, "Study Documents");
             this.parseStudyDocuments(study, studyDocuments);
             // study.setAttributeIfNotNull("testField8", studyDocuments);
-    
+
             store(study);
 
         }
@@ -260,6 +265,7 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param studyTitle
      */
@@ -270,6 +276,7 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param mainTrialID
      * @param otherIDsStr
@@ -280,7 +287,7 @@ public class CtgConverter extends BaseConverter
         boolean continueParsing = true;
 
         // NCT ID
-        if (storedPKs.contains(mainTrialID)) {  // should not happen
+        if (storedPKs.contains(mainTrialID)) { // should not happen
             continueParsing = false;
             this.writeLog("NCT ID already exists: " + mainTrialID);
         } else {
@@ -289,17 +296,17 @@ public class CtgConverter extends BaseConverter
         }
 
         // Other IDs
-        if (!ConverterUtils.isNullOrEmptyOrBlank(otherIDsStr) && continueParsing) {
+        if (!ConverterUtils.isBlankOrNull(otherIDsStr) && continueParsing) {
             // study.setAttributeIfNotNull("testField1", otherIDsStr);
             boolean ctisIdSet = false;
             boolean euctrIdSet = false;
             List<String> euIds = new ArrayList<String>();
-            List<String> otherIds = new ArrayList<String>();    // IDs to be added as "StudyIdentifier" items later
+            List<String> otherIds = new ArrayList<String>(); // IDs to be added as "StudyIdentifier" items later
 
             // Adding secondaryIDs and trialID into one set
             Set<String> ids = Stream.of(otherIDsStr.split("\\|"))
-                .map(String::strip)
-                .collect(Collectors.toSet());
+                    .map(String::strip)
+                    .collect(Collectors.toSet());
 
             Iterator<String> idsIter = ids.iterator();
             while (idsIter.hasNext() && continueParsing) {
@@ -325,21 +332,22 @@ public class CtgConverter extends BaseConverter
                             } else {
                                 this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " + otherID);
                             }
-                        } else if (euctrPrefix != null || euctrSuffix != null) {    // EUCTR ID
+                        } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
                             // Setting EUCTR ID without prefix and suffix
                             study.setAttributeIfNotNull("euctrID", euId);
                             euctrIdSet = true;
-                            
+
                             if (euctrSuffix != null) {
                                 this.writeLog("EUCTR ID matched and suffix is not null: " + euctrSuffix);
                             }
-                        } else {    // Undistinguishable ID
+                        } else { // Undistinguishable ID
                             if (ctisIdSet) {
                                 if (!euctrIdSet) {
                                     study.setAttributeIfNotNull("euctrID", euId);
                                     euctrIdSet = true;
                                 } else {
-                                    this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: " + euId + "; full string of IDs: " + otherIDsStr);
+                                    this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: "
+                                            + euId + "; full string of IDs: " + otherIDsStr);
                                 }
                             } else if (ctisIdSet) {
                                 study.setAttributeIfNotNull("primaryIdentifier", euId);
@@ -356,24 +364,26 @@ public class CtgConverter extends BaseConverter
 
             if (continueParsing) {
                 // Adding other IDs as StudyIdentifier items
-                for (String otherID: otherIds) {
+                for (String otherID : otherIds) {
                     // TODO: infer ID type
-                    this.createAndStoreClassItem(study, "StudyIdentifier", 
-                        new String[][]{{"identifierValue", otherID}});
+                    this.createAndStoreClassItem(study, "StudyIdentifier",
+                            new String[][] { { "identifierValue", otherID } });
                 }
-                
+
                 // Handling undistinguishable EU IDs
                 if (euIds.size() > 0) {
                     if (euIds.size() > 2) {
                         this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + otherIDsStr);
                     } else if (euIds.size() == 2) {
                         if (ctisIdSet || euctrIdSet) {
-                            this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
+                            this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds
+                                    + "; full string of IDs: " + otherIDsStr);
                         } else {
                             String id1 = euIds.get(0);
                             String id2 = euIds.get(1);
-    
-                            // Assuming that the more recent ID (year + sequential part after) is the CTIS ID, and the other is the EUCTR ID
+
+                            // Assuming that the more recent ID (year + sequential part after) is the CTIS
+                            // ID, and the other is the EUCTR ID
                             if (id1.compareTo(id2) > 0) {
                                 study.setAttributeIfNotNull("primaryIdentifier", id1);
                                 study.setAttributeIfNotNull("euctrID", id2);
@@ -382,13 +392,15 @@ public class CtgConverter extends BaseConverter
                                 study.setAttributeIfNotNull("euctrID", id1);
                             }
                         }
-                    } else {    // 1 ID
+                    } else { // 1 ID
                         if (ctisIdSet && euctrIdSet) {
-                            this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds + "; full string of IDs: " + otherIDsStr);
+                            this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds
+                                    + "; full string of IDs: " + otherIDsStr);
                         } else {
                             String id1 = euIds.get(0);
-    
-                            // Note: if both ctisID and euctrID have not been set before, we populate both fields hoping for a merge to correct the fields later
+
+                            // Note: if both ctisID and euctrID have not been set before, we populate both
+                            // fields hoping for a merge to correct the fields later
                             if (!ctisIdSet) {
                                 study.setAttributeIfNotNull("primaryIdentifier", id1);
                             }
@@ -402,12 +414,12 @@ public class CtgConverter extends BaseConverter
         }
 
         if (continueParsing) {
-            String nctID = ConverterUtils.getValueOfItemAttribute(study, "nctID");
-            String euctrID = ConverterUtils.getValueOfItemAttribute(study, "euctrID");
-            String ctisID = ConverterUtils.getValueOfItemAttribute(study, "primaryIdentifier");
+            String nctID = ConverterUtils.getAttrValue(study, "nctID");
+            String euctrID = ConverterUtils.getAttrValue(study, "euctrID");
+            String ctisID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
-            for (String id: new String[]{nctID, ctisID, euctrID}) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(id)) {
+            for (String id : new String[] { nctID, ctisID, euctrID }) {
+                if (!ConverterUtils.isBlankOrNull(id)) {
                     this.storedPKs.add(id);
                 }
             }
@@ -415,17 +427,19 @@ public class CtgConverter extends BaseConverter
 
         return continueParsing;
     }
-    
+
     /**
      * TODO
+     * 
      * @param study
      */
     public void addStudySource(Item study) throws Exception {
-        this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_CTG}});
+        this.createAndStoreClassItem(study, "StudySource", new String[][] { { "name", ConverterCVT.SOURCE_NAME_CTG } });
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param studyTitle
      */
@@ -434,24 +448,24 @@ public class CtgConverter extends BaseConverter
 
         // TODO: && !title.equals("-") && !title.equals("_") && !title.equals(".") ?
         /* Public title */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyTitle)) {
+        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
             study.setAttributeIfNotNull("displayTitle", studyTitle);
             displayTitleSet = true;
 
             this.createAndStoreClassItem(study, "Title",
-                new String[][]{{"text", studyTitle}, {"type", ConverterCVT.TITLE_TYPE_PUBLIC}});
+                    new String[][] { { "text", studyTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
         }
-        
+
         /* Acronym */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(acronym)) {
+        if (!ConverterUtils.isBlankOrNull(acronym)) {
             if (!displayTitleSet) {
                 study.setAttributeIfNotNull("displayTitle", acronym);
             }
 
             this.createAndStoreClassItem(study, "Title",
-                new String[][]{{"text", acronym}, {"type", ConverterCVT.TITLE_TYPE_ACRONYM}});
+                    new String[][] { { "text", acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
         }
-        
+
         // Unknown title if not set before
         if (!displayTitleSet) {
             study.setAttribute("displayTitle", ConverterCVT.TITLE_UNKNOWN);
@@ -460,17 +474,18 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param briefSummary
      */
     public void parseBriefSummary(Item study, String briefSummary) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(briefSummary)) {
-            study.setAttribute("briefDescription", briefSummary);
+        if (!ConverterUtils.isBlankOrNull(briefSummary)) {
+            study.setAttribute("description", briefSummary);
         }
     }
 
     public void parseStatus(Item study, String status) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(status)) {
+        if (!ConverterUtils.isBlankOrNull(status)) {
             // TODO: normalisation
             String cleanedStatus = ConverterUtils.capitaliseAndReplaceCharBySpace(status, '_');
             if (cleanedStatus.equals("Active not recruiting")) { // Temporary
@@ -482,18 +497,19 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param conditionsStr
      * @throws Exception
      */
     public void parseConditions(Item study, String conditionsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(conditionsStr)) {
+        if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
             String[] conditions = conditionsStr.split("\\|");
-            for (String condition: conditions) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(condition)) {
+            for (String condition : conditions) {
+                if (!ConverterUtils.isBlankOrNull(condition)) {
                     // TODO: link/normalise with CV
-                    this.createAndStoreClassItem(study, "StudyCondition", 
-                        new String[][]{{"originalValue", WordUtils.capitalizeFully(condition, ' ', '-')}});
+                    this.createAndStoreClassItem(study, "StudyCondition",
+                            new String[][] { { "originalValue", WordUtils.capitalizeFully(condition, ' ', '-') } });
                 }
             }
         }
@@ -501,27 +517,30 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param interventionsStr
      * @throws Exception
      */
     public void parseInterventions(Item study, String interventionsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(interventionsStr)) {
+        if (!ConverterUtils.isBlankOrNull(interventionsStr)) {
             // TODO: formatting
             study.setAttributeIfNotNull("interventions", interventionsStr);
 
             String[] interventions = interventionsStr.split("\\|");
             String[] tuple;
-            for (String intervention: interventions) {
-                if (!ConverterUtils.isNullOrEmptyOrBlank(intervention)) {
+            for (String intervention : interventions) {
+                if (!ConverterUtils.isBlankOrNull(intervention)) {
                     tuple = intervention.split(": ");
                     if (tuple.length == 2) {
                         // TODO: link/normalise with CV
                         this.createAndStoreClassItem(study, "Topic",
-                            new String[][]{{"type", ConverterUtils.capitaliseAndReplaceCharBySpace(tuple[0], '_')}, 
-                                {"value", WordUtils.capitalizeFully(tuple[1], ' ', '-')}});
+                                new String[][] {
+                                        { "type", ConverterUtils.capitaliseAndReplaceCharBySpace(tuple[0], '_') },
+                                        { "value", WordUtils.capitalizeFully(tuple[1], ' ', '-') } });
                     } else {
-                        this.writeLog("Failed to properly split intervention tuple: " + intervention + "; full string: " + interventionsStr);
+                        this.writeLog("Failed to properly split intervention tuple: " + intervention + "; full string: "
+                                + interventionsStr);
                     }
                 }
             }
@@ -530,17 +549,19 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param primaryOutcomes
      */
     public void parsePrimaryOutcomes(Item study, String primaryOutcomes) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(primaryOutcomes)) {
+        if (!ConverterUtils.isBlankOrNull(primaryOutcomes)) {
             study.setAttributeIfNotNull("primaryOutcome", primaryOutcomes);
         }
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param secondaryOutcomes
      * @param otherOutcomes
@@ -549,11 +570,11 @@ public class CtgConverter extends BaseConverter
         // TODO: capitalise?
         StringBuilder outcomesSb = new StringBuilder();
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(secondaryOutcomes)) {
+        if (!ConverterUtils.isBlankOrNull(secondaryOutcomes)) {
             outcomesSb.append(secondaryOutcomes);
         }
 
-        if (!ConverterUtils.isNullOrEmptyOrBlank(otherOutcomes)) {
+        if (!ConverterUtils.isBlankOrNull(otherOutcomes)) {
             if (!outcomesSb.toString().isEmpty()) {
                 if (!outcomesSb.toString().endsWith(".")) {
                     outcomesSb.append(".");
@@ -562,48 +583,52 @@ public class CtgConverter extends BaseConverter
             }
             outcomesSb.append(otherOutcomes);
         }
-        
+
         study.setAttributeIfNotNull("secondaryOutcomes", outcomesSb.toString());
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param sponsor
      * @throws Exception
      */
     public void parseSponsor(Item study, String sponsor) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(sponsor)) {
+        if (!ConverterUtils.isBlankOrNull(sponsor)) {
             // TODO: differentiate people from orgs + link to CV
             this.createAndStoreClassItem(study, "Organisation",
-                new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR}, {"name", sponsor}});
+                    new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR }, { "name", sponsor } });
         }
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param collaboratorsStr
      * @throws Exception
      */
     public void parseCollaborators(Item study, String collaboratorsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(collaboratorsStr)) {
+        if (!ConverterUtils.isBlankOrNull(collaboratorsStr)) {
             String[] collaborators = collaboratorsStr.split("\\|");
-            for (String collaborator: collaborators) {
+            for (String collaborator : collaborators) {
                 // TODO: differentiate people from orgs (if any) + link to CV
                 this.createAndStoreClassItem(study, "Organisation",
-                    new String[][]{{"contribType", ConverterCVT.CONTRIBUTOR_TYPE_COLLABORATING_ORG}, {"name", collaborator}});
+                        new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_COLLABORATING_ORG },
+                                { "name", collaborator } });
             }
         }
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param gender
      */
     public void parseGender(Item study, String gender) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(gender)) {
+        if (!ConverterUtils.isBlankOrNull(gender)) {
             if (gender.equalsIgnoreCase(ConverterCVT.GENDER_ALL)) {
                 study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
             } else if (gender.equalsIgnoreCase(ConverterCVT.GENDER_WOMEN)) {
@@ -618,19 +643,20 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param ageStr
      */
     public void parseAge(Item study, String ageStr) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(ageStr)) {
+        if (!ConverterUtils.isBlankOrNull(ageStr)) {
             int minAge = Integer.MAX_VALUE;
             int maxAge = Integer.MIN_VALUE;
 
             String[] ageRanges = ageStr.split(", ");
 
             // Parsing the various age ranges
-            for (String ageRange: ageRanges) {
-                if (ageRange.equalsIgnoreCase(CtgConverter.AGE_CHILD)) {    // "CHILD" (0-17)
+            for (String ageRange : ageRanges) {
+                if (ageRange.equalsIgnoreCase(CtgConverter.AGE_CHILD)) { // "CHILD" (0-17)
                     minAge = Integer.MIN_VALUE;
                     if (maxAge < 17) {
                         maxAge = 17;
@@ -642,7 +668,7 @@ public class CtgConverter extends BaseConverter
                     if (maxAge < 64) {
                         maxAge = 64;
                     }
-                } else if (ageRange.equalsIgnoreCase(CtgConverter.AGE_OLDER_ADULT)) {   // "OLDER_ADULT" (65+)
+                } else if (ageRange.equalsIgnoreCase(CtgConverter.AGE_OLDER_ADULT)) { // "OLDER_ADULT" (65+)
                     if (minAge > 65) {
                         minAge = 65;
                     }
@@ -657,7 +683,7 @@ public class CtgConverter extends BaseConverter
                 study.setAttributeIfNotNull("minAge", String.valueOf(minAge));
                 study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
-            
+
             if (maxAge != Integer.MIN_VALUE && maxAge != Integer.MAX_VALUE) {
                 study.setAttributeIfNotNull("maxAge", String.valueOf(maxAge));
                 study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
@@ -670,12 +696,13 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param phasesStr
      * @throws Exception
      */
     public void parsePhases(Item study, String phasesStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(phasesStr)) {
+        if (!ConverterUtils.isBlankOrNull(phasesStr)) {
             Matcher mPhase = P_PHASE.matcher(phasesStr);
             if (mPhase.matches()) {
                 String phaseValue = "";
@@ -685,20 +712,21 @@ public class CtgConverter extends BaseConverter
                 String p1 = mPhase.group(3);
                 String p2 = mPhase.group(4);
 
-                if (na != null) {   // Not applicable
+                if (na != null) { // Not applicable
                     phaseValue = ConverterCVT.NOT_APPLICABLE;
                 } else {
                     if (early != null) {
                         phaseValue = ConverterCVT.FEATURE_V_EARLY_PHASE_1;
-                    } else if (p2 == null) {    // One phase number
+                    } else if (p2 == null) { // One phase number
                         phaseValue = ConverterUtils.convertPhaseNumber(p1);
-                    } else {    // Two phase numbers
+                    } else { // Two phase numbers
                         phaseValue = ConverterUtils.constructMultiplePhasesString(p1, p2);
                     }
                 }
 
-                this.createAndStoreClassItem(study, "StudyFeature", 
-                    new String[][]{{"featureType", ConverterCVT.FEATURE_T_PHASE}, {"featureValue", phaseValue}});
+                this.createAndStoreClassItem(study, "StudyFeature",
+                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
+                                { "featureValue", phaseValue } });
             } else {
                 this.writeLog("Failed to match phase value: " + phasesStr);
             }
@@ -707,15 +735,19 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param enrolment
      */
     public void parseEnrolment(Item study, String enrolment) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(enrolment)) {
-            String studyStatus = ConverterUtils.getValueOfItemAttribute(study, "status");
-            // Note: Enrolment can also be actual enrolment for suspended status (and perhaps others as well),
-            // but there does not seem to be a way to know that from the data, it is shown on CTG website however
-            if (studyStatus.equalsIgnoreCase(ConverterCVT.STATUS_COMPLETED) || studyStatus.equalsIgnoreCase(ConverterCVT.STATUS_ACTIVE_NOT_RECRUITING)) {
+        if (!ConverterUtils.isBlankOrNull(enrolment)) {
+            String studyStatus = ConverterUtils.getAttrValue(study, "status");
+            // Note: Enrolment can also be actual enrolment for suspended status (and
+            // perhaps others as well),
+            // but there does not seem to be a way to know that from the data, it is shown
+            // on CTG website however
+            if (studyStatus.equalsIgnoreCase(ConverterCVT.STATUS_COMPLETED)
+                    || studyStatus.equalsIgnoreCase(ConverterCVT.STATUS_ACTIVE_NOT_RECRUITING)) {
                 study.setAttributeIfNotNull("actualEnrolment", enrolment);
             } else {
                 study.setAttributeIfNotNull("plannedEnrolment", enrolment);
@@ -725,69 +757,81 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param studyType
      */
     public void parseStudyType(Item study, String studyType) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyType)) {
+        if (!ConverterUtils.isBlankOrNull(studyType)) {
             study.setAttributeIfNotNull("type", ConverterUtils.capitaliseAndReplaceCharBySpace(studyType, '_'));
         }
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param studyDesign
      * @throws Exception
      */
     public void parseStudyDesign(Item study, String studyDesign) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDesign)) {
-            // Observational studies always have "Observational Model: |Time Perspective: p" as study design value
+        if (!ConverterUtils.isBlankOrNull(studyDesign)) {
+            // Observational studies always have "Observational Model: |Time Perspective: p"
+            // as study design value
             if (!studyDesign.startsWith("Observational")) {
                 String[] kvs = studyDesign.split("\\|");
                 String[] tuple;
 
                 if (kvs.length == 4) {
-                    for (String kv: kvs) {
+                    for (String kv : kvs) {
                         tuple = kv.split(": ");
                         if (tuple.length == 2) {
                             // Filtering out "NA" value for "Allocation" feature type
                             if (!tuple[0].isEmpty() && !tuple[1].isEmpty() && !tuple[1].equalsIgnoreCase("NA")) {
                                 // TODO: CV relevant? CV in MDR for features is entirely based on CTG values
                                 // TODO: normalise masking values?
-                                this.createAndStoreClassItem(study, "StudyFeature", 
-                                    new String[][]{{"featureType", ConverterUtils.capitaliseFirstLetter(tuple[0])},
-                                                    {"featureValue", ConverterUtils.capitaliseAndReplaceCharBySpace(tuple[1], '_')}});
+                                this.createAndStoreClassItem(study, "StudyFeature",
+                                        new String[][] {
+                                                { "featureType", ConverterUtils.capitaliseFirstLetter(tuple[0]) },
+                                                { "featureValue", ConverterUtils
+                                                        .capitaliseAndReplaceCharBySpace(tuple[1], '_') } });
                             } else {
-                                this.writeLog("parseStudyDesign(): key is empty, tuple: " + kv + "; full string: " + studyDesign);
+                                this.writeLog("parseStudyDesign(): key is empty, tuple: " + kv + "; full string: "
+                                        + studyDesign);
                             }
                         }
                     }
                 } else {
-                    this.writeLog("Unexpected length for study design split features (" + kvs.length + "), full string: " + studyDesign);
+                    this.writeLog("Unexpected length for study design split features (" + kvs.length
+                            + "), full string: " + studyDesign);
                 }
             }
         }
 
         /*
          * Allocation: randomized, na, non_randomized
-         * Masking: none, single, double, triple, quadruple (potentially with details in parentheses)
+         * Masking: none, single, double, triple, quadruple (potentially with details in
+         * parentheses)
          * Intervention model: parallel, single_group, crossover, sequential, factorial
-         * Primary purpose: treatment, prevention, other, supportive_care, basic_science, diagnostic, health_services_research, screening, device_feasibility, ect (maybe more?)
+         * Primary purpose: treatment, prevention, other, supportive_care,
+         * basic_science, diagnostic, health_services_research, screening,
+         * device_feasibility, ect (maybe more?)
          */
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param startDateStr
      */
     public void parseStartDate(Item study, String startDateStr) {
         study.setAttributeIfNotNull("startDate", startDateStr);
     }
-    
+
     /**
      * TODO
+     * 
      * @param study
      * @param completionDateStr
      * @param primaryCompletionDateStr
@@ -802,18 +846,19 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param locationsStr
      * @throws Exception
      */
     public void parseLocations(Item study, String locationsStr) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(locationsStr)) {
+        if (!ConverterUtils.isBlankOrNull(locationsStr)) {
             String[] splitLocations = locationsStr.split("\\|");
             String[] splitLocation;
             String countryName, cityName, facility;
 
             if (splitLocations.length > 0) {
-                for (String location: splitLocations) {
+                for (String location : splitLocations) {
                     countryName = "";
                     cityName = "";
                     facility = "";
@@ -823,8 +868,9 @@ public class CtgConverter extends BaseConverter
                         this.writeLog("Failed to split location: " + location);
                     } else if (splitLocation.length == 2) { // City/state/province/region, country
                         // TODO check if city or state/province/region + clean
-                        // TODO 
-                        // if (!splitLocation[0].toLowerCase().contains("locations")) {    // Filtering "Many locations" and "Multiple locations"
+                        // TODO
+                        // if (!splitLocation[0].toLowerCase().contains("locations")) { // Filtering
+                        // "Many locations" and "Multiple locations"
                         // }
                         countryName = WordUtils.capitalizeFully(splitLocation[1], ' ', '-');
                     } else if (splitLocation.length == 3) { // Place, city, country
@@ -848,30 +894,33 @@ public class CtgConverter extends BaseConverter
                         this.writeLog("Unexpected number of substrings in split location: " + location);
                     }
 
-                    if (!ConverterUtils.isNullOrEmptyOrBlank(countryName)) {
-                        this.createAndStoreClassItem(study, "Location", 
-                            new String[][]{{"countryName", countryName}, {"cityName", cityName}, {"facility", facility}});
+                    if (!ConverterUtils.isBlankOrNull(countryName)) {
+                        this.createAndStoreClassItem(study, "Location",
+                                new String[][] { { "countryName", countryName }, { "cityName", cityName },
+                                        { "facility", facility } });
                     }
                     /*
-                        National Institutes of Health Clinical Center, 9000 Rockville Pike, Bethesda, Maryland, 20892, United States
-                        Seoul National University Hospital, Seoul, Korea, Republic of
-                        Medical University of Vienna, Vienna, 1090, Austria
-                        Hacettepe University, Ankara, Turkey
-                        Many Locations, Germany
+                     * National Institutes of Health Clinical Center, 9000 Rockville Pike, Bethesda,
+                     * Maryland, 20892, United States
+                     * Seoul National University Hospital, Seoul, Korea, Republic of
+                     * Medical University of Vienna, Vienna, 1090, Austria
+                     * Hacettepe University, Ankara, Turkey
+                     * Many Locations, Germany
                      */
 
                     /*
-                        <reference name="study" referenced-type="Study" reverse-reference="locations"/>
-                        <reference name="country" referenced-type="Country"/>
-                        <attribute name="facilityOrg" type="java.lang.String"/>
-                        <attribute name="facility" type="java.lang.String"/>
-                        <attribute name="facilityRor" type="java.lang.String"/>
-                        <!-- TODO: CV? -->
-                        <attribute name="city" type="java.lang.String"/>
-                        <attribute name="cityName" type="java.lang.String"/>
-                        <attribute name="countryName" type="java.lang.String"/>
-                        <attribute name="status" type="java.lang.String"/>
-                    */
+                     * <reference name="study" referenced-type="Study"
+                     * reverse-reference="locations"/>
+                     * <reference name="country" referenced-type="Country"/>
+                     * <attribute name="facilityOrg" type="java.lang.String"/>
+                     * <attribute name="facility" type="java.lang.String"/>
+                     * <attribute name="facilityRor" type="java.lang.String"/>
+                     * <!-- TODO: CV? -->
+                     * <attribute name="city" type="java.lang.String"/>
+                     * <attribute name="cityName" type="java.lang.String"/>
+                     * <attribute name="countryName" type="java.lang.String"/>
+                     * <attribute name="status" type="java.lang.String"/>
+                     */
                 }
             }
         }
@@ -879,29 +928,31 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param studyDocuments
      * @throws Exception
      */
     public void parseStudyDocuments(Item study, String studyDocuments) throws Exception {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDocuments)) {
+        if (!ConverterUtils.isBlankOrNull(studyDocuments)) {
             String[] splitDocuments = studyDocuments.split("\\|");
             HashMap<String, List<String>> instances = new HashMap<String, List<String>>();
 
-            for (String doc: splitDocuments) {
+            for (String doc : splitDocuments) {
                 // Matching title + URL
                 Matcher mDoc = P_DOC.matcher(doc);
                 if (mDoc.matches()) {
-                    String g1 = mDoc.group(1);  // Object type
+                    String g1 = mDoc.group(1); // Object type
                     String g1Lower = g1.toLowerCase();
-                    String g2 = mDoc.group(2);  // Direct link to study documents (study protocols, SAPs, ICFs)
+                    String g2 = mDoc.group(2); // Direct link to study documents (study protocols, SAPs, ICFs)
 
-                    // Adding URL to list with objects of found types, one document may combine multiple types, one study may have multiple instances of the same object type
+                    // Adding URL to list with objects of found types, one document may combine
+                    // multiple types, one study may have multiple instances of the same object type
                     if (g1Lower.contains("informed consent form")) {
-                        if (!instances.containsKey(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM)) {
-                            instances.put(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM, new ArrayList<String>());
+                        if (!instances.containsKey(ConverterCVT.O_TYPE_ICF)) {
+                            instances.put(ConverterCVT.O_TYPE_ICF, new ArrayList<String>());
                         }
-                        instances.get(ConverterCVT.O_TYPE_INFORMED_CONSENT_FORM).add(g2);
+                        instances.get(ConverterCVT.O_TYPE_ICF).add(g2);
                     }
                     if (g1Lower.contains("study protocol")) {
                         if (!instances.containsKey(ConverterCVT.O_TYPE_STUDY_PROTOCOL)) {
@@ -920,17 +971,19 @@ public class CtgConverter extends BaseConverter
                 }
             }
 
-            // Adding one DO per type (if any instance exist), and adding as many instances as different URLs for the same object type
+            // Adding one SO per type (if any instance exist), and adding as many instances
+            // as different URLs for the same object type
             for (Map.Entry<String, List<String>> entry : instances.entrySet()) {
                 String objectType = entry.getKey();
                 List<String> urls = entry.getValue();
-                // Document DO
-                Item documentDO = this.createAndStoreClassItem(study, "DataObject", 
-                    new String[][]{{"type", objectType}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, {"title", objectType}});
-
-                for (String url: urls) {
-                    // DO Instance with direct URL
-                    this.createAndStoreClassItem(documentDO, "ObjectInstance", new String[][]{{"url", url}});
+                // Document SO
+                // TODO: urlTargetType?
+                for (String url : urls) {
+                    this.createAndStoreClassItem(study, "StudyObject",
+                            new String[][] { { "type", objectType },
+                                    { "accessUrl", url },
+                                    { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC }, // TODO: check if true
+                                    { "displayTitle", objectType } });
                 }
             }
         }
@@ -938,45 +991,39 @@ public class CtgConverter extends BaseConverter
 
     /**
      * TODO
+     * 
      * @param study
      * @param creationDate
      * @param url
      * @throws Exception
      */
-    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate firstPosted, LocalDate lastUpdate) throws Exception {
-        String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate firstPosted, LocalDate lastUpdate)
+            throws Exception {
+        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
         String doDisplayTitle;
-        if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
             doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
-        /* Trial registry entry DO */
-        Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject", 
-            new String[][]{{"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY}, {"objectClass", ConverterCVT.O_CLASS_TEXT},
-                            {"title", doDisplayTitle}});
+        /* Trial registry entry SO */
         // TODO: publication year?
-
-        /* Registry entry instance */
-        if (!ConverterUtils.isNullOrEmptyOrBlank(this.currentTrialID)) {
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance", 
-                new String[][]{{"url", entryUrl}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
-        }
-
-        /* Object created date */
-        if (firstPosted != null) {
-            this.createAndStoreObjectDate(doRegistryEntry, firstPosted, ConverterCVT.DATE_TYPE_AVAILABLE);
-        }
-
-        // Last update
-        if (lastUpdate != null) {
-            this.createAndStoreObjectDate(doRegistryEntry, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
+        if (!ConverterUtils.isBlankOrNull(entryUrl)) {
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
+                            { "datePublished", firstPosted != null ? firstPosted.toString() : null },
+                            { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+                            { "accessUrl", entryUrl },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "displayTitle", doDisplayTitle } });
         }
     }
 
     /**
      * TODO
+     * 
      * @param study
      * @param studyResults
      * @param entryURL
@@ -986,79 +1033,83 @@ public class CtgConverter extends BaseConverter
      * @param lastUpdate
      * @throws Exception
      */
-    public void createAndStoreResultsSummaryDO(Item study, String studyResults, String entryURL, 
-        LocalDate completionDate, LocalDate primaryCompletionDate, LocalDate resultsFirstPosted, LocalDate lastUpdate) throws Exception {
-        
-        // Using results field (yes/no) to create or not results summary DO
-        if (studyResults.equalsIgnoreCase("yes") && !ConverterUtils.isNullOrEmptyOrBlank(entryURL) && resultsFirstPosted != null) {
+    public void createAndStoreResultsSummaryDO(Item study, String studyResults, String entryURL,
+            LocalDate completionDate, LocalDate primaryCompletionDate, LocalDate resultsFirstPosted,
+            LocalDate lastUpdate) throws Exception {
+
+        // Using results field (yes/no) to create or not results summary SO
+        if (studyResults.equalsIgnoreCase("yes") && !ConverterUtils.isBlankOrNull(entryURL)
+                && resultsFirstPosted != null) {
             // Constructing results URL by prepending results suffix to entry URL
             String resultsURLLink = entryURL + "?tab=results";
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getValueOfItemAttribute(study, "displayTitle");
+            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isNullOrEmptyOrBlank(studyDisplayTitle)) {
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
                 doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
-            /* Results summary DO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "DataObject", 
-                                        new String[][]{{"title", doDisplayTitle}, {"objectClass", ConverterCVT.O_CLASS_TEXT}, 
-                                                        {"type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY}});
-            /* Instance with results URL */
-            // TODO: system? (=source)
-            this.createAndStoreClassItem(resultsSummaryDO, "ObjectInstance", 
-                                        new String[][]{{"url", resultsURLLink}, {"resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT}});
-            
             // Results completed date
+            LocalDate resultsCompletedDate = null;
             if (completionDate != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, completionDate, ConverterCVT.DATE_TYPE_CREATED);
+                resultsCompletedDate = completionDate;
             } else if (primaryCompletionDate != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, primaryCompletionDate, ConverterCVT.DATE_TYPE_CREATED);
+                resultsCompletedDate = primaryCompletionDate;
             }
 
-            // Results posted date
+            // Publication year
+            String publicationYear = null;
             if (resultsFirstPosted != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, resultsFirstPosted, ConverterCVT.DATE_TYPE_AVAILABLE);
-                // Publication year
-                String publicationYear = String.valueOf(resultsFirstPosted.getYear());
-                if (!ConverterUtils.isNullOrEmptyOrBlank(publicationYear)) {
-                    resultsSummaryDO.setAttributeIfNotNull("publicationYear", publicationYear);
-                }
+                // TODO: handle errors
+                publicationYear = String.valueOf(resultsFirstPosted.getYear());
             }
 
-            // Last update
-            if (lastUpdate != null) {
-                this.createAndStoreObjectDate(resultsSummaryDO, lastUpdate, ConverterCVT.DATE_TYPE_UPDATED);
-            }
+            /* Results summary SO */
+            this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "displayTitle", doDisplayTitle },
+                            { "dateCreated", resultsCompletedDate != null ? resultsCompletedDate.toString() : null },
+                            // Note: was ConverterCVT.DATE_TYPE_AVAILABLE before model change
+                            { "datePublished", resultsFirstPosted != null ? resultsFirstPosted.toString() : null },
+                            { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+                            { "publicationYear", publicationYear },
+                            { "accessUrl", resultsURLLink },
+                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
         }
     }
-    
+
     /**
      * TODO
+     * 
      * @param s
      * @return
      */
     public static String cleanLocationSubstring(String s) {
         s = s.toLowerCase();
-        if (!s.contains("multiple locations") && !s.contains("many locations") && !s.contains("multiple sites") && !s.contains("many facilities")) {
+        if (!s.contains("multiple locations") && !s.contains("many locations") && !s.contains("multiple sites")
+                && !s.contains("many facilities")) {
             return WordUtils.capitalizeFully(s);
         }
         return "";
     }
-    
+
     /**
      * TODO
+     * 
      * @param c1 either part of the country (e.g. "Korea"), or city name
-     * @param c2 either part of the country (e.g. "Republic Of") or full country name
+     * @param c2 either part of the country (e.g. "Republic Of") or full country
+     *           name
      * @return
      */
     public static String cleanCountryString(String c1, String c2) {
         String countryName = "";
         if (c2.equalsIgnoreCase("Republic Of") || c2.equalsIgnoreCase("Islamic Republic of")
-             || c2.equalsIgnoreCase("The Democratic Republic of the") || c2.equalsIgnoreCase("The Former Yugoslav Republic of")) {
+                || c2.equalsIgnoreCase("The Democratic Republic of the")
+                || c2.equalsIgnoreCase("The Former Yugoslav Republic of")) {
             countryName = WordUtils.capitalizeFully(c1 + ", " + c2, ' ', '-');
         } else {
             countryName = c2;
@@ -1068,21 +1119,23 @@ public class CtgConverter extends BaseConverter
 
     /**
      * Add -01 prefix to date only composed of year + month
+     * 
      * @param dateString
      * @return
      */
     public static String normaliseDateString(String dateString) {
-        if (!ConverterUtils.isNullOrEmptyOrBlank(dateString) && dateString.length() == 7) {
+        if (!ConverterUtils.isBlankOrNull(dateString) && dateString.length() == 7) {
             dateString = dateString + "-01";
         }
         return dateString;
     }
 
     /**
-     * Get field value from array of values using a field's position-lookup Map, value is also cleaned.
+     * Get field value from array of values using a field's position-lookup Map,
+     * value is also cleaned.
      * 
      * @param lineValues the list of all values for a line in the data file
-     * @param field the name of the field to get the value of
+     * @param field      the name of the field to get the value of
      * @return the cleaned value of the field
      * @see //#cleanValue()
      */
@@ -1091,8 +1144,8 @@ public class CtgConverter extends BaseConverter
         if (fieldInd < lineValues.length) {
             return this.cleanValue(lineValues[this.fieldsToInd.get(field)], true);
         } else {
-            this.writeLog("Field index " + fieldInd + 
-                " out of bounds this study's values (length: " + lineValues.length + ")");
+            this.writeLog("Field index " + fieldInd +
+                    " out of bounds this study's values (length: " + lineValues.length + ")");
             return null;
         }
     }
