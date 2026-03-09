@@ -103,9 +103,6 @@ public class WhoConverter extends CacheConverter {
 
     private static final String DATASET_TITLE = "ICTRPFullExport-1003291-20-06-2024.csv";
     private static final String DATA_SOURCE_NAME = "ICTRP";
-    //private static final String DATA_SOURCE_DESC = "International Clinical Trials Registry Platform (WHO)";
-
-    private static String DATA_SOURCE_DESC = System.getProperty("dataSourceDescription");
 
     private String headersFilePath = "";
     private Map<String, Integer> fieldsToInd;
@@ -224,12 +221,6 @@ public class WhoConverter extends CacheConverter {
 
         // TODO EUCTR: check for additional IDs with existing study
         study = this.parseTrialIDsAndGetStudy(trialID, secondaryIDs, bridgingFlag, childs);
-
-        /* Study data source */
-
-        //String description = getSource().getPropertyValue("src.dataSourceDescription");
-        this.writeLog("AAAA -> " + DATA_SOURCE_DESC);
-        //this.addStudySource(study);
 
         // TODO: study end date? -> results posted date?
         // Used for registry entry DO
@@ -807,16 +798,6 @@ public class WhoConverter extends CacheConverter {
         return study;
     }
 
-    /**
-     * TODO
-     */
-    public void addStudySource(Item study) throws Exception {
-        if (!this.existingStudy()) {
-            //this.createAndStoreClassItem(study, "StudySource", new String[][]{{"name", ConverterCVT.SOURCE_NAME_WHO}});
-            this.createAndStoreClassItem(study, "DataSource",
-                    new String[][]{{"name", DATA_SOURCE_NAME},{"description", DATA_SOURCE_DESC}});
-        }
-    }
 
     /**
      * TODO
