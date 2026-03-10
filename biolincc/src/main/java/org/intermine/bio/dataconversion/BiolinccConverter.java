@@ -17,12 +17,6 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.commons.text.WordUtils;
-import org.apache.xalan.xsltc.compiler.sym;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
 /*
  * Copyright (C) 2024-2025 MDRMine
  * Modified from 2002-2019 FlyMine
