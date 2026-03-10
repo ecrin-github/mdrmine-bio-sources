@@ -131,7 +131,7 @@ public class CtisConverter extends CacheConverter {
     public void parseAndStoreValues(String[] lineValues) throws Exception {
         Item study = createItem("Study");
         // TODO: source id?
-        // TODO: DOs publication year
+        // TODO: SOs publication year
 
         /* Trial ID */
         String trialID = this.getAndCleanValue(lineValues, "Trial number");
@@ -140,7 +140,7 @@ public class CtisConverter extends CacheConverter {
         // number than the current
         if (this.parseTrialID(study, trialID)) {
 
-            /* Study title (need to get it before protocol DO) */
+            /* Study title (need to get it before protocol SO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
             if (!ConverterUtils.isBlankOrNull(trialTitle)) {
                 study.setAttributeIfNotNull("displayTitle", trialTitle);
@@ -152,7 +152,7 @@ public class CtisConverter extends CacheConverter {
 
             // Sponsor protocol code
             String protocolCode = this.getAndCleanValue(lineValues, "Protocol code");
-            /* Protocol DO */
+            /* Protocol SO */
             this.parseProtocolCode(study, protocolCode);
 
             /* Trial status */
@@ -215,7 +215,7 @@ public class CtisConverter extends CacheConverter {
 
             // All dates are dd/mm/yyyy
 
-            /* Ethics approval notification DO + decision date */
+            /* Ethics approval notification SO + decision date */
             String decisionDate = this.getAndCleanValue(lineValues, "Decision date");
             this.parseDecisionDate(study, decisionDate);
 
@@ -244,16 +244,16 @@ public class CtisConverter extends CacheConverter {
             // study.setAttributeIfNotNull("testField6", "CTIS_" + sponsors);
             // study.setAttributeIfNotNull("testField7", "CTIS_" + sponsorType);
 
-            /* Trial registry entry DO + instance + last updated date */
+            /* Trial registry entry SO + instance + last updated date */
             String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
             LocalDate lastUpdated = this.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
             this.createAndStoreRegistryEntryDO(study, lastUpdated);
             // study.setAttributeIfNotNull("testField8", "CTIS_" + lastUpdated);
 
-            /* Brief description (constructed) */
+            /* Description (constructed) */
             // TODO: missing Main Objective field from CTIS UI
-            ConverterUtils.addToBriefDescription(study, product);
-            ConverterUtils.addToBriefDescription(study, primaryEndpoint);
+            ConverterUtils.addToDescription(study, product);
+            ConverterUtils.addToDescription(study, primaryEndpoint);
 
             // Storing in cache
             if (!this.existingStudy()) {
@@ -336,16 +336,12 @@ public class CtisConverter extends CacheConverter {
                 doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
             }
 
-            /* Protocol DO */
-            Item protocolDO = this.createAndStoreClassItem(study, "DataObject",
-                    new String[][] { { "objectClass", ConverterCVT.O_CLASS_TEXT },
+            /* Protocol SO */
+            Item protocolDO = this.createAndStoreClassItem(study, "StudyObject",
+                    new String[][] { { "objectId", protocolCode },
+                            { "primaryIdentifierType", ConverterCVT.ID_TYPE_SPONSOR },
                             { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
-                            { "title", doDisplayTitle } });
-
-            /* Object identifier: protocol code */
-            this.createAndStoreClassItem(protocolDO, "ObjectIdentifier",
-                    new String[][] { { "identifierValue", protocolCode },
-                            { "identifierType", ConverterCVT.ID_TYPE_SPONSOR } });
+                            { "displayTitle", doDisplayTitle } });
         }
     }
 
@@ -762,15 +758,12 @@ public class CtisConverter extends CacheConverter {
                     doDisplayTitle = ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
                 }
 
-                /* Ethics approval notification DO */
-                Item ethicsApprovalDO = this.createAndStoreClassItem(study, "DataObject",
+                /* Ethics approval notification SO */
+                Item ethicsApprovalDO = this.createAndStoreClassItem(study, "StudyObject",
                         new String[][] { { "type", ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION },
-                                { "title", doDisplayTitle } });
-
-                /* Object date: decision date */
-                this.createAndStoreClassItem(ethicsApprovalDO, "ObjectDate",
-                        new String[][] { { "dateType", ConverterCVT.DATE_TYPE_ISSUED },
-                                { "startDate", decisionDate.toString() } });
+                                { "datePublished", decisionDate.toString() }, // Note: was ConverterCVT.DATE_TYPE_ISSUED
+                                                                              // type before model change
+                                { "displayTitle", doDisplayTitle } });
             }
         }
     }
@@ -830,22 +823,14 @@ public class CtisConverter extends CacheConverter {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
-        /* Trial registry entry DO */
-        Item doRegistryEntry = this.createAndStoreClassItem(study, "DataObject",
+        /* Trial registry entry SO */
+        this.createAndStoreClassItem(study, "StudyObject",
                 new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                        { "objectClass", ConverterCVT.O_CLASS_TEXT },
-                        { "title", doDisplayTitle } });
-
-        /* Registry entry instance */
-        if (!ConverterUtils.isBlankOrNull(this.currentTrialID)) {
-            // Instance with constructed URL
-            this.createAndStoreClassItem(doRegistryEntry, "ObjectInstance",
-                    new String[][] { { "url", REGISTRY_ENTRY_BASE_URL + this.currentTrialID },
-                            { "resourceType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT } });
-        }
-
-        /* Last update object date */
-        this.createAndStoreObjectDate(doRegistryEntry, lastUpdated, ConverterCVT.DATE_TYPE_UPDATED);
+                        { "dateUpdated", lastUpdated != null ? lastUpdated.toString() : null },
+                        { "accessUrl", REGISTRY_ENTRY_BASE_URL + this.currentTrialID },
+                        { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                        { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+                        { "displayTitle", doDisplayTitle } });
     }
 
     /**

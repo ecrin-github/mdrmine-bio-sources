@@ -77,6 +77,7 @@ public class ConverterCVT {
     public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
 
     /* Objects */
+    public static final String ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_TYPE_BIOSPECIMEN = "Biospecimen data";
     public static final String O_TYPE_ICF = "Informed consent form";
     public static final String O_TYPE_IPD = "Individual partipant data";
@@ -88,8 +89,6 @@ public class ConverterCVT {
     public static final String O_TYPE_WEBSITE = "Website";
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD = "Case by case download";
-    public static final String O_CLASS_DATASET = "Dataset";
-    public static final String O_CLASS_TEXT = "Text";
     public static final String O_RESOURCE_TYPE_PDF = "PDF";
     public static final String O_RESOURCE_TYPE_WORD_DOC = "Word doc";
     public static final String O_RESOURCE_TYPE_WEB_TEXT = "Web text";

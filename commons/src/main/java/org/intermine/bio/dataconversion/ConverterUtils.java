@@ -221,21 +221,21 @@ public class ConverterUtils {
     }
 
     /**
-     * Concatenate text on a new line to study brief description field value.
+     * Concatenate text on a new line to study description field value.
      * 
-     * @param study the study item to modify the brief description field of
+     * @param study the study item to modify the description field of
      * @param text  the text to concatenate (or set, if the field's value is empty)
-     *              to the study's brief description
+     *              to the study's description
      */
-    public static void addToBriefDescription(Item study, String text) {
+    public static void addToDescription(Item study, String text) {
         if (!ConverterUtils.isBlankOrNull(text)) {
-            Attribute briefDescription = study.getAttribute("briefDescription");
-            if (briefDescription != null) {
-                String currentDesc = briefDescription.getValue();
+            Attribute description = study.getAttribute("description");
+            if (description != null) {
+                String currentDesc = description.getValue();
                 if (!ConverterUtils.isBlankOrNull(currentDesc)) {
-                    study.setAttribute("briefDescription", currentDesc + "\n" + text);
+                    study.setAttribute("description", currentDesc + "\n" + text);
                 } else {
-                    study.setAttribute("briefDescription", text);
+                    study.setAttribute("description", text);
                 }
             }
         }

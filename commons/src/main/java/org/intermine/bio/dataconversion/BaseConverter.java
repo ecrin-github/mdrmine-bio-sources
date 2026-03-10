@@ -580,18 +580,6 @@ public abstract class BaseConverter extends BioFileConverter {
         return studyIdentifier;
     }
 
-    /**
-     * TODO
-     */
-    public Item createAndStoreObjectDate(Item dataObject, LocalDate date, String dateType) throws Exception {
-        Item objectDate = null;
-
-        objectDate = this.createAndStoreClassItem(dataObject, "ObjectDate",
-                new String[][] { { "dateType", dateType }, { "startDate", date != null ? date.toString() : null } });
-
-        return objectDate;
-    }
-
     /*
      * TODO
      */
