@@ -1,5 +1,14 @@
 package org.intermine.bio.dataconversion;
 
+import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamReader;
+import javax.xml.stream.events.XMLEvent;
 import java.io.Reader;
 import java.lang.reflect.Method;
 import java.time.LocalDate;
@@ -21,17 +30,6 @@ import java.util.regex.Pattern;
  *
  */
 
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamReader;
-import javax.xml.stream.events.XMLEvent;
-
-import org.apache.commons.text.WordUtils;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-
 /**
  * 
  * Explanation on some of the fields here:
@@ -40,8 +38,9 @@ import com.fasterxml.jackson.dataformat.xml.XmlMapper;
  * @author
  */
 public class EuctrConverter extends CacheConverter {
-    private static final String DATASET_TITLE = "EUCTR_allfile";
+    private static final String DATASET_TITLE = "EUCTR_2026-03-04";
     private static final String DATA_SOURCE_NAME = "EUCTR";
+    private static final String DATA_SOURCE_DESC = "EU Clinical Trials Register";
 
     private static final Pattern P_TITLE_NA = Pattern.compile("^-|_|N\\/?A$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_HC_CODE = Pattern.compile(
@@ -163,9 +162,6 @@ public class EuctrConverter extends CacheConverter {
                         this.writeLog("Couldn't find country from country code: " + countryCode);
                     }
                 }
-
-                /* Study data source */
-                this.addStudySource(study);
 
                 /* EUCTR trial ID */
                 String trialUrl = this.getAndCleanValue(mainInfo, "url");
@@ -373,18 +369,6 @@ public class EuctrConverter extends CacheConverter {
 
                 this.currentTrialID = null;
             }
-        }
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     */
-    public void addStudySource(Item study) throws Exception {
-        if (!this.existingStudy()) {
-            this.createAndStoreClassItem(study, "StudySource",
-                    new String[][] { { "name", ConverterCVT.SOURCE_NAME_EUCTR } });
         }
     }
 
