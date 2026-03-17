@@ -775,6 +775,8 @@ public class EuctrConverter extends CacheConverter {
                         new String[][] { { "originalValue", WordUtils.capitalizeFully(hcFreetext, ' ', '-') } });
             }
 
+            Set<String> seenOriginalValues = new HashSet<String>(); // Avoid adding duplicates
+
             // HC Codes (MeSH tree)
             Matcher mHcCode;
             for (String hcCode : hcCodes) {
@@ -783,18 +785,26 @@ public class EuctrConverter extends CacheConverter {
 
                     if (mHcCode.matches()) {
                         // TODO: remove if too generic? therapeutic area (diseases/body conditions)
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] {
-                                        { "originalValue", WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-') },
-                                        { "originalCTType", ConverterCVT.CV_MESH_TREE },
-                                        { "originalCTCode", mHcCode.group(2) } });
+                        String firstCode = WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-');
+                        if (!seenOriginalValues.contains(firstCode)) {
+                            this.createAndStoreClassItem(study, "StudyCondition",
+                                    new String[][] {
+                                            { "originalValue", firstCode },
+                                            { "originalCTType", ConverterCVT.CV_MESH_TREE },
+                                            { "originalCTCode", mHcCode.group(2) } });
+                            seenOriginalValues.add(firstCode);
+                        }
 
                         // More specific condition
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] {
-                                        { "originalValue", WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-') },
-                                        { "originalCTType", ConverterCVT.CV_MESH_TREE },
-                                        { "originalCTCode", mHcCode.group(4) } });
+                        String secondCode = WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-');
+                        if (!seenOriginalValues.contains(secondCode)) {
+                            this.createAndStoreClassItem(study, "StudyCondition",
+                                    new String[][] {
+                                            { "originalValue", secondCode },
+                                            { "originalCTType", ConverterCVT.CV_MESH_TREE },
+                                            { "originalCTCode", mHcCode.group(4) } });
+                            seenOriginalValues.add(secondCode);
+                        }
                     } else {
                         this.writeLog("Failed to match health condition code: " + hcCode);
                     }
@@ -808,11 +818,15 @@ public class EuctrConverter extends CacheConverter {
                     mHcKeyword = P_HC_KEYWORD.matcher(hcKw);
 
                     if (mHcKeyword.matches()) {
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] {
-                                        { "originalValue", WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-') },
-                                        { "originalCTType", ConverterCVT.CV_MEDDRA },
-                                        { "originalCTCode", mHcKeyword.group(1) } });
+                        String formattedKeyword = WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-');
+                        if (!seenOriginalValues.contains(formattedKeyword)) {
+                            this.createAndStoreClassItem(study, "StudyCondition",
+                                    new String[][] {
+                                            { "originalValue", formattedKeyword },
+                                            { "originalCTType", ConverterCVT.CV_MEDDRA },
+                                            { "originalCTCode", mHcKeyword.group(1) } });
+                            seenOriginalValues.add(formattedKeyword);
+                        }
                     } else {
                         this.writeLog("Failed to match health condition keyword: " + hcKw);
                     }

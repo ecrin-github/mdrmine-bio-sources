@@ -843,6 +843,7 @@ public class WhoConverter extends CacheConverter {
      * @param contactType public or scientific contact
      */
     public void parseContact(Item study, String[] lineValues, String contactType) throws Exception {
+        // TODO: get rid of separate first name/last name
         if (!this.existingStudy()) {
             String[] firstNames = {};
             String[] lastNames = {};
@@ -1401,19 +1402,16 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy()) {
             // TODO: match values with CT codes/ICD Codes
             if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
-                if (conditionsStr.contains(";")) { // TODO: Useless check, split includes full string if separator not
-                                                   // found
-                    String[] conditionsList = conditionsStr.split(";");
-                    for (String conditionStr : conditionsList) {
-                        if (!ConverterUtils.isBlankOrNull(conditionStr)) {
-                            this.createAndStoreClassItem(study, "StudyCondition",
-                                    new String[][] {
-                                            { "originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-') } });
-                        }
-                    }
-                } else {
+                // TODO: some values contain semicolons (e.g. NCT00112593 trial)
+                // Not adding duplicate StudyConditions
+                Set<String> studyConditions = Stream.of(conditionsStr.split(";"))
+                        .map(String::strip)
+                        .collect(Collectors.toSet());
+
+                Iterator<String> conditionsIter = studyConditions.iterator();
+                while (conditionsIter.hasNext()) {
                     this.createAndStoreClassItem(study, "StudyCondition",
-                            new String[][] { { "originalValue", WordUtils.capitalizeFully(conditionsStr, ' ', '-') } });
+                        new String[][] { { "originalValue", WordUtils.capitalizeFully(conditionsIter.next(), ' ', '-') } });
                 }
             }
         }

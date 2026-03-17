@@ -504,13 +504,15 @@ public class CtgConverter extends BaseConverter {
      */
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
-            String[] conditions = conditionsStr.split("\\|");
-            for (String condition : conditions) {
-                if (!ConverterUtils.isBlankOrNull(condition)) {
-                    // TODO: link/normalise with CV
-                    this.createAndStoreClassItem(study, "StudyCondition",
-                            new String[][] { { "originalValue", WordUtils.capitalizeFully(condition, ' ', '-') } });
-                }
+            Set<String> studyConditions = Stream.of(conditionsStr.split("\\|"))
+                    .map(String::strip)
+                    .collect(Collectors.toSet());
+
+            Iterator<String> conditionsIter = studyConditions.iterator();
+            while (conditionsIter.hasNext()) {
+                this.createAndStoreClassItem(study, "StudyCondition",
+                        new String[][] {
+                                { "originalValue", WordUtils.capitalizeFully(conditionsIter.next(), ' ', '-') } });
             }
         }
     }

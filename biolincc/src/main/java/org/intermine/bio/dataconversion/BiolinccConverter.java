@@ -6,11 +6,14 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.text.WordUtils;
 import org.apache.xalan.xsltc.compiler.sym;
@@ -494,10 +497,15 @@ public class BiolinccConverter extends BaseConverter {
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         // TODO: match values with CT codes/ICD Codes
         if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
-            String[] conditionsList = conditionsStr.split(",");
-            for (String conditionStr : conditionsList) {
+            Set<String> studyConditions = Stream.of(conditionsStr.split(","))
+                    .map(String::strip)
+                    .collect(Collectors.toSet());
+
+            Iterator<String> conditionsIter = studyConditions.iterator();
+            while (conditionsIter.hasNext()) {
                 this.createAndStoreClassItem(study, "StudyCondition",
-                        new String[][] { { "originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-') } });
+                        new String[][] {
+                                { "originalValue", WordUtils.capitalizeFully(conditionsIter.next(), ' ', '-') } });
             }
         }
     }
@@ -626,6 +634,7 @@ public class BiolinccConverter extends BaseConverter {
         // TODO: access details?
         // TODO: lang code en by default?
         // TODO: managingOrg NHLBI?
+        // TODO: materialTypes to dedicated field in Biosample
         String details = (!ConverterUtils.isBlankOrNull(materialTypes) ? "Material types: " + materialTypes : null);
         Item biospecimenDO = this.createAndStoreClassItem(study, "StudyObject",
                 new String[][] { { "displayTitle", ConverterCVT.O_TYPE_BIOSPECIMEN },
