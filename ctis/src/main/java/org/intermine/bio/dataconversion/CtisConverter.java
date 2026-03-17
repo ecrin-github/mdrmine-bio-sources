@@ -11,6 +11,15 @@ package org.intermine.bio.dataconversion;
  *
  */
 
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 import java.io.Reader;
 import java.time.LocalDate;
 import java.util.HashMap;
@@ -18,16 +27,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
 
 /**
  * Class to parse values from a CTIS data file and store them as MDRMine items
@@ -55,6 +54,7 @@ public class CtisConverter extends CacheConverter {
 
     private static final String DATASET_TITLE = "CTIS_trials_20241202";
     private static final String DATA_SOURCE_NAME = "CTIS";
+    private static final String DATA_SOURCE_DESC = "Clinical Trials Information System (EMA)";
 
     private Map<String, Integer> fieldsToInd;
     private Map<String, Integer> baseIdsResubmissions = new HashMap<String, Integer>(); // Base ID -> resubmissiong
@@ -139,8 +139,6 @@ public class CtisConverter extends CacheConverter {
         // Not parsing if existing study is found and with a more recent resubmission
         // number than the current
         if (this.parseTrialID(study, trialID)) {
-            /* Study data source */
-            this.addStudySource(study);
 
             /* Study title (need to get it before protocol SO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
@@ -315,20 +313,6 @@ public class CtisConverter extends CacheConverter {
         }
 
         return continueParsing;
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param protocolCode
-     * @throws Exception
-     */
-    public void addStudySource(Item study) throws Exception {
-        if (!this.existingStudy()) {
-            this.createAndStoreClassItem(study, "StudySource",
-                    new String[][] { { "name", ConverterCVT.SOURCE_NAME_CTIS } });
-        }
     }
 
     /**

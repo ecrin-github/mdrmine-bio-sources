@@ -11,25 +11,11 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.io.File;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
+import com.opencsv.CSVParser;
+import com.opencsv.CSVParserBuilder;
+import com.opencsv.CSVReader;
+import com.opencsv.CSVReaderBuilder;
+import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.text.WordUtils;
 import org.apache.logging.log4j.LogManager;
@@ -38,11 +24,17 @@ import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
+import java.io.File;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Class to parse values from a WHO data file and store them as MDRMine items
@@ -110,7 +102,7 @@ public class WhoConverter extends CacheConverter {
     private static final String EC_PREFIX = "Exclusion criteria: ";
 
     private static final String DATASET_TITLE = "ICTRPFullExport-1003291-20-06-2024.csv";
-    private static final String DATA_SOURCE_NAME = "WHO";
+    private static final String DATA_SOURCE_NAME = "ICTRP";
 
     private String headersFilePath = "";
     private Map<String, Integer> fieldsToInd;
@@ -229,9 +221,6 @@ public class WhoConverter extends CacheConverter {
 
         // TODO EUCTR: check for additional IDs with existing study
         study = this.parseTrialIDsAndGetStudy(trialID, secondaryIDs, bridgingFlag, childs);
-
-        /* Study data source */
-        this.addStudySource(study);
 
         // TODO: study end date? -> results posted date?
         // Used for registry entry SO
@@ -809,15 +798,6 @@ public class WhoConverter extends CacheConverter {
         return study;
     }
 
-    /**
-     * TODO
-     */
-    public void addStudySource(Item study) throws Exception {
-        if (!this.existingStudy()) {
-            this.createAndStoreClassItem(study, "StudySource",
-                    new String[][] { { "name", ConverterCVT.SOURCE_NAME_WHO } });
-        }
-    }
 
     /**
      * TODO
@@ -1315,7 +1295,6 @@ public class WhoConverter extends CacheConverter {
      * TODO
      * 
      * @param cadDate    date of competent authority decision
-     * @param ecdDateStr raw date(s) string of ethics committee decision
      */
     public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate,
             String ecdDatesStr) throws Exception {

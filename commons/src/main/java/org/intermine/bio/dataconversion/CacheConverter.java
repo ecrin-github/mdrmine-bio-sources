@@ -1,17 +1,12 @@
 package org.intermine.bio.dataconversion;
 
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.metadata.ReferenceDescriptor;
 import org.intermine.xml.full.Item;
+
+import java.time.LocalDate;
+import java.util.*;
 
 public abstract class CacheConverter extends BaseConverter {
 
@@ -31,7 +26,7 @@ public abstract class CacheConverter extends BaseConverter {
     protected Map<String, List<Item>> countries = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> studySources = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> dataSources = new HashMap<String, List<Item>>();
     // SOs
     protected Map<String, List<Item>> objects = new HashMap<String, List<Item>>();
     // SO-related maps
@@ -156,7 +151,8 @@ public abstract class CacheConverter extends BaseConverter {
      */
     public void storeAllItems() throws Exception {
         List<Map<String, List<Item>>> itemMaps = Arrays.asList(
-                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers, this.studySources,
+                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers,
+                this.dataSources,
                 this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics,
                 this.objects, this.relationships);
 
@@ -201,7 +197,7 @@ public abstract class CacheConverter extends BaseConverter {
         this.studyCountries = null;
         this.studyFeatures = null;
         this.studyIdentifiers = null;
-        this.studySources = null;
+        this.dataSources = null;
         this.locations = null;
         this.organisations = null;
         this.people = null;
@@ -215,13 +211,14 @@ public abstract class CacheConverter extends BaseConverter {
     /**
      * TODO
      * 
-     * @param study
      */
     public void removeStudyAndLinkedItems(String mainTrialID) {
         // Maps where key is or can be study ID (-objects)
         List<Map<String, List<Item>>> studyMaps = Arrays.asList(
-                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers, this.studySources,
-                this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics, this.relationships);
+                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers,
+                this.dataSources,
+                this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics,
+                this.relationships);
 
         // Maps where key is or can be object ID
         List<Map<String, List<Item>>> objectMaps = Arrays.asList(

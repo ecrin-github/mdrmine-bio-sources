@@ -11,30 +11,23 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.io.Reader;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import org.apache.commons.text.WordUtils;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
+import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
+import java.io.Reader;
+import java.time.LocalDate;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * 
@@ -44,6 +37,7 @@ public class CtgConverter extends BaseConverter {
     //
     private static final String DATASET_TITLE = "CTG-Studies";
     private static final String DATA_SOURCE_NAME = "CTG";
+    private static final String DATA_SOURCE_DESC = "ClinicalTrials.gov (NIH)";
 
     private static final Pattern P_PHASE = Pattern.compile("(NA)|(early_)?phase(\\d)(?:\\|phase(\\d))?",
             Pattern.CASE_INSENSITIVE);
@@ -132,9 +126,6 @@ public class CtgConverter extends BaseConverter {
         // TODO: if studies with blank trial IDs exist, check otherIDs then?
         if (!ConverterUtils.isBlankOrNull(trialID) && !trialID.equals("NCT01027572") &&
                 this.parseTrialIDs(study, trialID, otherIDs)) {
-
-            /* Study data source */
-            this.addStudySource(study);
 
             /* Study title */
             String studyTitle = this.getAndCleanValue(lineValues, "Study Title");
@@ -267,7 +258,6 @@ public class CtgConverter extends BaseConverter {
      * TODO
      * 
      * @param study
-     * @param studyTitle
      */
     public void parseTrialID(Item study, String trialID) {
         // NCT ID
@@ -426,15 +416,6 @@ public class CtgConverter extends BaseConverter {
         }
 
         return continueParsing;
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     */
-    public void addStudySource(Item study) throws Exception {
-        this.createAndStoreClassItem(study, "StudySource", new String[][] { { "name", ConverterCVT.SOURCE_NAME_CTG } });
     }
 
     /**
@@ -835,8 +816,6 @@ public class CtgConverter extends BaseConverter {
      * TODO
      * 
      * @param study
-     * @param completionDateStr
-     * @param primaryCompletionDateStr
      */
     public void parseCompletionDates(Item study, LocalDate completionDate, LocalDate primaryCompletionDate) {
         if (completionDate != null) {
@@ -995,8 +974,6 @@ public class CtgConverter extends BaseConverter {
      * TODO
      * 
      * @param study
-     * @param creationDate
-     * @param url
      * @throws Exception
      */
     public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate firstPosted, LocalDate lastUpdate)
