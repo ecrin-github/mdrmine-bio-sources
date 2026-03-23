@@ -6,6 +6,7 @@ import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 
+import javax.xml.XMLConstants;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.events.XMLEvent;
@@ -86,6 +87,11 @@ public class EuctrConverter extends CacheConverter {
         this.loadCountries();
 
         XMLInputFactory xi = XMLInputFactory.newInstance();
+
+        // Disable DTD check in DOCTYPE for file(s) with CTIS entries to avoid errors
+        xi.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        xi.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
+
         XMLStreamReader xr = xi.createXMLStreamReader(reader);
         XmlMapper xm = new XmlMapper();
         int eventType;
