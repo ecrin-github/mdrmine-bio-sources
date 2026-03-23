@@ -115,15 +115,17 @@ public class ConverterUtils {
      */
     public static LocalDate getDateFromString(String dateStr, DateTimeFormatter dateFormatter) {
         LocalDate parsedDate = null;
-        try {
-            if (dateFormatter != null) {
-                parsedDate = LocalDate.parse(dateStr, dateFormatter);
-            } else {
-                // ISO date format parsing
-                parsedDate = LocalDate.parse(dateStr);
+        if (!ConverterUtils.isBlankOrNull(dateStr)) {
+            try {
+                if (dateFormatter != null) {
+                    parsedDate = LocalDate.parse(dateStr, dateFormatter);
+                } else {
+                    // ISO date format parsing
+                    parsedDate = LocalDate.parse(dateStr);
+                }
+            } catch (DateTimeException e) {
+                ;
             }
-        } catch (DateTimeException e) {
-            ;
         }
         return parsedDate;
     }

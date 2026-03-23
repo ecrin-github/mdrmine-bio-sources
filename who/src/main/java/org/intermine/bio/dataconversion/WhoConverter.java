@@ -1539,8 +1539,8 @@ public class WhoConverter extends CacheConverter {
                 if (doRegistryEntry != null) {
                     // dateCreated
                     String existingDateCreatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateCreated");
-                    // Updating creation date if older than known creation date or there was no previous date
-                    if (!ConverterUtils.isBlankOrNull(existingDateCreatedStr) || registrationDate
+                    // Updating dateCreated if older than known creation date or there was no previous date
+                    if (ConverterUtils.isBlankOrNull(existingDateCreatedStr) || registrationDate
                                     .compareTo(ConverterUtils.getDateFromString(existingDateCreatedStr, null)) < 0) {
                         doRegistryEntry.setAttributeIfNotNull("dateCreated", registrationDate.toString());
 
@@ -1551,8 +1551,9 @@ public class WhoConverter extends CacheConverter {
 
                     // dateUpdated
                     String existingDateUpdatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateUpdated");
-                    if (!ConverterUtils.isBlankOrNull(existingDateUpdatedStr)
-                            && lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateUpdatedStr, null)) > 0) {
+                    // Updating dateUpdated if older than known creation date or there was no previous date
+                    if (ConverterUtils.isBlankOrNull(existingDateUpdatedStr)
+                            || lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateUpdatedStr, null)) > 0) {
                         doRegistryEntry.setAttributeIfNotNull("dateUpdated", lastUpdate.toString());
 
                         // TODO: newerLastUpdate logic in separate function?
