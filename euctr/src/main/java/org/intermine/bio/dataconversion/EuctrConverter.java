@@ -6,6 +6,7 @@ import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 
+import javax.xml.XMLConstants;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.events.XMLEvent;
@@ -86,6 +87,11 @@ public class EuctrConverter extends CacheConverter {
         this.loadCountries();
 
         XMLInputFactory xi = XMLInputFactory.newInstance();
+
+        // Disable DTD check in DOCTYPE for file(s) with CTIS entries to avoid errors
+        xi.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+        xi.setProperty("javax.xml.stream.isSupportingExternalEntities", false);
+
         XMLStreamReader xr = xi.createXMLStreamReader(reader);
         XmlMapper xm = new XmlMapper();
         int eventType;
@@ -437,7 +443,7 @@ public class EuctrConverter extends CacheConverter {
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
         if (!this.existingStudy()) {
             this.createAndStoreClassItem(study, "Organisation",
-                    new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR },
+                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                             { "name", primarySponsor } });
         }
     }
@@ -466,7 +472,7 @@ public class EuctrConverter extends CacheConverter {
                         new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
                                 { "dateCreated", creationDate != null ? creationDate.toString() : null },
                                 { "accessUrl", url },
-                                { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                                 { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                                 { "displayTitle", doDisplayTitle } });
             }
@@ -712,9 +718,9 @@ public class EuctrConverter extends CacheConverter {
 
                     if (phasesRes.size() > 0) {
                         if (phasesRes.size() == 1) { // One phase
-                            phaseValue = "Phase " + String.valueOf(phasesRes.get(0));
+                            phaseValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0));
                         } else if (phasesRes.size() == 2) { // Two phases
-                            phaseValue = "Phase " + String.valueOf(phasesRes.get(0)) + "/"
+                            phaseValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0)) + "/"
                                     + String.valueOf(phasesRes.get(1));
                         } else {
                             this.writeLog("Matched more than 2 groups for phase string, g1: " + p1 + "; g2: " + p2
@@ -759,6 +765,8 @@ public class EuctrConverter extends CacheConverter {
                         new String[][] { { "originalValue", WordUtils.capitalizeFully(hcFreetext, ' ', '-') } });
             }
 
+            Set<String> seenOriginalValues = new HashSet<String>(); // Avoid adding duplicates
+
             // HC Codes (MeSH tree)
             Matcher mHcCode;
             for (String hcCode : hcCodes) {
@@ -767,18 +775,26 @@ public class EuctrConverter extends CacheConverter {
 
                     if (mHcCode.matches()) {
                         // TODO: remove if too generic? therapeutic area (diseases/body conditions)
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] {
-                                        { "originalValue", WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-') },
-                                        { "originalCTType", ConverterCVT.CV_MESH_TREE },
-                                        { "originalCTCode", mHcCode.group(2) } });
+                        String firstCode = WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-');
+                        if (!seenOriginalValues.contains(firstCode)) {
+                            this.createAndStoreClassItem(study, "StudyCondition",
+                                    new String[][] {
+                                            { "originalValue", firstCode },
+                                            { "originalCTType", ConverterCVT.CV_MESH_TREE },
+                                            { "originalCTCode", mHcCode.group(2) } });
+                            seenOriginalValues.add(firstCode);
+                        }
 
                         // More specific condition
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] {
-                                        { "originalValue", WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-') },
-                                        { "originalCTType", ConverterCVT.CV_MESH_TREE },
-                                        { "originalCTCode", mHcCode.group(4) } });
+                        String secondCode = WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-');
+                        if (!seenOriginalValues.contains(secondCode)) {
+                            this.createAndStoreClassItem(study, "StudyCondition",
+                                    new String[][] {
+                                            { "originalValue", secondCode },
+                                            { "originalCTType", ConverterCVT.CV_MESH_TREE },
+                                            { "originalCTCode", mHcCode.group(4) } });
+                            seenOriginalValues.add(secondCode);
+                        }
                     } else {
                         this.writeLog("Failed to match health condition code: " + hcCode);
                     }
@@ -792,11 +808,15 @@ public class EuctrConverter extends CacheConverter {
                     mHcKeyword = P_HC_KEYWORD.matcher(hcKw);
 
                     if (mHcKeyword.matches()) {
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] {
-                                        { "originalValue", WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-') },
-                                        { "originalCTType", ConverterCVT.CV_MEDDRA },
-                                        { "originalCTCode", mHcKeyword.group(1) } });
+                        String formattedKeyword = WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-');
+                        if (!seenOriginalValues.contains(formattedKeyword)) {
+                            this.createAndStoreClassItem(study, "StudyCondition",
+                                    new String[][] {
+                                            { "originalValue", formattedKeyword },
+                                            { "originalCTType", ConverterCVT.CV_MEDDRA },
+                                            { "originalCTCode", mHcKeyword.group(1) } });
+                            seenOriginalValues.add(formattedKeyword);
+                        }
                     } else {
                         this.writeLog("Failed to match health condition keyword: " + hcKw);
                     }
@@ -864,7 +884,7 @@ public class EuctrConverter extends CacheConverter {
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
                             { "accessUrl", resultsUrlLink },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
         }
@@ -888,11 +908,11 @@ public class EuctrConverter extends CacheConverter {
 
                     if (!ConverterUtils.isBlankOrNull(type)) {
                         if (type.equalsIgnoreCase("public")) {
-                            type = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
+                            type = ConverterCVT.CONTRIB_TYPE_PUBLIC_CONTACT;
                         } else if (type.equalsIgnoreCase("scientific")) {
                             // Exception already thrown earlier so value can't be anything other than
                             // "scientific"
-                            type = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
+                            type = ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT;
                         } else {
                             this.writeLog("Unknown contact type value: " + type);
                         }
@@ -1179,7 +1199,7 @@ public class EuctrConverter extends CacheConverter {
             for (String secondarySponsor : secondarySponsors) {
                 // TODO: link to CV
                 this.createAndStoreClassItem(study, "Organisation",
-                        new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR },
+                        new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                                 { "name", secondarySponsor } });
             }
         }
@@ -1244,16 +1264,16 @@ public class EuctrConverter extends CacheConverter {
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
             if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_PROT;
             } else {
-                doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                doDisplayTitle = ConverterCVT.O_TYPE_PROT;
             }
 
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "objectId", protocolCode },
                             { "primaryIdentifierType", ConverterCVT.ID_TYPE_SPONSOR },
-                            { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
+                            { "type", ConverterCVT.O_TYPE_PROT },
                             { "displayTitle", doDisplayTitle } });
         }
     }
@@ -1271,7 +1291,7 @@ public class EuctrConverter extends CacheConverter {
                 // TODO: match with CV
                 if (!ConverterUtils.isBlankOrNull(org)) {
                     this.createAndStoreClassItem(study, "Organisation",
-                            new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_STUDY_FUNDER },
+                            new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_STUDY_FUNDER },
                                     { "name", org } });
                 }
             }

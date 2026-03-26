@@ -16,6 +16,8 @@ import java.time.LocalDate;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /*
  * Copyright (C) 2024-2025 MDRMine
@@ -41,7 +43,6 @@ public class BiolinccConverter extends BaseConverter {
     private static final Pattern P_HEADER = Pattern.compile("\\w+.*");
     private static final Pattern P_STUDY_YEARS = Pattern.compile("^([\\d+]{4}|Ongoing).*([\\d+]{4}|Ongoing).*$");
 
-    private static final String CTG_STUDY_BASE_URL = "https://clinicaltrials.gov/study/";
     private static final String AGE_ADULT = "Adult";
     private static final String AGE_PEDIATRIC = "Pediatric";
     private static final String AGE_ALL = "Both";
@@ -417,7 +418,7 @@ public class BiolinccConverter extends BaseConverter {
                         this.writeLog("NCT ID already seen: " + nctId);
                     }
 
-                    ctgUrl = CTG_STUDY_BASE_URL + nctId;
+                    ctgUrl = ConverterCVT.CTG_STUDY_BASE_URL + nctId;
                     parsedUrls.add(ctgUrl);
                 } else {
                     this.writeLog("Failed to match CTG URL: " + url);
@@ -444,7 +445,7 @@ public class BiolinccConverter extends BaseConverter {
             this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "displayTitle", doDisplayTitle },
                             { "accessUrl", biolinccUrl },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
         }
@@ -455,7 +456,7 @@ public class BiolinccConverter extends BaseConverter {
             this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "displayTitle", doDisplayTitle },
                             { "accessUrl", ctgUrl },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
         }
@@ -485,10 +486,15 @@ public class BiolinccConverter extends BaseConverter {
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         // TODO: match values with CT codes/ICD Codes
         if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
-            String[] conditionsList = conditionsStr.split(",");
-            for (String conditionStr : conditionsList) {
+            Set<String> studyConditions = Stream.of(conditionsStr.split(","))
+                    .map(String::strip)
+                    .collect(Collectors.toSet());
+
+            Iterator<String> conditionsIter = studyConditions.iterator();
+            while (conditionsIter.hasNext()) {
                 this.createAndStoreClassItem(study, "StudyCondition",
-                        new String[][] { { "originalValue", WordUtils.capitalizeFully(conditionStr, ' ', '-') } });
+                        new String[][] {
+                                { "originalValue", WordUtils.capitalizeFully(conditionsIter.next(), ' ', '-') } });
             }
         }
     }
@@ -617,6 +623,7 @@ public class BiolinccConverter extends BaseConverter {
         // TODO: access details?
         // TODO: lang code en by default?
         // TODO: managingOrg NHLBI?
+        // TODO: materialTypes to dedicated field in Biosample
         String details = (!ConverterUtils.isBlankOrNull(materialTypes) ? "Material types: " + materialTypes : null);
         Item biospecimenDO = this.createAndStoreClassItem(study, "StudyObject",
                 new String[][] { { "displayTitle", ConverterCVT.O_TYPE_BIOSPECIMEN },
@@ -659,7 +666,7 @@ public class BiolinccConverter extends BaseConverter {
     public void parseNetwork(Item study, String networkStr) throws Exception {
         // TODO: contribType?
         this.createAndStoreClassItem(study, "Organisation",
-                new String[][] { { "name", networkStr }, { "type", "Network" } });
+                new String[][] { { "name", networkStr }, { "type", ConverterCVT.ORG_TYPE_NETWORK } });
     }
 
     /**
@@ -676,7 +683,7 @@ public class BiolinccConverter extends BaseConverter {
             // Note: email is not in the model so parentStudyContactEmail is unused
             this.createAndStoreClassItem(study, "Person",
                     new String[][] { { "fullName", parentStudyContactName },
-                            { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT } });
+                            { "contribType", ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT } });
         }
     }
 
@@ -727,7 +734,7 @@ public class BiolinccConverter extends BaseConverter {
             this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "displayTitle", "Study (or clinical trial network) website" },
                             { "accessUrl", studyWebsiteStr },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_WEBSITE } });
         }

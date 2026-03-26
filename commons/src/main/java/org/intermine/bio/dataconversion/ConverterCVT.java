@@ -56,6 +56,7 @@ public class ConverterCVT {
     public static final String FEATURE_T_ALLOCATION = "Allocation"; // MDR ID: 22
     public static final String FEATURE_T_INTERVENTION_MODEL = "Intervention model"; // MDR ID: 23
     public static final String FEATURE_T_MASKING = "Masking"; // MDR ID: 24
+    public static final String FEATURE_T_OBSERVATIONAL_MODEL = "Observational model"; // MDR ID: 30
     public static final String FEATURE_T_TIME_PERSPECTIVE = "Time perspective"; // MDR ID: 31
     public static final String FEATURE_V_EARLY_PHASE_1 = "Early Phase 1";
     public static final String FEATURE_V_RETROSPECTIVE = "Retrospective";
@@ -77,34 +78,39 @@ public class ConverterCVT {
     public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
 
     /* Objects */
-    public static final String ACCESS_TYPE_PUBLIC = "Public";
+    public static final String O_ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_TYPE_BIOSPECIMEN = "Biospecimen data";
     public static final String O_TYPE_ICF = "Informed consent form";
     public static final String O_TYPE_IPD = "Individual partipant data";
     public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
-    public static final String O_TYPE_STATISTICAL_ANALYSIS_PLAN = "Statistical analysis plan";
-    public static final String O_TYPE_STUDY_PROTOCOL = "Study protocol";
+    public static final String O_TYPE_SAP = "Statistical analysis plan";
+    public static final String O_TYPE_PROT = "Study protocol";
     public static final String O_TYPE_TRIAL_REGISTRY_ENTRY = "Trial registry entry";
     public static final String O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY = "Trial registry results summary";
     public static final String O_TYPE_WEBSITE = "Website";
-    public static final String O_ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD = "Case by case download";
     public static final String O_RESOURCE_TYPE_PDF = "PDF";
     public static final String O_RESOURCE_TYPE_WORD_DOC = "Word doc";
     public static final String O_RESOURCE_TYPE_WEB_TEXT = "Web text";
     public static final String O_TITLE_RESULTS_SUMMARY = "Results summary";
     public static final String O_TITLE_REGISTRY_ENTRY = "Registry web page";
-    public static final String CONTRIBUTOR_TYPE_PUBLIC_CONTACT = "Public contact";
-    public static final String CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT = "Scientific contact";
-    public static final String CONTRIBUTOR_TYPE_SPONSOR = "Sponsor";
-    public static final String CONTRIBUTOR_TYPE_STUDY_FUNDER = "Study funder";
-    public static final String CONTRIBUTOR_TYPE_COLLABORATING_ORG = "Collaborating organisation";
-    public static final String DATE_TYPE_AVAILABLE = "Available";
-    public static final String DATE_TYPE_CREATED = "Created";
-    public static final String DATE_TYPE_UPDATED = "Updated";
-    public static final String DATE_TYPE_ISSUED = "Issued";
 
-    /* Both */
+    /* Other classes */
+    public static final String CONTRIB_TYPE_PRINCIPAL_INVESTIGATOR = "Principal Investigator";
+    public static final String CONTRIB_TYPE_PUBLIC_CONTACT = "Public contact";
+    public static final String CONTRIB_TYPE_SCIENTIFIC_CONTACT = "Scientific contact";
+    public static final String CONTRIB_TYPE_SPONSOR = "Sponsor";
+    public static final String CONTRIB_TYPE_SPONSOR_INVESTIGATOR = "Sponsor Investigator";
+    public static final String CONTRIB_TYPE_STUDY_FUNDER = "Study funder";
+    public static final String CONTRIB_TYPE_COLLABORATING_ORG = "Collaborating organisation";
+    // Note: not in current MDR, this is for now used for CTG Collaborators that are not orgs
+    public static final String CONTRIB_TYPE_COLLABORATING_PERSON = "Collaborating person";
+    public static final String ORG_TYPE_FEDERAL_US = "US Federal agency";
+    public static final String ORG_TYPE_GOVERNMENTAL = "Governmental";
+    public static final String ORG_TYPE_INDUSTRY = "Industry";
+    public static final String ORG_TYPE_NETWORK = "Network";
+    public static final String ORG_TYPE_NIH = "US NIH Institute";
+    public static final String ORG_TYPE_OTHER = "Other";
     public static final String TITLE_UNKNOWN = "Unknown title";
     public static final String TITLE_TYPE_PUBLIC = "Public title";
     public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";
@@ -123,4 +129,7 @@ public class ConverterCVT {
     public static final String SOURCE_NAME_CTIS = "Clinical Trials Information System (CTIS)";
     public static final String SOURCE_NAME_EUCTR = "EU Clinical Trials Register";
     public static final String SOURCE_NAME_BIOLINCC = "Biologic Specimen and Data Repository Information Coordinating Center (BioLINCC)";
+
+    public static final String CTG_STUDY_BASE_URL = "https://clinicaltrials.gov/study/";
+    public static final String CTG_DOCUMENT_BASE_URL = "https://cdn.clinicaltrials.gov/large-docs/";
 }

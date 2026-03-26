@@ -100,8 +100,12 @@ public class ConverterUtils {
             int lastEndOfLine = currentEndOfLine;
             // lastIndexOf starts looking backwards from given index
             currentEndOfLine = string.lastIndexOf("\n", lastEndOfLine - 1);
-            String lastLine = string.substring(currentEndOfLine + 1, lastEndOfLine);
-            lines.add(0, lastLine);
+            if (currentEndOfLine != -1) {
+                String lastLine = string.substring(currentEndOfLine + 1, lastEndOfLine);
+                lines.add(0, lastLine);
+            } else {
+                break;
+            }
         }
         return lines;
     }
@@ -115,15 +119,17 @@ public class ConverterUtils {
      */
     public static LocalDate getDateFromString(String dateStr, DateTimeFormatter dateFormatter) {
         LocalDate parsedDate = null;
-        try {
-            if (dateFormatter != null) {
-                parsedDate = LocalDate.parse(dateStr, dateFormatter);
-            } else {
-                // ISO date format parsing
-                parsedDate = LocalDate.parse(dateStr);
+        if (!ConverterUtils.isBlankOrNull(dateStr)) {
+            try {
+                if (dateFormatter != null) {
+                    parsedDate = LocalDate.parse(dateStr, dateFormatter);
+                } else {
+                    // ISO date format parsing
+                    parsedDate = LocalDate.parse(dateStr);
+                }
+            } catch (DateTimeException e) {
+                ;
             }
-        } catch (DateTimeException e) {
-            ;
         }
         return parsedDate;
     }
@@ -137,6 +143,13 @@ public class ConverterUtils {
             }
         }
 
+        return false;
+    }
+
+    public static boolean isYes(String s) {
+        if (!ConverterUtils.isBlankOrNull(s) && s.equalsIgnoreCase("yes")) {
+            return true;
+        }
         return false;
     }
 
