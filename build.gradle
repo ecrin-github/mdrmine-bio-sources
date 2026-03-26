@@ -45,6 +45,7 @@ subprojects {
         compile group: "org.intermine", name: "intermine-resources", version: imVersion // log4j
         compile group: 'commons-collections', name: 'commons-collections', version: '3.2'
         compile group: 'com.opencsv', name: 'opencsv', version: '5.9'
+        compile group: 'com.alibaba.fastjson2', name: 'fastjson2', version: '2.0.58' // Note: 2.0.61 is latest but causes this error: https://github.com/alibaba/fastjson2/issues/3989
         compile group: 'org.jsoup', name: 'jsoup', version: '1.18.3'
         compile group: 'com.fasterxml.woodstox', name: 'woodstox-core', version: '7.1.0'
         compile group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-xml', version: '2.18.2'

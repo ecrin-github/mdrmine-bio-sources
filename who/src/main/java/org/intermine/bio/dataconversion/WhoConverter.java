@@ -331,14 +331,14 @@ public class WhoConverter extends CacheConverter {
              * Primary and secondary sponsors, scientific support organisation (source
              * support)
              */
-            this.createAndStoreStudyOrg(study, primarySponsor, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
+            this.createAndStoreStudyOrg(study, primarySponsor, ConverterCVT.CONTRIB_TYPE_SPONSOR);
             // TODO: there may be multiple sponsors in this field
-            this.createAndStoreStudyOrg(study, secondarySponsors, ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR);
+            this.createAndStoreStudyOrg(study, secondarySponsors, ConverterCVT.CONTRIB_TYPE_SPONSOR);
             // Checking if the source support string is different than the primary and
             // secondary sponsors + is not "please refer to primary and secondary sponsors"
             if (!sourceSupport.toLowerCase().contains("please") && !sourceSupport.equalsIgnoreCase(primarySponsor)
                     && !sourceSupport.equalsIgnoreCase(secondarySponsors)) {
-                this.createAndStoreStudyOrg(study, sourceSupport, ConverterCVT.CONTRIBUTOR_TYPE_STUDY_FUNDER);
+                this.createAndStoreStudyOrg(study, sourceSupport, ConverterCVT.CONTRIB_TYPE_STUDY_FUNDER);
             }
         }
 
@@ -956,11 +956,11 @@ public class WhoConverter extends CacheConverter {
         }
 
         if (contactType.equalsIgnoreCase("public")) {
-            contribType = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
+            contribType = ConverterCVT.CONTRIB_TYPE_PUBLIC_CONTACT;
         } else {
             // Exception already thrown earlier so value can't be anything other than
             // "scientific"
-            contribType = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
+            contribType = ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT;
         }
 
         // TODO: fix affiliation
@@ -1123,9 +1123,9 @@ public class WhoConverter extends CacheConverter {
                                     + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
                         }
                     } else if (nb2 != null && !nb1.equalsIgnoreCase(nb2)) { // Two phases
-                        featureValue = "Phase " + ConverterUtils.constructMultiplePhasesString(nb1, nb2);
+                        featureValue = ConverterCVT.FEATURE_T_PHASE + " " + ConverterUtils.constructMultiplePhasesString(nb1, nb2);
                     } else { // One phase
-                        featureValue = "Phase " + ConverterUtils.convertPhaseNumber(nb1);
+                        featureValue = ConverterCVT.FEATURE_T_PHASE + " " + ConverterUtils.convertPhaseNumber(nb1);
                     }
                 } else {
                     this.writeLog("Anomaly: matched \"numbers\" phase string but no phase number, phase: "
@@ -1150,9 +1150,9 @@ public class WhoConverter extends CacheConverter {
 
                         if (phasesRes.size() > 0) {
                             if (phasesRes.size() == 1) { // One phase
-                                featureValue = "Phase " + String.valueOf(phasesRes.get(0));
+                                featureValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0));
                             } else if (phasesRes.size() == 2) { // Two phases
-                                featureValue = "Phase " + String.valueOf(phasesRes.get(0)) + "/"
+                                featureValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0)) + "/"
                                         + String.valueOf(phasesRes.get(1));
                             } else {
                                 this.writeLog("Anomaly: matched more than 2 groups for \"verbose\" phase field, g1: "
@@ -1277,7 +1277,7 @@ public class WhoConverter extends CacheConverter {
             } else {
                 Matcher mNone = P_NONE.matcher(studyOrgStr);
                 if (mNone.matches()) { // No sponsor
-                    if (contribType.equals(ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR)) {
+                    if (contribType.equals(ConverterCVT.CONTRIB_TYPE_SPONSOR)) {
                         this.createAndStoreClassItem(study, "Organisation",
                                 new String[][] { { "contribType", contribType },
                                         { "name", ConverterCVT.SPONSOR_NONE } });
@@ -1445,7 +1445,7 @@ public class WhoConverter extends CacheConverter {
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
                             { "accessUrl", resultsUrlLink },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
         }
@@ -1463,9 +1463,9 @@ public class WhoConverter extends CacheConverter {
                 String doDisplayTitle;
                 String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
                 if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                    doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                    doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_PROT;
                 } else {
-                    doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                    doDisplayTitle = ConverterCVT.O_TYPE_PROT;
                 }
 
                 /* Protocol SO */
@@ -1492,7 +1492,7 @@ public class WhoConverter extends CacheConverter {
                 // maybe to change
                 this.createAndStoreClassItem(study, "StudyObject",
                         new String[][] { { "displayTitle", doDisplayTitle },
-                                { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
+                                { "type", ConverterCVT.O_TYPE_PROT },
                                 { "publicationYear", publicationYear },
                                 { "accessUrl", protocolURL },
                                 { "urlTargetType", resourceType },
@@ -1526,7 +1526,7 @@ public class WhoConverter extends CacheConverter {
                                 { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
                                 { "publicationYear", publicationYear },
                                 { "accessUrl", entryUrl },
-                                { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                                 { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                                 { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
             }

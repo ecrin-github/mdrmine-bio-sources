@@ -443,7 +443,7 @@ public class EuctrConverter extends CacheConverter {
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
         if (!this.existingStudy()) {
             this.createAndStoreClassItem(study, "Organisation",
-                    new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR },
+                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                             { "name", primarySponsor } });
         }
     }
@@ -472,7 +472,7 @@ public class EuctrConverter extends CacheConverter {
                         new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
                                 { "dateCreated", creationDate != null ? creationDate.toString() : null },
                                 { "accessUrl", url },
-                                { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                                 { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                                 { "displayTitle", doDisplayTitle } });
             }
@@ -718,9 +718,9 @@ public class EuctrConverter extends CacheConverter {
 
                     if (phasesRes.size() > 0) {
                         if (phasesRes.size() == 1) { // One phase
-                            phaseValue = "Phase " + String.valueOf(phasesRes.get(0));
+                            phaseValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0));
                         } else if (phasesRes.size() == 2) { // Two phases
-                            phaseValue = "Phase " + String.valueOf(phasesRes.get(0)) + "/"
+                            phaseValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0)) + "/"
                                     + String.valueOf(phasesRes.get(1));
                         } else {
                             this.writeLog("Matched more than 2 groups for phase string, g1: " + p1 + "; g2: " + p2
@@ -884,7 +884,7 @@ public class EuctrConverter extends CacheConverter {
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
                             { "accessUrl", resultsUrlLink },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
         }
@@ -908,11 +908,11 @@ public class EuctrConverter extends CacheConverter {
 
                     if (!ConverterUtils.isBlankOrNull(type)) {
                         if (type.equalsIgnoreCase("public")) {
-                            type = ConverterCVT.CONTRIBUTOR_TYPE_PUBLIC_CONTACT;
+                            type = ConverterCVT.CONTRIB_TYPE_PUBLIC_CONTACT;
                         } else if (type.equalsIgnoreCase("scientific")) {
                             // Exception already thrown earlier so value can't be anything other than
                             // "scientific"
-                            type = ConverterCVT.CONTRIBUTOR_TYPE_SCIENTIFIC_CONTACT;
+                            type = ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT;
                         } else {
                             this.writeLog("Unknown contact type value: " + type);
                         }
@@ -1199,7 +1199,7 @@ public class EuctrConverter extends CacheConverter {
             for (String secondarySponsor : secondarySponsors) {
                 // TODO: link to CV
                 this.createAndStoreClassItem(study, "Organisation",
-                        new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR },
+                        new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                                 { "name", secondarySponsor } });
             }
         }
@@ -1264,16 +1264,16 @@ public class EuctrConverter extends CacheConverter {
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
             if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_PROT;
             } else {
-                doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                doDisplayTitle = ConverterCVT.O_TYPE_PROT;
             }
 
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "objectId", protocolCode },
                             { "primaryIdentifierType", ConverterCVT.ID_TYPE_SPONSOR },
-                            { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
+                            { "type", ConverterCVT.O_TYPE_PROT },
                             { "displayTitle", doDisplayTitle } });
         }
     }
@@ -1291,7 +1291,7 @@ public class EuctrConverter extends CacheConverter {
                 // TODO: match with CV
                 if (!ConverterUtils.isBlankOrNull(org)) {
                     this.createAndStoreClassItem(study, "Organisation",
-                            new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_STUDY_FUNDER },
+                            new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_STUDY_FUNDER },
                                     { "name", org } });
                 }
             }

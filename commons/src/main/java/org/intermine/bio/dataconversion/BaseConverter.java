@@ -596,7 +596,7 @@ public abstract class BaseConverter extends BioFileConverter {
         // store the Country item
         if (country != null) {
             this.handleReferencesAndCollections(country, studyCountry);
-            this.storeClassItem(study, country);
+            this.storeClassItem(study, country);    // TODO: remove? duplicate with storeCountries()?
         }
 
         return studyCountry;

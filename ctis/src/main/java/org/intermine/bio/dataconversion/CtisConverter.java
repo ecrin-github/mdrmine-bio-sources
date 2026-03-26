@@ -331,16 +331,16 @@ public class CtisConverter extends CacheConverter {
             String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
             if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_PROT;
             } else {
-                doDisplayTitle = ConverterCVT.O_TYPE_STUDY_PROTOCOL;
+                doDisplayTitle = ConverterCVT.O_TYPE_PROT;
             }
 
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "objectId", protocolCode },
                             { "primaryIdentifierType", ConverterCVT.ID_TYPE_SPONSOR },
-                            { "type", ConverterCVT.O_TYPE_STUDY_PROTOCOL },
+                            { "type", ConverterCVT.O_TYPE_PROT },
                             { "displayTitle", doDisplayTitle } });
         }
     }
@@ -802,7 +802,7 @@ public class CtisConverter extends CacheConverter {
                     if (!seenSponsors.contains(sponsor)) {
                         // TODO: organisationRor
                         this.createAndStoreClassItem(study, "Organisation",
-                                new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR },
+                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                                         { "name", sponsor }, { "type", type } });
                         seenSponsors.add(sponsor);
                     }
@@ -828,7 +828,7 @@ public class CtisConverter extends CacheConverter {
                 new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
                         { "dateUpdated", lastUpdated != null ? lastUpdated.toString() : null },
                         { "accessUrl", REGISTRY_ENTRY_BASE_URL + this.currentTrialID },
-                        { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                        { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                         { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                         { "displayTitle", doDisplayTitle } });
     }

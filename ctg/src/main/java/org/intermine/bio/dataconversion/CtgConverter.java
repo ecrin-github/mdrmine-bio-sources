@@ -1,33 +1,31 @@
 package org.intermine.bio.dataconversion;
 
-/*
- * Copyright (C) 2024-2025 MDRMine
- * Modified from 2002-2019 FlyMine
- *
- * This code may be freely distributed and modified under the
- * terms of the GNU Lesser General Public Licence.  This should
- * be distributed with the code.  See the LICENSE file for more
- * information or http://www.gnu.org/copyleft/lesser.html.
- *
- */
-
-import com.opencsv.CSVParser;
-import com.opencsv.CSVParserBuilder;
-import com.opencsv.CSVReader;
-import com.opencsv.CSVReaderBuilder;
-import com.opencsv.exceptions.CsvMalformedLineException;
-import org.apache.commons.text.WordUtils;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
+import java.io.BufferedReader;
 import java.io.Reader;
-import java.time.LocalDate;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
+import org.apache.commons.text.WordUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.model.bio.IPDDataset;
+import org.intermine.xml.full.Item;
+
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONException;
+import com.alibaba.fastjson2.JSONFactory;
+import com.alibaba.fastjson2.JSONReader;
+import com.alibaba.fastjson2.reader.ObjectReader;
+import com.opencsv.CSVReader;
 
 /**
  * 
@@ -38,14 +36,17 @@ public class CtgConverter extends BaseConverter {
     private static final String DATASET_TITLE = "CTG-Studies";
     private static final String DATA_SOURCE_NAME = "CTG";
     private static final String DATA_SOURCE_DESC = "ClinicalTrials.gov (NIH)";
+    private static final String RESULTS_TAB_URL_SUFFIX = "?tab=results";
+
+    private static final String ALLOCATION_NOT_APPLICABLE = "NA";
+    private static final String ENROLLMENT_ACTUAL = "ACTUAL";
+    private static final String PRINCIPAL_INVESTIGATOR = "PRINCIPAL_INVESTIGATOR";
+    private static final String SPONSOR = "SPONSOR";
+    private static final String SPONSOR_INVESTIGATOR = "SPONSOR_INVESTIGATOR";
 
     private static final Pattern P_PHASE = Pattern.compile("(NA)|(early_)?phase(\\d)(?:\\|phase(\\d))?",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_DOC = Pattern.compile("(.*?),\\h*(http\\S+)\\h*", Pattern.CASE_INSENSITIVE);
-
-    private static final String AGE_CHILD = "CHILD";
-    private static final String AGE_ADULT = "ADULT";
-    private static final String AGE_OLDER_ADULT = "OLDER_ADULT";
 
     private Map<String, Integer> fieldsToInd;
     private HashSet<String> storedPKs = new HashSet<String>(); // Storing all NCT, EUCTR, and CTIS id to avoid duplicate
@@ -72,345 +73,315 @@ public class CtgConverter extends BaseConverter {
          * FileConverterTask.execute())
          */
         this.startLogging("ctg");
+        this.loadCountries();
 
-        final CSVParser parser = new CSVParserBuilder()
-                .withSeparator(',')
-                // .withQuoteChar('"')
-                .build();
-        final CSVReader csvReader = new CSVReaderBuilder(reader)
-                .withCSVParser(parser)
-                .build();
+        BufferedReader br = (BufferedReader) reader;
 
-        /* Headers */
-        this.fieldsToInd = this.getHeaders(csvReader);
+        // CtgStudy object reader
+        ObjectReader<CtgStudy> objectReader = JSONFactory.getDefaultObjectReaderProvider()
+                .getObjectReader(CtgStudy.class);
 
-        /* Reading file */
-        boolean skipNext = false;
+        br.readLine(); // JSON array start
 
-        // nextLine[] is an array of values from the line
-        String[] nextLine = csvReader.readNext();
-
-        // TODO: performance tests? compared to iterator
-        while (nextLine != null) {
-            if (!skipNext) {
-                this.parseAndStoreTrial(nextLine);
-            } else {
-                skipNext = false;
-            }
-
-            try {
-                nextLine = csvReader.readNext();
-            } catch (CsvMalformedLineException e) {
-                this.writeLog("Failed to parse line");
-                nextLine = new String[0];
-                skipNext = true;
+        String line;
+        while ((line = br.readLine()) != null) {
+            if (!line.equals("]")) {
+                try {
+                    CtgStudy jsonStudy = JSON.parseObject(line, CtgStudy.class);
+                    this.parseAndStoreTrial(jsonStudy);
+                } catch (JSONException e) {
+                    this.writeLog("Failed to read JSON study: " + e);
+                }
             }
         }
 
-        csvReader.close();
+        // // CtgStudy object reader
+        // ObjectReader<CtgStudy> objectReader =
+        // JSONFactory.getDefaultObjectReaderProvider()
+        // .getObjectReader(CtgStudy.class);
 
+        // try (JSONReader jr = JSONReader.of(reader)) {
+        // if (!jr.nextIfArrayStart()) {
+        // throw new IllegalStateException("JSON does not start with array");
+        // }
+
+        // while (!jr.nextIfArrayEnd()) {
+        // try {
+        // CtgStudy jsonStudy = objectReader.readObject(jr, null, null, 0L); // 0L = no
+        // features
+        // this.parseAndStoreTrial(jsonStudy);
+        // } catch (JSONException e) {
+        // this.writeLog("Failed to read JSON study: " + e);
+        // }
+        // }
+        // } catch (Exception e) {
+        // e.printStackTrace();
+        // }
+
+        this.storeCountries();
         this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
-    public void parseAndStoreTrial(String[] lineValues) throws Exception {
+    public void parseAndStoreTrial(CtgStudy ctgStudy) throws Exception {
         Item study = createItem("Study");
 
-        /* Trial ID */
-        String trialID = this.getAndCleanValue(lineValues, "NCT Number");
-        /* Secondary IDs (EUCTR, CTIS, Protocol code, etc.) */
-        String otherIDs = this.getAndCleanValue(lineValues, "Other IDs");
-
-        // Not storing study if trialID is blank or is the trial that is not parsed
-        // properly or is a trial with an ID that is already linked to another study
-        // TODO: if studies with blank trial IDs exist, check otherIDs then?
-        if (!ConverterUtils.isBlankOrNull(trialID) && !trialID.equals("NCT01027572") &&
-                this.parseTrialIDs(study, trialID, otherIDs)) {
-
-            /* Study title */
-            String studyTitle = this.getAndCleanValue(lineValues, "Study Title");
-            // Study acronym
-            String acronym = this.getAndCleanValue(lineValues, "Acronym");
-            this.parseStudyTitle(study, studyTitle, acronym);
-
-            // Registry trial page URL (used later for registry entry and results summary
-            // SO)
-            String studyURL = this.getAndCleanValue(lineValues, "Study URL");
+        if (this.parseTrialIDs(study, ctgStudy)) {
+            /* Study titles */
+            this.parseStudyTitle(study, ctgStudy);
 
             /* Study status */
-            String studyStatus = this.getAndCleanValue(lineValues, "Study Status");
-            this.parseStatus(study, studyStatus);
+            this.parseStatus(study, ctgStudy);
 
             /* Study description */
-            String briefSummary = this.getAndCleanValue(lineValues, "Brief Summary");
-            this.parseBriefSummary(study, briefSummary);
-
-            // TODO: use this to parse results or not?
-            String studyResults = this.getAndCleanValue(lineValues, "Study Results");
+            this.parseBriefSummary(study, ctgStudy);
 
             /* Study conditions */
-            String conditions = this.getAndCleanValue(lineValues, "Conditions");
-            this.parseConditions(study, conditions);
+            this.parseConditions(study, ctgStudy);
 
             /* Study topics */
-            String interventions = this.getAndCleanValue(lineValues, "Interventions");
-            this.parseInterventions(study, interventions);
-            // study.setAttributeIfNotNull("testField2", interventions);
+            this.parseInterventions(study, ctgStudy);
 
             /* Primary outcomes */
-            String primaryOutcomeMeasures = this.getAndCleanValue(lineValues, "Primary Outcome Measures");
-            this.parsePrimaryOutcomes(study, primaryOutcomeMeasures);
+            this.parsePrimaryOutcomes(study, ctgStudy);
 
             /* Secondary outcomes */
-            String secondaryOutcomeMeasures = this.getAndCleanValue(lineValues, "Secondary Outcome Measures");
-            String otherOutcomeMeasures = this.getAndCleanValue(lineValues, "Other Outcome Measures");
-            this.parseSecondaryOutcomes(study, secondaryOutcomeMeasures, otherOutcomeMeasures);
+            this.parseSecondaryOutcomes(study, ctgStudy);
 
-            /* Trial sponsor */
-            String sponsor = this.getAndCleanValue(lineValues, "Sponsor");
-            this.parseSponsor(study, sponsor);
+            /* Study sponsor (Organisations, Persons) */
+            this.parseSponsor(study, ctgStudy);
 
-            /* Trial collaborating organisations */
-            String collaborators = this.getAndCleanValue(lineValues, "Collaborators");
-            this.parseCollaborators(study, collaborators);
+            /* Study collaborators (Organisations, Persons) */
+            this.parseCollaborators(study, ctgStudy);
 
             /* Gender */
-            String gender = this.getAndCleanValue(lineValues, "Sex");
-            this.parseGender(study, gender);
+            this.parseGender(study, ctgStudy);
 
             /* Min/max age */
-            String age = this.getAndCleanValue(lineValues, "Age");
-            this.parseAge(study, age);
+            this.parseAge(study, ctgStudy);
 
-            /* Study feature: phase */
-            String phases = this.getAndCleanValue(lineValues, "Phases");
-            this.parsePhases(study, phases);
+            /* StudyFeature: phase */
+            this.parsePhases(study, ctgStudy);
 
             /* Study planned/actual enrolment */
-            String enrolment = this.getAndCleanValue(lineValues, "Enrollment");
-            this.parseEnrolment(study, enrolment);
-
-            // Unused (see wiki)
-            String funderType = this.getAndCleanValue(lineValues, "Funder Type");
-            // study.setAttributeIfNotNull("testField3", funderType);
+            this.parseEnrolment(study, ctgStudy);
 
             /* Study type */
-            String studyType = this.getAndCleanValue(lineValues, "Study Type");
-            this.parseStudyType(study, studyType);
+            this.parseStudyType(study, ctgStudy);
 
             /* Study features */
-            String studyDesign = this.getAndCleanValue(lineValues, "Study Design");
-            this.parseStudyDesign(study, studyDesign);
+            this.parseStudyDesign(study, ctgStudy);
 
             /* Study start date */
-            String startDateStr = CtgConverter.normaliseDateString(this.getAndCleanValue(lineValues, "Start Date"));
-            this.parseStartDate(study, startDateStr);
+            this.parseStartDate(study, ctgStudy);
 
             /* Study end date */
-            // Last primary outcome measure data collection date
-            String primaryCompletionDateStr = CtgConverter
-                    .normaliseDateString(this.getAndCleanValue(lineValues, "Primary Completion Date"));
-            String completionDateStr = CtgConverter
-                    .normaliseDateString(this.getAndCleanValue(lineValues, "Completion Date"));
-            // Last data collection (all outcome measures) date
-            LocalDate primaryCompletionDate = ConverterUtils.getDateFromString(primaryCompletionDateStr, null);
-            LocalDate completionDate = ConverterUtils.getDateFromString(completionDateStr, null);
-            this.parseCompletionDates(study, completionDate, primaryCompletionDate);
-
-            // Record posted (available) date
-            String firstPostedStr = this.getAndCleanValue(lineValues, "First Posted");
-            LocalDate firstPosted = ConverterUtils.getDateFromString(firstPostedStr, null);
-            // study.setAttributeIfNotNull("testField4", firstPostedStr);
-
-            // Record last update date
-            String lastUpdatePostedStr = this.getAndCleanValue(lineValues, "Last Update Posted");
-            LocalDate lastUpdatePosted = ConverterUtils.getDateFromString(lastUpdatePostedStr, null);
-            // study.setAttributeIfNotNull("testField5", lastUpdatePostedStr);
-
-            // Results posted (available) date
-            String resultsFirstPostedStr = this.getAndCleanValue(lineValues, "Results First Posted");
-            LocalDate resultsFirstPosted = ConverterUtils.getDateFromString(resultsFirstPostedStr, null);
-            // study.setAttributeIfNotNull("testField6", resultsFirstPostedStr);
+            this.parseCompletionDates(study, ctgStudy);
 
             /* Trial registry entry SO */
-            this.createAndStoreRegistryEntryDO(study, studyURL, firstPosted, lastUpdatePosted);
+            this.createAndStoreRegistryEntrySO(study, ctgStudy);
 
             /* Trial results summary SO */
-            this.createAndStoreResultsSummaryDO(study, studyResults, studyURL, completionDate, primaryCompletionDate,
-                    resultsFirstPosted, lastUpdatePosted);
+            this.createAndStoreResultsSummarySO(study, ctgStudy);
 
             /* Study locations */
-            String locations = this.getAndCleanValue(lineValues, "Locations");
-            this.parseLocations(study, locations);
-            // study.setAttributeIfNotNull("testField7", locations);
+            this.parseLocations(study, ctgStudy);
 
-            String studyDocuments = this.getAndCleanValue(lineValues, "Study Documents");
-            this.parseStudyDocuments(study, studyDocuments);
-            // study.setAttributeIfNotNull("testField8", studyDocuments);
+            /* Various StudyObjects */
+            this.parseStudyDocuments(study, ctgStudy);
+
+            /* Plan to share IPD, DSS, IPD SO */
+            this.parseIPD(study, ctgStudy);
+
+            /* PubMed publications */
+            this.parseReferences(study, ctgStudy);
+
+            // TODO: seeAlsoLinks?
 
             store(study);
 
         }
+
         this.currentTrialID = null;
+
     }
 
     /**
      * TODO
      * 
      * @param study
-     */
-    public void parseTrialID(Item study, String trialID) {
-        // NCT ID
-        study.setAttributeIfNotNull("nctID", trialID);
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param mainTrialID
-     * @param otherIDsStr
+     * @param ctgStudy
      * @return
      * @throws Exception
      */
-    public boolean parseTrialIDs(Item study, String mainTrialID, String otherIDsStr) throws Exception {
+    public boolean parseTrialIDs(Item study, CtgStudy ctgStudy) throws Exception {
         boolean continueParsing = true;
 
-        // NCT ID
-        if (storedPKs.contains(mainTrialID)) { // should not happen
+        if (ctgStudy.protocolSection == null) {
             continueParsing = false;
-            this.writeLog("NCT ID already exists: " + mainTrialID);
+            this.writeLog("Warning: found study with no protocol section");
         } else {
-            this.currentTrialID = mainTrialID;
-            study.setAttributeIfNotNull("nctID", mainTrialID);
-        }
 
-        // Other IDs
-        if (!ConverterUtils.isBlankOrNull(otherIDsStr) && continueParsing) {
-            // study.setAttributeIfNotNull("testField1", otherIDsStr);
-            boolean ctisIdSet = false;
-            boolean euctrIdSet = false;
-            List<String> euIds = new ArrayList<String>();
-            List<String> otherIds = new ArrayList<String>(); // IDs to be added as "StudyIdentifier" items later
+            IdentificationModule idModule = ctgStudy.protocolSection.identificationModule;
 
-            // Adding secondaryIDs and trialID into one set
-            Set<String> ids = Stream.of(otherIDsStr.split("\\|"))
-                    .map(String::strip)
-                    .collect(Collectors.toSet());
+            if (idModule != null) {
+                String nctID = idModule.nctId;/* Trial ID */
+                // TODO: trials have nctIdAliases...
 
-            Iterator<String> idsIter = ids.iterator();
-            while (idsIter.hasNext() && continueParsing) {
-                String otherID = idsIter.next();
-
-                Matcher mEu = ConverterUtils.P_EU_ID.matcher(otherID);
-                if (mEu.matches()) {
-                    String ctisPrefix = mEu.group(1);
-                    String euctrPrefix = mEu.group(2);
-                    String euId = mEu.group(3);
-                    String ctisSuffix = mEu.group(4);
-                    String euctrSuffix = mEu.group(5);
-
-                    if (storedPKs.contains(euId)) {
-                        continueParsing = false;
-                        this.writeLog("EU ID already exists: " + euId + "; raw id: " + otherID);
-                    } else {
-                        if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
-                            if (euctrPrefix == null && euctrSuffix == null) {
-                                // Setting CTIS ID without prefix and suffix
-                                study.setAttributeIfNotNull("primaryIdentifier", euId);
-                                ctisIdSet = true;
-                            } else {
-                                this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " + otherID);
-                            }
-                        } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
-                            // Setting EUCTR ID without prefix and suffix
-                            study.setAttributeIfNotNull("euctrID", euId);
-                            euctrIdSet = true;
-
-                            if (euctrSuffix != null) {
-                                this.writeLog("EUCTR ID matched and suffix is not null: " + euctrSuffix);
-                            }
-                        } else { // Undistinguishable ID
-                            if (ctisIdSet) {
-                                if (!euctrIdSet) {
-                                    study.setAttributeIfNotNull("euctrID", euId);
-                                    euctrIdSet = true;
-                                } else {
-                                    this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: "
-                                            + euId + "; full string of IDs: " + otherIDsStr);
-                                }
-                            } else if (ctisIdSet) {
-                                study.setAttributeIfNotNull("primaryIdentifier", euId);
-                                ctisIdSet = true;
-                            } else {
-                                euIds.add(euId);
-                            }
-                        }
-                    }
+                // Not parsing study if trialID is blank
+                // TODO: if studies with blank trial IDs exist, check otherIDs then?
+                if (ConverterUtils.isBlankOrNull(nctID)) {
+                    continueParsing = false;
                 } else {
-                    otherIds.add(otherID);
-                }
-            }
+                    // NCT ID
+                    if (storedPKs.contains(nctID)) { // Trial with an ID that is already linked to another study
+                        continueParsing = false;
+                        this.writeLog("NCT ID already exists: " + nctID);
+                    } else {
+                        this.currentTrialID = nctID;
+                        study.setAttributeIfNotNull("nctID", nctID);
+                    }
 
-            if (continueParsing) {
-                // Adding other IDs as StudyIdentifier items
-                for (String otherID : otherIds) {
-                    // TODO: infer ID type
-                    this.createAndStoreClassItem(study, "StudyIdentifier",
-                            new String[][] { { "identifierValue", otherID } });
-                }
+                    /* Secondary IDs (EUCTR, CTIS, Protocol code, etc.) */
+                    if (continueParsing && idModule.secondaryIdInfos != null && idModule.secondaryIdInfos.size() > 0) {
+                        boolean ctisIdSet = false;
+                        boolean euctrIdSet = false;
+                        List<String> euIds = new ArrayList<String>();
+                        List<String> otherIds = new ArrayList<String>(); // IDs to be added as "StudyIdentifier" items
+                                                                         // later
 
-                // Handling undistinguishable EU IDs
-                if (euIds.size() > 0) {
-                    if (euIds.size() > 2) {
-                        this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + otherIDsStr);
-                    } else if (euIds.size() == 2) {
-                        if (ctisIdSet || euctrIdSet) {
-                            this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds
-                                    + "; full string of IDs: " + otherIDsStr);
-                        } else {
-                            String id1 = euIds.get(0);
-                            String id2 = euIds.get(1);
+                        // TODO: now we have adidtional info for secondary IDs, inferring id type can be
+                        // improved now
 
-                            // Assuming that the more recent ID (year + sequential part after) is the CTIS
-                            // ID, and the other is the EUCTR ID
-                            if (id1.compareTo(id2) > 0) {
-                                study.setAttributeIfNotNull("primaryIdentifier", id1);
-                                study.setAttributeIfNotNull("euctrID", id2);
+                        // Adding secondaryIDs and trialID into one set
+                        Set<String> ids = idModule.secondaryIdInfos.stream()
+                                .map(secId -> secId.id)
+                                .map(String::strip)
+                                .collect(Collectors.toSet());
+
+                        Iterator<String> idsIter = ids.iterator();
+                        while (idsIter.hasNext() && continueParsing) {
+                            String otherID = idsIter.next();
+
+                            Matcher mEu = ConverterUtils.P_EU_ID.matcher(otherID);
+                            if (mEu.matches()) {
+                                String ctisPrefix = mEu.group(1);
+                                String euctrPrefix = mEu.group(2);
+                                String euId = mEu.group(3);
+                                String ctisSuffix = mEu.group(4);
+                                String euctrSuffix = mEu.group(5);
+
+                                if (storedPKs.contains(euId)) {
+                                    continueParsing = false;
+                                    this.writeLog("EU ID already exists: " + euId + "; raw id: " + otherID);
+                                } else {
+                                    if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
+                                        if (euctrPrefix == null && euctrSuffix == null) {
+                                            // Setting CTIS ID without prefix and suffix
+                                            study.setAttributeIfNotNull("primaryIdentifier", euId);
+                                            ctisIdSet = true;
+                                        } else {
+                                            this.writeLog(
+                                                    "CTIS ID matched but also has EUCTR ID characteristics: "
+                                                            + otherID);
+                                        }
+                                    } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
+                                        // Setting EUCTR ID without prefix and suffix
+                                        study.setAttributeIfNotNull("euctrID", euId);
+                                        euctrIdSet = true;
+
+                                        if (euctrSuffix != null) {
+                                            this.writeLog("EUCTR ID matched and suffix is not null: " + euctrSuffix);
+                                        }
+                                    } else { // Undistinguishable ID
+                                        if (ctisIdSet) {
+                                            if (!euctrIdSet) {
+                                                study.setAttributeIfNotNull("euctrID", euId);
+                                                euctrIdSet = true;
+                                            } else {
+                                                this.writeLog(
+                                                        "Found an EU id but both CTIS and EUCTR ID are already set, id: "
+                                                                + euId + "; list of all IDs: " + ids);
+                                            }
+                                        } else if (ctisIdSet) {
+                                            study.setAttributeIfNotNull("primaryIdentifier", euId);
+                                            ctisIdSet = true;
+                                        } else {
+                                            euIds.add(euId);
+                                        }
+                                    }
+                                }
                             } else {
-                                study.setAttributeIfNotNull("primaryIdentifier", id2);
-                                study.setAttributeIfNotNull("euctrID", id1);
+                                otherIds.add(otherID);
                             }
                         }
-                    } else { // 1 ID
-                        if (ctisIdSet && euctrIdSet) {
-                            this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds
-                                    + "; full string of IDs: " + otherIDsStr);
-                        } else {
-                            String id1 = euIds.get(0);
 
-                            // Note: if both ctisID and euctrID have not been set before, we populate both
-                            // fields hoping for a merge to correct the fields later
-                            if (!ctisIdSet) {
-                                study.setAttributeIfNotNull("primaryIdentifier", id1);
+                        if (continueParsing) {
+                            // Adding other IDs as StudyIdentifier items
+                            for (String otherID : otherIds) {
+                                // TODO: infer ID type
+                                this.createAndStoreClassItem(study, "StudyIdentifier",
+                                        new String[][] { { "identifierValue", otherID } });
                             }
-                            if (!euctrIdSet) {
-                                study.setAttributeIfNotNull("euctrID", id1);
+
+                            // Handling undistinguishable EU IDs
+                            if (euIds.size() > 0) {
+                                if (euIds.size() > 2) {
+                                    this.writeLog(
+                                            "More than 2 EU IDs found: " + euIds + "; list of all IDs: " + ids);
+                                } else if (euIds.size() == 2) {
+                                    if (ctisIdSet || euctrIdSet) {
+                                        this.writeLog(
+                                                "2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds
+                                                        + "; list of all IDs: " + ids);
+                                    } else {
+                                        String id1 = euIds.get(0);
+                                        String id2 = euIds.get(1);
+
+                                        // Assuming that the more recent ID (year + sequential part after) is the CTIS
+                                        // ID, and the other is the EUCTR ID
+                                        if (id1.compareTo(id2) > 0) {
+                                            study.setAttributeIfNotNull("primaryIdentifier", id1);
+                                            study.setAttributeIfNotNull("euctrID", id2);
+                                        } else {
+                                            study.setAttributeIfNotNull("primaryIdentifier", id2);
+                                            study.setAttributeIfNotNull("euctrID", id1);
+                                        }
+                                    }
+                                } else { // 1 ID
+                                    if (ctisIdSet && euctrIdSet) {
+                                        this.writeLog(
+                                                "1 EU ID found but both CTIS and EUCTR IDs have already been set: "
+                                                        + euIds
+                                                        + "; list of all IDs: " + ids);
+                                    } else {
+                                        String id1 = euIds.get(0);
+
+                                        // Note: if both ctisID and euctrID have not been set before, we populate both
+                                        // fields hoping for a merge to correct the fields later
+                                        if (!ctisIdSet) {
+                                            study.setAttributeIfNotNull("primaryIdentifier", id1);
+                                        }
+                                        if (!euctrIdSet) {
+                                            study.setAttributeIfNotNull("euctrID", id1);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
-                }
-            }
-        }
 
-        if (continueParsing) {
-            String nctID = ConverterUtils.getAttrValue(study, "nctID");
-            String euctrID = ConverterUtils.getAttrValue(study, "euctrID");
-            String ctisID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
+                    if (continueParsing) {
+                        nctID = ConverterUtils.getAttrValue(study, "nctID");
+                        String euctrID = ConverterUtils.getAttrValue(study, "euctrID");
+                        String ctisID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
-            for (String id : new String[] { nctID, ctisID, euctrID }) {
-                if (!ConverterUtils.isBlankOrNull(id)) {
-                    this.storedPKs.add(id);
+                        for (String id : new String[] { nctID, ctisID, euctrID }) {
+                            if (!ConverterUtils.isBlankOrNull(id)) {
+                                this.storedPKs.add(id);
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -422,78 +393,79 @@ public class CtgConverter extends BaseConverter {
      * TODO
      * 
      * @param study
-     * @param studyTitle
+     * @param ctgStudy
      */
-    public void parseStudyTitle(Item study, String studyTitle, String acronym) throws Exception {
-        boolean displayTitleSet = false;
+    public void parseStudyTitle(Item study, CtgStudy ctgStudy) throws Exception {
+        IdentificationModule idModule = ctgStudy.protocolSection.identificationModule;
 
-        // TODO: && !title.equals("-") && !title.equals("_") && !title.equals(".") ?
-        /* Public title */
-        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            study.setAttributeIfNotNull("displayTitle", studyTitle);
-            displayTitleSet = true;
+        // TODO: check for "-", "_", ".", etc.?
 
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", studyTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
-        }
+        // Constructing displayTitle the same way as on the CTG website:
+        // "briefTitle (acronym)"
+        StringBuilder titleSb = new StringBuilder();
 
-        /* Acronym */
-        if (!ConverterUtils.isBlankOrNull(acronym)) {
-            if (!displayTitleSet) {
-                study.setAttributeIfNotNull("displayTitle", acronym);
+        if (idModule != null) {
+
+            /* Brief (public) title */
+            if (!ConverterUtils.isBlankOrNull(idModule.briefTitle)) {
+                titleSb.append(idModule.briefTitle);
+
+                this.createAndStoreClassItem(study, "Title",
+                        new String[][] { { "text", idModule.briefTitle },
+                                { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
             }
 
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
+            /* Official (scientific) title */
+            if (!ConverterUtils.isBlankOrNull(idModule.officialTitle)) {
+                // Only setting officialTitle to displayTitle if no briefTitle
+                if (ConverterUtils.isBlankOrNull(titleSb.toString())) {
+                    titleSb.append(idModule.officialTitle);
+                }
+
+                this.createAndStoreClassItem(study, "Title",
+                        new String[][] { { "text", idModule.officialTitle },
+                                { "type", ConverterCVT.TITLE_TYPE_SCIENTIFIC } });
+            }
+
+            /* Acronym */
+            if (!ConverterUtils.isBlankOrNull(idModule.acronym)) {
+                if (ConverterUtils.isBlankOrNull(titleSb.toString())) {
+                    titleSb.append(idModule.acronym);
+                } else {
+                    titleSb.append(" (" + idModule.acronym + ")");
+                }
+
+                this.createAndStoreClassItem(study, "Title",
+                        new String[][] { { "text", idModule.acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
+            }
         }
 
         // Unknown title if not set before
-        if (!displayTitleSet) {
-            study.setAttribute("displayTitle", ConverterCVT.TITLE_UNKNOWN);
+        if (ConverterUtils.isBlankOrNull(titleSb.toString())) {
+            titleSb.append(ConverterCVT.TITLE_UNKNOWN);
         }
+
+        study.setAttributeIfNotNull("displayTitle", titleSb.toString());
     }
 
     /**
      * TODO
      * 
      * @param study
-     * @param briefSummary
+     * @param ctgStudy
      */
-    public void parseBriefSummary(Item study, String briefSummary) {
-        if (!ConverterUtils.isBlankOrNull(briefSummary)) {
-            study.setAttribute("description", briefSummary);
-        }
-    }
+    public void parseStatus(Item study, CtgStudy ctgStudy) {
+        StatusModule statusModule = ctgStudy.protocolSection.statusModule;
 
-    public void parseStatus(Item study, String status) {
-        if (!ConverterUtils.isBlankOrNull(status)) {
-            // TODO: normalisation
-            String cleanedStatus = ConverterUtils.capitaliseAndReplaceCharBySpace(status, '_');
-            if (cleanedStatus.equals("Active not recruiting")) { // Temporary
-                cleanedStatus = ConverterCVT.STATUS_ACTIVE_NOT_RECRUITING;
-            }
-            study.setAttributeIfNotNull("status", cleanedStatus);
-        }
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param conditionsStr
-     * @throws Exception
-     */
-    public void parseConditions(Item study, String conditionsStr) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
-            Set<String> studyConditions = Stream.of(conditionsStr.split("\\|"))
-                    .map(String::strip)
-                    .collect(Collectors.toSet());
-
-            Iterator<String> conditionsIter = studyConditions.iterator();
-            while (conditionsIter.hasNext()) {
-                this.createAndStoreClassItem(study, "StudyCondition",
-                        new String[][] {
-                                { "originalValue", WordUtils.capitalizeFully(conditionsIter.next(), ' ', '-') } });
+        if (statusModule != null) {
+            if (!ConverterUtils.isBlankOrNull(statusModule.overallStatus)) {
+                // TODO: proper normalisation
+                String cleanedStatus = ConverterUtils.capitaliseAndReplaceCharBySpace(statusModule.overallStatus,
+                        '_');
+                if (cleanedStatus.equals("Active not recruiting")) { // Temporary
+                    cleanedStatus = ConverterCVT.STATUS_ACTIVE_NOT_RECRUITING;
+                }
+                study.setAttributeIfNotNull("status", cleanedStatus);
             }
         }
     }
@@ -502,28 +474,62 @@ public class CtgConverter extends BaseConverter {
      * TODO
      * 
      * @param study
-     * @param interventionsStr
+     * @param ctgStudy
+     */
+    public void parseBriefSummary(Item study, CtgStudy ctgStudy) {
+        DescriptionModule descModule = ctgStudy.protocolSection.descriptionModule;
+
+        if (descModule != null) {
+            study.setAttribute("description", descModule.briefSummary);
+        }
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
      * @throws Exception
      */
-    public void parseInterventions(Item study, String interventionsStr) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(interventionsStr)) {
-            // TODO: formatting
-            study.setAttributeIfNotNull("interventions", interventionsStr);
+    public void parseConditions(Item study, CtgStudy ctgStudy) throws Exception {
+        ConditionsModule condModule = ctgStudy.protocolSection.conditionsModule;
 
-            String[] interventions = interventionsStr.split("\\|");
-            String[] tuple;
-            for (String intervention : interventions) {
-                if (!ConverterUtils.isBlankOrNull(intervention)) {
-                    tuple = intervention.split(": ");
-                    if (tuple.length == 2) {
-                        // TODO: link/normalise with CV
-                        this.createAndStoreClassItem(study, "Topic",
-                                new String[][] {
-                                        { "type", ConverterUtils.capitaliseAndReplaceCharBySpace(tuple[0], '_') },
-                                        { "value", WordUtils.capitalizeFully(tuple[1], ' ', '-') } });
+        if (condModule != null) {
+            if (condModule.conditions != null && condModule.conditions.size() > 0) {
+
+                /*
+                 * Getting MeSH terms corresponding to conditions from the conditionBrowseModule
+                 * (if any)
+                 */
+                // TODO: condition values don't necessary exactly match MeSH terms (NCT00133718)
+                HashMap<String, String> meshTerms = new HashMap<String, String>();
+
+                if (Optional.ofNullable(ctgStudy.derivedSection)
+                        .map(DerivedSection::getConditionBrowseModule)
+                        .map(ConditionBrowseModule::getMeshes)
+                        .isPresent()) {
+                    for (Mesh mesh : ctgStudy.derivedSection.conditionBrowseModule.meshes) {
+                        meshTerms.put(mesh.term.toLowerCase(), mesh.id);
+                    }
+                }
+
+                // Probably not needed, but just in case
+                Set<String> studyConditions = condModule.conditions.stream()
+                        .map(String::strip)
+                        .collect(Collectors.toSet());
+
+                /* StudyConditions */
+                Iterator<String> conditionsIter = studyConditions.iterator();
+                while (conditionsIter.hasNext()) {
+                    String condition = conditionsIter.next();
+                    String meshId = meshTerms.getOrDefault(condition.toLowerCase(), null);
+                    if (meshId != null) {
+                        this.createAndStoreClassItem(study, "StudyCondition",
+                                new String[][] { { "originalValue", condition },
+                                        { "originalCTType", ConverterCVT.CV_MESH }, { "originalCTCode", meshId } });
                     } else {
-                        this.writeLog("Failed to properly split intervention tuple: " + intervention + "; full string: "
-                                + interventionsStr);
+                        this.createAndStoreClassItem(study, "StudyCondition",
+                                new String[][] { { "originalValue", condition } });
                     }
                 }
             }
@@ -532,376 +538,587 @@ public class CtgConverter extends BaseConverter {
 
     /**
      * TODO
-     * 
+     *
      * @param study
-     * @param primaryOutcomes
+     * @param ctgStudy
+     * @throws Exception
      */
-    public void parsePrimaryOutcomes(Item study, String primaryOutcomes) {
-        if (!ConverterUtils.isBlankOrNull(primaryOutcomes)) {
-            study.setAttributeIfNotNull("primaryOutcome", primaryOutcomes);
-        }
-    }
+    public void parseInterventions(Item study, CtgStudy ctgStudy) throws Exception {
+        ArmsInterventionsModule armsModule = ctgStudy.protocolSection.armsInterventionsModule;
 
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param secondaryOutcomes
-     * @param otherOutcomes
-     */
-    public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String otherOutcomes) {
-        // TODO: capitalise?
-        StringBuilder outcomesSb = new StringBuilder();
+        if (armsModule != null) {
+            // TODO: set Study.interventions?
 
-        if (!ConverterUtils.isBlankOrNull(secondaryOutcomes)) {
-            outcomesSb.append(secondaryOutcomes);
-        }
+            if (armsModule.interventions != null && armsModule.interventions.size() > 0) {
+                /*
+                 * Getting MeSH terms corresponding to interventions from the
+                 * interventionBrowseModule (if any)
+                 */
+                // TODO: intervention values don't necessary exactly match MeSH terms
+                HashMap<String, String> meshTerms = new HashMap<String, String>();
 
-        if (!ConverterUtils.isBlankOrNull(otherOutcomes)) {
-            if (!outcomesSb.toString().isEmpty()) {
-                if (!outcomesSb.toString().endsWith(".")) {
-                    outcomesSb.append(".");
+                if (Optional.ofNullable(ctgStudy.derivedSection)
+                        .map(DerivedSection::getInterventionBrowseModule)
+                        .map(InterventionBrowseModule::getMeshes)
+                        .isPresent()) {
+                    for (Mesh mesh : ctgStudy.derivedSection.interventionBrowseModule.meshes) {
+                        meshTerms.put(mesh.term.toLowerCase(), mesh.id);
+                    }
                 }
-                outcomesSb.append(" ");
-            }
-            outcomesSb.append(otherOutcomes);
-        }
 
-        study.setAttributeIfNotNull("secondaryOutcomes", outcomesSb.toString());
+                // There can be duplicates with different description/armGroupLabels,
+                // treating them as duplicates for now (NCT04745767)
+                Set<String> seenInterventionNames = new HashSet<String>();
+
+                /* Topics */
+                Iterator<Intervention> interventionsIter = armsModule.interventions.iterator();
+                while (interventionsIter.hasNext()) {
+
+                    Intervention intervention = interventionsIter.next();
+                    if (!ConverterUtils.isBlankOrNull(intervention.name)
+                            && !seenInterventionNames.contains(intervention.name.toLowerCase())) {
+                        String interventionType = ConverterUtils.capitaliseAndReplaceCharBySpace(intervention.type,
+                                '_');
+
+                        String meshId = meshTerms.getOrDefault(intervention.name.toLowerCase(), null);
+                        if (meshId != null) {
+                            this.createAndStoreClassItem(study, "Topic",
+                                    new String[][] { { "type", interventionType }, { "value", intervention.name },
+                                            { "ctType", ConverterCVT.CV_MESH }, { "ctCode", meshId } });
+                        } else {
+                            this.createAndStoreClassItem(study, "Topic",
+                                    new String[][] { { "type", interventionType }, { "value", intervention.name } });
+                        }
+
+                        seenInterventionNames.add(intervention.name.toLowerCase());
+                    }
+                }
+            }
+        }
     }
 
     /**
      * TODO
-     * 
+     *
      * @param study
-     * @param sponsor
+     * @param ctgStudy
+     */
+    public void parsePrimaryOutcomes(Item study, CtgStudy ctgStudy) {
+        OutcomesModule outcomesModule = ctgStudy.protocolSection.outcomesModule;
+
+        if (outcomesModule != null) {
+            if (outcomesModule.primaryOutcomes != null && outcomesModule.primaryOutcomes.size() > 0) {
+                StringBuilder poSb = new StringBuilder();
+
+                boolean firstOutcome = true;
+                for (Outcome po : outcomesModule.primaryOutcomes) {
+                    if (!firstOutcome) {
+                        poSb.append(" ");
+                    } else {
+                        firstOutcome = false;
+                    }
+
+                    poSb.append(po.measure);
+
+                    if (!ConverterUtils.isBlankOrNull(po.description)) {
+                        poSb.append(": ");
+                        poSb.append(po.description);
+                    }
+
+                    if (!ConverterUtils.isBlankOrNull(po.timeFrame)) {
+                        if (ConverterUtils.isBlankOrNull(po.description)) {
+                            poSb.append(": ");
+                        }
+                        poSb.append(", ");
+                        poSb.append(po.timeFrame);
+                    }
+
+                    if (!poSb.toString().endsWith(".")) {
+                        poSb.append(".");
+                    }
+                }
+
+                study.setAttributeIfNotNull("primaryOutcome", poSb.toString());
+            }
+        }
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
+     */
+    public void parseSecondaryOutcomes(Item study, CtgStudy ctgStudy) {
+        OutcomesModule outcomesModule = ctgStudy.protocolSection.outcomesModule;
+
+        if (outcomesModule != null) {
+            StringBuilder oSb = new StringBuilder();
+
+            if (outcomesModule.secondaryOutcomes != null && outcomesModule.secondaryOutcomes.size() > 0) {
+                boolean firstOutcome = true;
+                for (Outcome so : outcomesModule.secondaryOutcomes) {
+                    if (!firstOutcome) {
+                        oSb.append(" ");
+                    } else {
+                        firstOutcome = false;
+                    }
+
+                    oSb.append(so.measure);
+
+                    if (!ConverterUtils.isBlankOrNull(so.description)) {
+                        oSb.append(": ");
+                        oSb.append(so.description);
+                    }
+
+                    if (!ConverterUtils.isBlankOrNull(so.timeFrame)) {
+                        if (ConverterUtils.isBlankOrNull(so.description)) {
+                            oSb.append(": ");
+                        }
+                        oSb.append(", ");
+                        oSb.append(so.timeFrame);
+                    }
+
+                    if (!oSb.toString().endsWith(".")) {
+                        oSb.append(".");
+                    }
+                }
+            }
+
+            // TODO: should otherOutcomes be included in secondaryOutcomes?
+            // separate field in model?
+            if (outcomesModule.otherOutcomes != null && outcomesModule.otherOutcomes.size() > 0) {
+                if (oSb.toString().length() > 0) {
+                    oSb.append(" ");
+                }
+
+                boolean firstOutcome = true;
+                for (Outcome oo : outcomesModule.otherOutcomes) {
+                    if (!firstOutcome) {
+                        oSb.append(" ");
+                    } else {
+                        firstOutcome = false;
+                    }
+
+                    oSb.append(oo.measure);
+
+                    if (!ConverterUtils.isBlankOrNull(oo.description)) {
+                        oSb.append(": ");
+                        oSb.append(oo.description);
+                    }
+
+                    if (!ConverterUtils.isBlankOrNull(oo.timeFrame)) {
+                        if (ConverterUtils.isBlankOrNull(oo.description)) {
+                            oSb.append(": ");
+                        }
+                        oSb.append(", ");
+                        oSb.append(oo.timeFrame);
+                    }
+
+                    if (!oSb.toString().endsWith(".")) {
+                        oSb.append(".");
+                    }
+                }
+            }
+
+            study.setAttributeIfNotNull("secondaryOutcomes", oSb.toString());
+        }
+    }
+
+    public static String getEntityType(String type) {
+        String entityType = null;
+
+        switch ((type != null) ? type : ConverterCVT.UNKNOWN) {
+            case "FED":
+                entityType = ConverterCVT.ORG_TYPE_FEDERAL_US;
+                break;
+            case "OTHER_GOV":
+                entityType = ConverterCVT.ORG_TYPE_GOVERNMENTAL;
+                break;
+            case "INDUSTRY":
+                entityType = ConverterCVT.ORG_TYPE_INDUSTRY;
+                break;
+            case "NETWORK":
+                entityType = ConverterCVT.ORG_TYPE_NETWORK;
+                break;
+            case "NIH":
+                entityType = ConverterCVT.ORG_TYPE_NIH;
+                break;
+            case "OTHER":
+                entityType = ConverterCVT.ORG_TYPE_OTHER;
+                break;
+            default: // AMBIG, INDIV, UNKNOWN
+                entityType = ConverterCVT.UNKNOWN;
+                break;
+        }
+
+        return entityType;
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
      * @throws Exception
      */
-    public void parseSponsor(Item study, String sponsor) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(sponsor)) {
-            // TODO: differentiate people from orgs + link to CV
-            this.createAndStoreClassItem(study, "Organisation",
-                    new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_SPONSOR }, { "name", sponsor } });
-        }
-    }
+    public void parseSponsor(Item study, CtgStudy ctgStudy) throws Exception {
+        SponsorCollaboratorsModule sponsorModule = ctgStudy.protocolSection.sponsorCollaboratorsModule;
 
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param collaboratorsStr
-     * @throws Exception
-     */
-    public void parseCollaborators(Item study, String collaboratorsStr) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(collaboratorsStr)) {
-            String[] collaborators = collaboratorsStr.split("\\|");
-            for (String collaborator : collaborators) {
-                // TODO: differentiate people from orgs (if any) + link to CV
-                this.createAndStoreClassItem(study, "Organisation",
-                        new String[][] { { "contribType", ConverterCVT.CONTRIBUTOR_TYPE_COLLABORATING_ORG },
-                                { "name", collaborator } });
-            }
-        }
-    }
+        if (sponsorModule != null) {
+            boolean addedSponsor = false;
+            if (sponsorModule.responsibleParty != null) {
+                if (sponsorModule.responsibleParty.type != null) {
+                    if (sponsorModule.responsibleParty.type.equalsIgnoreCase(PRINCIPAL_INVESTIGATOR)) {
+                        // Responsible party is PI and sponsor is their organisation
+                        Item piPerson = this.createAndStoreClassItem(study, "Person",
+                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_PRINCIPAL_INVESTIGATOR }, {
+                                        "fullName", sponsorModule.responsibleParty.investigatorFullName } });
 
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param gender
-     */
-    public void parseGender(Item study, String gender) {
-        if (!ConverterUtils.isBlankOrNull(gender)) {
-            if (gender.equalsIgnoreCase(ConverterCVT.GENDER_ALL)) {
-                study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
-            } else if (gender.equalsIgnoreCase(ConverterCVT.GENDER_WOMEN)) {
-                study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_WOMEN);
-            } else if (gender.equalsIgnoreCase(ConverterCVT.GENDER_MEN)) {
-                study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_MEN);
-            } else {
-                this.writeLog("Unknown gender value: " + gender);
-            }
-        }
-    }
+                        if (sponsorModule.leadSponsor != null) {
+                            String sponsorType = CtgConverter.getEntityType(sponsorModule.leadSponsor.clazz);
+                            Item sponsorOrg = this.createClassItem(study, "Organisation",
+                                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
+                                            { "name", sponsorModule.leadSponsor.name },
+                                            { "type", sponsorType } });
+                            addedSponsor = true;
 
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param ageStr
-     */
-    public void parseAge(Item study, String ageStr) {
-        if (!ConverterUtils.isBlankOrNull(ageStr)) {
-            int minAge = Integer.MAX_VALUE;
-            int maxAge = Integer.MIN_VALUE;
-
-            String[] ageRanges = ageStr.split(", ");
-
-            // Parsing the various age ranges
-            for (String ageRange : ageRanges) {
-                if (ageRange.equalsIgnoreCase(CtgConverter.AGE_CHILD)) { // "CHILD" (0-17)
-                    minAge = Integer.MIN_VALUE;
-                    if (maxAge < 17) {
-                        maxAge = 17;
+                            // PI affiliation
+                            this.handleReferencesAndCollections(piPerson, sponsorOrg);
+                            store(sponsorOrg);
+                        }
+                    } else if (sponsorModule.responsibleParty.type.equalsIgnoreCase(SPONSOR_INVESTIGATOR)) {
+                        // PI is also sponsor
+                        Item piPerson = this.createAndStoreClassItem(study, "Person",
+                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR_INVESTIGATOR }, {
+                                        "fullName", sponsorModule.responsibleParty.investigatorFullName } });
+                        addedSponsor = true;
+                        // TODO responsibleParty.investigatorAffiliation to create an Organisation item
+                    } else if (!sponsorModule.responsibleParty.type.equalsIgnoreCase(SPONSOR)) {
+                        this.writeLog("Warning: Unknown responsibleParty type: " + sponsorModule.responsibleParty.type);
                     }
-                } else if (ageRange.equalsIgnoreCase(CtgConverter.AGE_ADULT)) { // "ADULT" (18-64)
-                    if (minAge > 18) {
-                        minAge = 18;
-                    }
-                    if (maxAge < 64) {
-                        maxAge = 64;
-                    }
-                } else if (ageRange.equalsIgnoreCase(CtgConverter.AGE_OLDER_ADULT)) { // "OLDER_ADULT" (65+)
-                    if (minAge > 65) {
-                        minAge = 65;
-                    }
-                    maxAge = Integer.MAX_VALUE;
+                    // Else: sponsor handled below
                 } else {
-                    this.writeLog("Unknown age range value: " + ageRange + ", full string: " + ageStr);
+                    // TODO: handle this case
+                    this.writeLog("Warning: unhandled responsibleParty case (likely oldNameTitle + oldOrganization)");
                 }
             }
 
-            // TODO: none on no minimum?
-            if (minAge != Integer.MIN_VALUE && minAge != Integer.MAX_VALUE) {
-                study.setAttributeIfNotNull("minAge", String.valueOf(minAge));
-                study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
-            }
+            if (!addedSponsor && sponsorModule.leadSponsor != null) {
+                if (sponsorModule.responsibleParty == null) {
+                    this.writeLog("Warning: found study with no responsibleParty but a leadSponsor");
+                }
 
-            if (maxAge != Integer.MIN_VALUE && maxAge != Integer.MAX_VALUE) {
-                study.setAttributeIfNotNull("maxAge", String.valueOf(maxAge));
-                study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
+                if (!ConverterUtils.isBlankOrNull(sponsorModule.leadSponsor.name)) {
+                    String sponsorType = CtgConverter.getEntityType(sponsorModule.leadSponsor.clazz);
+
+                    // INDIV class is always a Person, however there are others that mix people and
+                    // organisation together: AMBIG, OTHER, UNKNOWN
+                    // Since most sponsor of these classes are Organisation, assuming they are
+                    // organisation for now (TODO: better separation)
+                    if (sponsorModule.leadSponsor.clazz != null
+                            && sponsorModule.leadSponsor.clazz.equalsIgnoreCase("INDIV")) {
+                        this.createAndStoreClassItem(study, "Person",
+                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
+                                        { "fullName", sponsorModule.leadSponsor.name } });
+                    } else {
+                        this.createAndStoreClassItem(study, "Organisation",
+                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
+                                        { "name", sponsorModule.leadSponsor.name },
+                                        { "type", sponsorType } });
+                    }
+                } else {
+                    this.writeLog(
+                            "Warning: found leadSponsor with no/empty name: " + sponsorModule.leadSponsor.name + " "
+                                    + sponsorModule.leadSponsor.clazz);
+                }
             }
-        } else {
-            study.setAttributeIfNotNull("minAge", ConverterCVT.UNKNOWN);
-            study.setAttributeIfNotNull("maxAge", ConverterCVT.UNKNOWN);
         }
     }
 
     /**
      * TODO
-     * 
+     *
      * @param study
-     * @param phasesStr
+     * @param ctgStudy
      * @throws Exception
      */
-    public void parsePhases(Item study, String phasesStr) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(phasesStr)) {
-            Matcher mPhase = P_PHASE.matcher(phasesStr);
-            if (mPhase.matches()) {
-                String phaseValue = "";
+    public void parseCollaborators(Item study, CtgStudy ctgStudy) throws Exception {
+        SponsorCollaboratorsModule sponsorModule = ctgStudy.protocolSection.sponsorCollaboratorsModule;
 
-                String na = mPhase.group(1);
-                String early = mPhase.group(2);
-                String p1 = mPhase.group(3);
-                String p2 = mPhase.group(4);
+        if (sponsorModule != null) {
+            if (sponsorModule.collaborators != null && sponsorModule.collaborators.size() > 0) {
+                for (Collaborator c : sponsorModule.collaborators) {
+                    if (!ConverterUtils.isBlankOrNull(c.name)) {
+                        String collaboratorType = CtgConverter.getEntityType(c.clazz);
 
-                if (na != null) { // Not applicable
-                    phaseValue = ConverterCVT.NOT_APPLICABLE;
-                } else {
-                    if (early != null) {
-                        phaseValue = ConverterCVT.FEATURE_V_EARLY_PHASE_1;
-                    } else if (p2 == null) { // One phase number
-                        phaseValue = ConverterUtils.convertPhaseNumber(p1);
-                    } else { // Two phase numbers
-                        phaseValue = ConverterUtils.constructMultiplePhasesString(p1, p2);
+                        // INDIV class is always a Person, however there are others that mix people and
+                        // organisation together: AMBIG, OTHER, UNKNOWN
+                        // Since most sponsor of these classes are Organisation, assuming they are
+                        // organisation for now (TODO: better separation)
+                        if (c.clazz != null && c.clazz.equalsIgnoreCase("INDIV")) {
+                            this.createAndStoreClassItem(study, "Person",
+                                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_COLLABORATING_PERSON },
+                                            { "fullName", c.name } });
+                        } else {
+                            this.createAndStoreClassItem(study, "Organisation",
+                                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_COLLABORATING_ORG },
+                                            { "name", c.name },
+                                            { "type", collaboratorType } });
+                        }
+                    } else {
+                        this.writeLog(
+                                "Warning: found collaborator with no/empty name: " + c.name + " " + c.clazz);
                     }
                 }
-
-                this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
-                                { "featureValue", phaseValue } });
-            } else {
-                this.writeLog("Failed to match phase value: " + phasesStr);
             }
         }
     }
 
     /**
      * TODO
-     * 
+     *
      * @param study
-     * @param enrolment
+     * @param ctgStudy
      */
-    public void parseEnrolment(Item study, String enrolment) {
-        if (!ConverterUtils.isBlankOrNull(enrolment)) {
-            String studyStatus = ConverterUtils.getAttrValue(study, "status");
-            // Note: Enrolment can also be actual enrolment for suspended status (and
-            // perhaps others as well),
-            // but there does not seem to be a way to know that from the data, it is shown
-            // on CTG website however
-            if (studyStatus.equalsIgnoreCase(ConverterCVT.STATUS_COMPLETED)
-                    || studyStatus.equalsIgnoreCase(ConverterCVT.STATUS_ACTIVE_NOT_RECRUITING)) {
-                study.setAttributeIfNotNull("actualEnrolment", enrolment);
-            } else {
-                study.setAttributeIfNotNull("plannedEnrolment", enrolment);
+    public void parseGender(Item study, CtgStudy ctgStudy) {
+        EligibilityModule eligModule = ctgStudy.protocolSection.eligibilityModule;
+
+        // TODO: do something with eligModule.genderDescription?
+        if (eligModule != null) {
+            if (!ConverterUtils.isBlankOrNull(eligModule.sex)) {
+                if (eligModule.sex.equalsIgnoreCase(ConverterCVT.GENDER_ALL)) {
+                    study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_ALL);
+                } else if (eligModule.sex.equalsIgnoreCase(ConverterCVT.GENDER_WOMEN)) {
+                    study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_WOMEN);
+                } else if (eligModule.sex.equalsIgnoreCase(ConverterCVT.GENDER_MEN)) {
+                    study.setAttributeIfNotNull("genderElig", ConverterCVT.GENDER_MEN);
+                } else {
+                    this.writeLog("Unknown gender value: " + eligModule.sex);
+                }
+            }
+        }
+
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
+     */
+    public void parseAge(Item study, CtgStudy ctgStudy) {
+        EligibilityModule eligModule = ctgStudy.protocolSection.eligibilityModule;
+
+        if (eligModule != null) {
+            if (!ConverterUtils.isBlankOrNull(eligModule.minimumAge)) {
+                String[] minAgeSplit = eligModule.minimumAge.split(" ");
+
+                if (minAgeSplit.length > 1) {
+                    study.setAttributeIfNotNull("minAge", minAgeSplit[0]);
+                    study.setAttributeIfNotNull("minAgeUnit",
+                            minAgeSplit[1] + (minAgeSplit[1].endsWith("s") ? "" : "s"));
+                } else {
+                    this.writeLog("Warning: failed to split minimum age string: " + eligModule.minimumAge);
+                }
+            }
+            if (!ConverterUtils.isBlankOrNull(eligModule.maximumAge)) {
+                String[] maxAgeSplit = eligModule.maximumAge.split(" ");
+
+                if (maxAgeSplit.length > 1) {
+                    study.setAttributeIfNotNull("maxAge", maxAgeSplit[0]);
+                    study.setAttributeIfNotNull("maxAgeUnit",
+                            maxAgeSplit[1] + (maxAgeSplit[1].endsWith("s") ? "" : "s"));
+                } else {
+                    this.writeLog("Warning: failed to split maximum age string: " + eligModule.maximumAge);
+                }
             }
         }
     }
 
     /**
      * TODO
-     * 
+     *
      * @param study
-     * @param studyType
-     */
-    public void parseStudyType(Item study, String studyType) {
-        if (!ConverterUtils.isBlankOrNull(studyType)) {
-            study.setAttributeIfNotNull("type", ConverterUtils.capitaliseAndReplaceCharBySpace(studyType, '_'));
-        }
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param studyDesign
+     * @param ctgStudy
      * @throws Exception
      */
-    public void parseStudyDesign(Item study, String studyDesign) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(studyDesign)) {
-            // Observational studies always have "Observational Model: |Time Perspective: p"
-            // as study design value
-            if (!studyDesign.startsWith("Observational")) {
-                String[] kvs = studyDesign.split("\\|");
-                String[] tuple;
+    public void parsePhases(Item study, CtgStudy ctgStudy) throws Exception {
+        DesignModule designModule = ctgStudy.protocolSection.designModule;
 
-                if (kvs.length == 4) {
-                    for (String kv : kvs) {
-                        tuple = kv.split(": ");
-                        if (tuple.length == 2) {
-                            // Filtering out "NA" value for "Allocation" feature type
-                            if (!tuple[0].isEmpty() && !tuple[1].isEmpty() && !tuple[1].equalsIgnoreCase("NA")) {
-                                // TODO: CV relevant? CV in MDR for features is entirely based on CTG values
-                                // TODO: normalise masking values?
-                                this.createAndStoreClassItem(study, "StudyFeature",
-                                        new String[][] {
-                                                { "featureType", ConverterUtils.capitaliseFirstLetter(tuple[0]) },
-                                                { "featureValue", ConverterUtils
-                                                        .capitaliseAndReplaceCharBySpace(tuple[1], '_') } });
+        if (designModule != null) {
+            if (designModule.phases != null && designModule.phases.size() > 0) {
+                // Reusing CSV code by re-constructing CSV value
+                String phasesStr = String.join("|", designModule.phases);
+
+                Matcher mPhase = P_PHASE.matcher(phasesStr);
+                if (mPhase.matches()) {
+                    String phaseValue = "";
+
+                    String na = mPhase.group(1);
+                    String early = mPhase.group(2);
+                    String p1 = mPhase.group(3);
+                    String p2 = mPhase.group(4);
+
+                    if (na != null) { // Not applicable
+                        phaseValue = ConverterCVT.NOT_APPLICABLE;
+                    } else {
+                        if (early != null) {
+                            phaseValue = ConverterCVT.FEATURE_V_EARLY_PHASE_1;
+                        } else if (p2 == null) { // One phase number
+                            phaseValue = ConverterUtils.convertPhaseNumber(p1);
+                        } else { // Two phase numbers
+                            phaseValue = ConverterUtils.constructMultiplePhasesString(p1, p2);
+                        }
+                    }
+
+                    this.createAndStoreClassItem(study, "StudyFeature",
+                            new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
+                                    { "featureValue", ConverterCVT.FEATURE_T_PHASE + " " + phaseValue } });
+                } else {
+                    this.writeLog("Failed to match phase value: " + phasesStr);
+                }
+            }
+        }
+
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
+     */
+    public void parseEnrolment(Item study, CtgStudy ctgStudy) {
+        if (Optional.ofNullable(ctgStudy.protocolSection.designModule)
+                .map(DesignModule::getEnrollmentInfo)
+                .map(EnrollmentInfo::getCount)
+                .isPresent()) {
+
+            EnrollmentInfo enrollmentInfo = ctgStudy.protocolSection.designModule.enrollmentInfo;
+
+            if (!ConverterUtils.isBlankOrNull(enrollmentInfo.type)
+                    && enrollmentInfo.type.equalsIgnoreCase(ENROLLMENT_ACTUAL)) {
+                study.setAttributeIfNotNull("actualEnrolment", enrollmentInfo.count);
+            } else { // If enrollmentInfo.count is "ESTIMATED" or absent,
+                     // we default to plannedEnrolment
+                study.setAttributeIfNotNull("plannedEnrolment", enrollmentInfo.count);
+            }
+        }
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
+     */
+    public void parseStudyType(Item study, CtgStudy ctgStudy) {
+        DesignModule designModule = ctgStudy.protocolSection.designModule;
+
+        if (designModule != null) {
+            if (!ConverterUtils.isBlankOrNull(designModule.studyType)) {
+                study.setAttributeIfNotNull("type",
+                        ConverterUtils.capitaliseAndReplaceCharBySpace(designModule.studyType, '_'));
+            }
+        }
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
+     * @throws Exception
+     */
+    public void parseStudyDesign(Item study, CtgStudy ctgStudy) throws Exception {
+        DesignModule designModule = ctgStudy.protocolSection.designModule;
+
+        if (designModule != null) {
+            DesignInfo designInfo = designModule.designInfo;
+
+            if (designInfo != null) {
+                // StudyFeature: Allocation
+                if (!ConverterUtils.isBlankOrNull(designInfo.allocation)) {
+                    String allocation = "";
+                    if (designInfo.allocation.equalsIgnoreCase(ALLOCATION_NOT_APPLICABLE)) {
+                        allocation = ConverterCVT.NOT_APPLICABLE;
+                    } else {
+                        allocation = ConverterUtils.capitaliseAndReplaceCharBySpace(designInfo.allocation, '_');
+                    }
+
+                    this.createAndStoreClassItem(study, "StudyFeature",
+                            new String[][] {
+                                    { "featureType", ConverterCVT.FEATURE_T_ALLOCATION },
+                                    { "featureValue", allocation } });
+                }
+
+                // StudyFeature: Interventional model
+                // TODO: use designInfo.interventionModelDescription somewhere?
+                if (!ConverterUtils.isBlankOrNull(designInfo.interventionModel)) {
+                    this.createAndStoreClassItem(study, "StudyFeature",
+                            new String[][] {
+                                    { "featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
+                                    { "featureValue", ConverterUtils
+                                            .capitaliseAndReplaceCharBySpace(designInfo.interventionModel, '_') } });
+                }
+
+                // StudyFeature: Masking
+                // TODO: use designInfo.maskingInfo.maskingDescription somewhere?
+                if (designInfo.maskingInfo != null && !ConverterUtils.isBlankOrNull(designInfo.maskingInfo.masking)) {
+                    StringBuilder maskingSb = new StringBuilder();
+                    maskingSb.append(
+                            ConverterUtils.capitaliseAndReplaceCharBySpace(designInfo.maskingInfo.masking, '_'));
+                    maskingSb.append(" ");
+
+                    if (designInfo.maskingInfo.whoMasked != null && designInfo.maskingInfo.whoMasked.size() > 0) {
+                        maskingSb.append("(");
+
+                        boolean first = true;
+                        for (String masked : designInfo.maskingInfo.whoMasked) {
+                            if (first) {
+                                first = false;
                             } else {
-                                this.writeLog("parseStudyDesign(): key is empty, tuple: " + kv + "; full string: "
-                                        + studyDesign);
+                                maskingSb.append(", ");
                             }
+                            maskingSb.append(ConverterUtils.capitaliseAndReplaceCharBySpace(masked, '_'));
                         }
+
+                        maskingSb.append(")");
                     }
-                } else {
-                    this.writeLog("Unexpected length for study design split features (" + kvs.length
-                            + "), full string: " + studyDesign);
+                    String maskingValue = designInfo.maskingInfo.masking;
+                    this.createAndStoreClassItem(study, "StudyFeature",
+                            new String[][] {
+                                    { "featureType", ConverterCVT.FEATURE_T_MASKING },
+                                    { "featureValue", maskingSb.toString() } });
                 }
-            }
-        }
 
-        /*
-         * Allocation: randomized, na, non_randomized
-         * Masking: none, single, double, triple, quadruple (potentially with details in
-         * parentheses)
-         * Intervention model: parallel, single_group, crossover, sequential, factorial
-         * Primary purpose: treatment, prevention, other, supportive_care,
-         * basic_science, diagnostic, health_services_research, screening,
-         * device_feasibility, ect (maybe more?)
-         */
-    }
+                // StudyFeature: Observational model
+                if (!ConverterUtils.isBlankOrNull(designInfo.observationalModel)) {
+                    this.createAndStoreClassItem(study, "StudyFeature",
+                            new String[][] {
+                                    { "featureType", ConverterCVT.FEATURE_T_OBSERVATIONAL_MODEL },
+                                    { "featureValue", ConverterUtils
+                                            .capitaliseAndReplaceCharBySpace(designInfo.observationalModel, '_') } });
+                }
 
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param startDateStr
-     */
-    public void parseStartDate(Item study, String startDateStr) {
-        study.setAttributeIfNotNull("startDate", startDateStr);
-    }
+                // StudyFeature: Primary purpose
+                // TODO: keep ECT capitalised
+                if (!ConverterUtils.isBlankOrNull(designInfo.primaryPurpose)) {
+                    this.createAndStoreClassItem(study, "StudyFeature",
+                            new String[][] {
+                                    { "featureType", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE },
+                                    { "featureValue", ConverterUtils
+                                            .capitaliseAndReplaceCharBySpace(designInfo.primaryPurpose, '_') } });
+                }
 
-    /**
-     * TODO
-     * 
-     * @param study
-     */
-    public void parseCompletionDates(Item study, LocalDate completionDate, LocalDate primaryCompletionDate) {
-        if (completionDate != null) {
-            study.setAttributeIfNotNull("endDate", completionDate.toString());
-        } else if (primaryCompletionDate != null) {
-            study.setAttributeIfNotNull("endDate", primaryCompletionDate.toString());
-        }
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param locationsStr
-     * @throws Exception
-     */
-    public void parseLocations(Item study, String locationsStr) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(locationsStr)) {
-            String[] splitLocations = locationsStr.split("\\|");
-            String[] splitLocation;
-            String countryName, cityName, facility;
-
-            if (splitLocations.length > 0) {
-                for (String location : splitLocations) {
-                    countryName = "";
-                    cityName = "";
-                    facility = "";
-
-                    splitLocation = location.split(", ");
-                    if (splitLocation.length < 2) {
-                        this.writeLog("Failed to split location: " + location);
-                    } else if (splitLocation.length == 2) { // City/state/province/region, country
-                        // TODO check if city or state/province/region + clean
-                        // TODO
-                        // if (!splitLocation[0].toLowerCase().contains("locations")) { // Filtering
-                        // "Many locations" and "Multiple locations"
-                        // }
-                        countryName = WordUtils.capitalizeFully(splitLocation[1], ' ', '-');
-                    } else if (splitLocation.length == 3) { // Place, city, country
-                        facility = CtgConverter.cleanLocationSubstring(splitLocation[0]);
-                        cityName = CtgConverter.cleanLocationSubstring(splitLocation[1]);
-                        countryName = CtgConverter.cleanCountryString(splitLocation[1], splitLocation[2]);
-                    } else if (splitLocation.length == 4) { // Place, city, postal code, country
-                        facility = WordUtils.capitalizeFully(splitLocation[0], ' ', '-');
-                        cityName = WordUtils.capitalizeFully(splitLocation[1], ' ', '-');
-                        countryName = CtgConverter.cleanCountryString(splitLocation[2], splitLocation[3]);
-                    } else if (splitLocation.length == 5) { // Place, city, state, postal code, country (to check)
-                        facility = WordUtils.capitalizeFully(splitLocation[0], ' ', '-');
-                        cityName = WordUtils.capitalizeFully(splitLocation[1], ' ', '-');
-                        countryName = WordUtils.capitalizeFully(splitLocation[4], ' ', '-');
-                        countryName = CtgConverter.cleanCountryString(splitLocation[3], splitLocation[4]);
-                    } else if (splitLocation.length == 6) { // Place, street, city, state, postal code, country
-                        cityName = WordUtils.capitalizeFully(splitLocation[2], ' ', '-');
-                        countryName = WordUtils.capitalizeFully(splitLocation[5], ' ', '-');
-                        countryName = CtgConverter.cleanCountryString(splitLocation[4], splitLocation[5]);
-                    } else if (splitLocation.length > 6) {
-                        this.writeLog("Unexpected number of substrings in split location: " + location);
-                    }
-
-                    if (!ConverterUtils.isBlankOrNull(countryName)) {
-                        this.createAndStoreClassItem(study, "Location",
-                                new String[][] { { "countryName", countryName }, { "cityName", cityName },
-                                        { "facility", facility } });
-                    }
-                    /*
-                     * National Institutes of Health Clinical Center, 9000 Rockville Pike, Bethesda,
-                     * Maryland, 20892, United States
-                     * Seoul National University Hospital, Seoul, Korea, Republic of
-                     * Medical University of Vienna, Vienna, 1090, Austria
-                     * Hacettepe University, Ankara, Turkey
-                     * Many Locations, Germany
-                     */
-
-                    /*
-                     * <reference name="study" referenced-type="Study"
-                     * reverse-reference="locations"/>
-                     * <reference name="country" referenced-type="Country"/>
-                     * <attribute name="facilityOrg" type="java.lang.String"/>
-                     * <attribute name="facility" type="java.lang.String"/>
-                     * <attribute name="facilityRor" type="java.lang.String"/>
-                     * <!-- TODO: CV? -->
-                     * <attribute name="city" type="java.lang.String"/>
-                     * <attribute name="cityName" type="java.lang.String"/>
-                     * <attribute name="countryName" type="java.lang.String"/>
-                     * <attribute name="status" type="java.lang.String"/>
-                     */
+                // StudyFeature: Time perspective
+                if (!ConverterUtils.isBlankOrNull(designInfo.timePerspective)) {
+                    this.createAndStoreClassItem(study, "StudyFeature",
+                            new String[][] {
+                                    { "featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE },
+                                    { "featureValue", ConverterUtils
+                                            .capitaliseAndReplaceCharBySpace(designInfo.timePerspective, '_') } });
                 }
             }
         }
@@ -909,92 +1126,110 @@ public class CtgConverter extends BaseConverter {
 
     /**
      * TODO
-     * 
+     *
      * @param study
-     * @param studyDocuments
-     * @throws Exception
+     * @param ctgStudy
      */
-    public void parseStudyDocuments(Item study, String studyDocuments) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(studyDocuments)) {
-            String[] splitDocuments = studyDocuments.split("\\|");
-            HashMap<String, List<String>> instances = new HashMap<String, List<String>>();
+    public void parseStartDate(Item study, CtgStudy ctgStudy) {
+        if (Optional.ofNullable(ctgStudy.protocolSection.statusModule)
+                .map(StatusModule::getStartDateStruct)
+                .map(DateStruct::getDate)
+                .isPresent()) {
 
-            for (String doc : splitDocuments) {
-                // Matching title + URL
-                Matcher mDoc = P_DOC.matcher(doc);
-                if (mDoc.matches()) {
-                    String g1 = mDoc.group(1); // Object type
-                    String g1Lower = g1.toLowerCase();
-                    String g2 = mDoc.group(2); // Direct link to study documents (study protocols, SAPs, ICFs)
-
-                    // Adding URL to list with objects of found types, one document may combine
-                    // multiple types, one study may have multiple instances of the same object type
-                    if (g1Lower.contains("informed consent form")) {
-                        if (!instances.containsKey(ConverterCVT.O_TYPE_ICF)) {
-                            instances.put(ConverterCVT.O_TYPE_ICF, new ArrayList<String>());
-                        }
-                        instances.get(ConverterCVT.O_TYPE_ICF).add(g2);
-                    }
-                    if (g1Lower.contains("study protocol")) {
-                        if (!instances.containsKey(ConverterCVT.O_TYPE_STUDY_PROTOCOL)) {
-                            instances.put(ConverterCVT.O_TYPE_STUDY_PROTOCOL, new ArrayList<String>());
-                        }
-                        instances.get(ConverterCVT.O_TYPE_STUDY_PROTOCOL).add(g2);
-                    }
-                    if (g1Lower.contains("statistical analysis plan")) {
-                        if (!instances.containsKey(ConverterCVT.O_TYPE_STATISTICAL_ANALYSIS_PLAN)) {
-                            instances.put(ConverterCVT.O_TYPE_STATISTICAL_ANALYSIS_PLAN, new ArrayList<String>());
-                        }
-                        instances.get(ConverterCVT.O_TYPE_STATISTICAL_ANALYSIS_PLAN).add(g2);
-                    }
-                } else {
-                    this.writeLog("Failed to match study document string: " + doc);
-                }
-            }
-
-            // Adding one SO per type (if any instance exist), and adding as many instances
-            // as different URLs for the same object type
-            for (Map.Entry<String, List<String>> entry : instances.entrySet()) {
-                String objectType = entry.getKey();
-                List<String> urls = entry.getValue();
-                // Document SO
-                // TODO: urlTargetType?
-                for (String url : urls) {
-                    this.createAndStoreClassItem(study, "StudyObject",
-                            new String[][] { { "type", objectType },
-                                    { "accessUrl", url },
-                                    { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC }, // TODO: check if true
-                                    { "displayTitle", objectType } });
-                }
-            }
+            String startDateStr = CtgConverter
+                    .normaliseDateString(ctgStudy.protocolSection.statusModule.startDateStruct.date);
+            study.setAttributeIfNotNull("startDate", startDateStr);
         }
     }
 
     /**
      * TODO
-     * 
+     *
+     * @param study
+     * @param ctgStudy
+     */
+    public void parseCompletionDates(Item study, CtgStudy ctgStudy) {
+        String studyEndDateStr = null;
+
+        if (Optional.ofNullable(ctgStudy.protocolSection.statusModule)
+                .map(StatusModule::getCompletionDateStruct)
+                .map(DateStruct::getDate)
+                .isPresent()) {
+            // Last data collection (all outcome measures) date
+            studyEndDateStr = CtgConverter
+                    .normaliseDateString(ctgStudy.protocolSection.statusModule.completionDateStruct.date);
+        } else if (Optional.ofNullable(ctgStudy.protocolSection.statusModule)
+                .map(StatusModule::getPrimaryCompletionDateStruct)
+                .map(DateStruct::getDate)
+                .isPresent()) {
+            // Last primary outcome measure data collection date
+            studyEndDateStr = CtgConverter
+                    .normaliseDateString(ctgStudy.protocolSection.statusModule.primaryCompletionDateStruct.date);
+        }
+
+        study.setAttributeIfNotNull("endDate", studyEndDateStr);
+    }
+
+    /**
+     * TODO
+     *
      * @param study
      * @throws Exception
      */
-    public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate firstPosted, LocalDate lastUpdate)
+    public void createAndStoreRegistryEntrySO(Item study, CtgStudy ctgStudy)
             throws Exception {
-        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-        String doDisplayTitle;
-        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-            doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
-        } else {
-            doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
-        }
+        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        if (!ConverterUtils.isBlankOrNull(nctID)) {
+            String dateCreated = null;
+            String datePublished = null;
+            String dateUpdated = null;
+            StatusModule statusModule = ctgStudy.protocolSection.statusModule;
 
-        /* Trial registry entry SO */
-        // TODO: publication year?
-        if (!ConverterUtils.isBlankOrNull(entryUrl)) {
+            // SO dates
+            if (statusModule != null) {
+                // Registry entry record created by sponsor/investigator and submitted to CTG
+                // date
+                if (!ConverterUtils.isBlankOrNull(statusModule.studyFirstSubmitDate)) {
+                    dateCreated = statusModule.studyFirstSubmitDate;
+                }
+
+                // Registry entry record posted on CTG date
+                if (statusModule.studyFirstPostDateStruct != null
+                        && !ConverterUtils.isBlankOrNull(statusModule.studyFirstPostDateStruct.date)) {
+                    datePublished = statusModule.studyFirstPostDateStruct.date;
+                }
+
+                // Registry entry record last update date
+                if (statusModule.lastUpdatePostDateStruct != null
+                        && !ConverterUtils.isBlankOrNull(statusModule.lastUpdatePostDateStruct.date)) {
+                    dateUpdated = statusModule.lastUpdatePostDateStruct.date;
+                }
+            }
+
+            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String doDisplayTitle;
+            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
+                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            } else {
+                doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            }
+
+            // Publication year
+            String publicationYear = null;
+            if (datePublished != null && datePublished.length() >= 4) {
+                publicationYear = datePublished.substring(0, 4);
+            }
+
+            /* Trial registry entry SO */
+            // TODO: publication year?
             this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                            { "datePublished", firstPosted != null ? firstPosted.toString() : null },
-                            { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
-                            { "accessUrl", entryUrl },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "dateCreated", dateCreated },
+                            { "datePublished", datePublished },
+                            { "dateUpdated", dateUpdated },
+                            { "publicationYear", publicationYear },
+                            { "accessUrl", ConverterCVT.CTG_STUDY_BASE_URL + nctID },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "displayTitle", doDisplayTitle } });
         }
@@ -1002,62 +1237,305 @@ public class CtgConverter extends BaseConverter {
 
     /**
      * TODO
-     * 
+     *
      * @param study
-     * @param studyResults
-     * @param entryURL
-     * @param completionDate
-     * @param primaryCompletionDate
-     * @param resultsFirstPosted
-     * @param lastUpdate
+     * @param ctgStudy
      * @throws Exception
      */
-    public void createAndStoreResultsSummaryDO(Item study, String studyResults, String entryURL,
-            LocalDate completionDate, LocalDate primaryCompletionDate, LocalDate resultsFirstPosted,
-            LocalDate lastUpdate) throws Exception {
+    public void createAndStoreResultsSummarySO(Item study, CtgStudy ctgStudy)
+            throws Exception {
+        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        if (ctgStudy.hasResults && !ConverterUtils.isBlankOrNull(nctID)) {
+            String dateCreated = null;
+            String datePublished = null;
+            String dateUpdated = null;
+            StatusModule statusModule = ctgStudy.protocolSection.statusModule;
 
-        // Using results field (yes/no) to create or not results summary SO
-        if (studyResults.equalsIgnoreCase("yes") && !ConverterUtils.isBlankOrNull(entryURL)
-                && resultsFirstPosted != null) {
-            // Constructing results URL by prepending results suffix to entry URL
-            String resultsURLLink = entryURL + "?tab=results";
+            // SO dates
+            if (statusModule != null) {
+                // Summary results record created by sponsor/investigator and submitted to CTG
+                // date
+                if (!ConverterUtils.isBlankOrNull(statusModule.resultsFirstSubmitDate)) {
+                    dateCreated = statusModule.resultsFirstSubmitDate;
+                }
+
+                // Summary results record posted on CTG date
+                if (statusModule.resultsFirstPostDateStruct != null
+                        && !ConverterUtils.isBlankOrNull(statusModule.resultsFirstPostDateStruct.date)) {
+                    datePublished = statusModule.resultsFirstPostDateStruct.date;
+                }
+
+                // Study record last update date, may or may not concern results summary info
+                if (statusModule.lastUpdatePostDateStruct != null
+                        && !ConverterUtils.isBlankOrNull(statusModule.lastUpdatePostDateStruct.date)) {
+                    dateUpdated = statusModule.lastUpdatePostDateStruct.date;
+                }
+            }
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyDisplayTitle = ConverterUtils.getAttrValue(study,
+                    "displayTitle");
             String doDisplayTitle;
             if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                doDisplayTitle = studyDisplayTitle + " - " +
+                        ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
-            // Results completed date
-            LocalDate resultsCompletedDate = null;
-            if (completionDate != null) {
-                resultsCompletedDate = completionDate;
-            } else if (primaryCompletionDate != null) {
-                resultsCompletedDate = primaryCompletionDate;
-            }
-
             // Publication year
             String publicationYear = null;
-            if (resultsFirstPosted != null) {
-                // TODO: handle errors
-                publicationYear = String.valueOf(resultsFirstPosted.getYear());
+            if (datePublished != null && datePublished.length() >= 4) {
+                publicationYear = datePublished.substring(0, 4);
             }
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "displayTitle", doDisplayTitle },
-                            { "dateCreated", resultsCompletedDate != null ? resultsCompletedDate.toString() : null },
-                            // Note: was ConverterCVT.DATE_TYPE_AVAILABLE before model change
-                            { "datePublished", resultsFirstPosted != null ? resultsFirstPosted.toString() : null },
-                            { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+                            { "dateCreated", dateCreated },
+                            { "datePublished", datePublished },
+                            { "dateUpdated", dateUpdated },
                             { "publicationYear", publicationYear },
-                            { "accessUrl", resultsURLLink },
-                            { "accessType", ConverterCVT.ACCESS_TYPE_PUBLIC },
+                            { "accessUrl", ConverterCVT.CTG_STUDY_BASE_URL + nctID + RESULTS_TAB_URL_SUFFIX },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
+        }
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param ctgStudy
+     * @throws Exception
+     */
+    public void parseLocations(Item study, CtgStudy ctgStudy) throws Exception {
+        ContactsLocationsModule contactsLocationsModule = ctgStudy.protocolSection.contactsLocationsModule;
+
+        // TODO: location contacts
+        if (contactsLocationsModule != null) {
+            List<Location> locations = contactsLocationsModule.locations;
+            if (locations != null && locations.size() > 0) {
+                for (Location loc : locations) {
+                    String facility = ConverterUtils.capitaliseAndReplaceCharBySpace(loc.facility, '_');
+                    Item location = this.createClassItem(study, "Location",
+                            new String[][] { { "countryName", loc.country },
+                                    { "cityName", loc.city },
+                                    { "facility", facility },
+                                    { "status", loc.status } });
+
+                    Item country = this.getCountry(loc.country);
+                    if (country != null) {
+                        this.handleReferencesAndCollections(country, location);
+                    }
+                    store(location);
+                }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param displayTitle
+     * @param objectType
+     * @param url
+     * @param dateCreated
+     * @param datePublished
+     * @throws Exception
+     */
+    public void createAndStoreStudyDocument(Item study, String displayTitle, String objectType, String url,
+            String dateCreated, String datePublished)
+            throws Exception {
+        this.createAndStoreClassItem(study, "StudyObject",
+                new String[][] { { "type", objectType },
+                        { "accessUrl", url },
+                        { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+                        { "dateCreated", dateCreated },
+                        { "datePublished", datePublished },
+                        { "displayTitle", displayTitle } });
+    }
+
+    /**
+     * TODO
+     *
+     * @param study
+     * @param studyDocuments
+     * @throws Exception
+     */
+    public void parseStudyDocuments(Item study, CtgStudy ctgStudy) throws Exception {
+        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+
+        if (!ConverterUtils.isBlankOrNull(nctID) && nctID.length() >= 2) {
+            if (Optional.ofNullable(ctgStudy.documentSection)
+                    .map(DocumentSection::getLargeDocumentModule)
+                    .map(LargeDocumentModule::getLargeDocs)
+                    .isPresent()) {
+
+                String nctSubDir = nctID.substring(nctID.length() - 2);
+
+                List<LargeDoc> studyDocuments = ctgStudy.documentSection.largeDocumentModule.largeDocs;
+                for (LargeDoc studyDoc : studyDocuments) {
+                    if (!ConverterUtils.isBlankOrNull(studyDoc.filename)) {
+                        String datePublished = null;
+                        if (!ConverterUtils.isBlankOrNull(studyDoc.uploadDate) && studyDoc.uploadDate.length() >= 10) { // YYYY-MM-DD
+                            datePublished = studyDoc.uploadDate.substring(0, 10);
+                        }
+
+                        String url = ConverterCVT.CTG_DOCUMENT_BASE_URL + nctSubDir + "/" + nctID + "/"
+                                + studyDoc.filename;
+
+                        // TODO: decide if one SO with multiple types or one SO per type
+                        if (studyDoc.hasIcf) {
+                            this.createAndStoreStudyDocument(study, studyDoc.label, ConverterCVT.O_TYPE_ICF, url,
+                                    studyDoc.date, datePublished);
+                        }
+                        if (studyDoc.hasProtocol) {
+                            this.createAndStoreStudyDocument(study, studyDoc.label, ConverterCVT.O_TYPE_PROT, url,
+                                    studyDoc.date, datePublished);
+                        }
+                        if (studyDoc.hasSap) {
+                            this.createAndStoreStudyDocument(study, studyDoc.label, ConverterCVT.O_TYPE_SAP, url,
+                                    studyDoc.date, datePublished);
+                        }
+                    } else {
+                        this.writeLog("Found a study document with no filename: " + studyDoc.uploadDate);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param ctgStudy
+     * @throws Exception
+     */
+    public void parseIPD(Item study, CtgStudy ctgStudy) throws Exception {
+        if (Optional.ofNullable(ctgStudy.protocolSection)
+                .map(ProtocolSection::getIpdSharingStatementModule)
+                .isPresent()) {
+            IpdSharingStatementModule ipdModule = ctgStudy.protocolSection.ipdSharingStatementModule;
+
+            String planToShareIPD = null;
+            if (!ConverterUtils.isBlankOrNull(ipdModule.ipdSharing)) {
+                planToShareIPD = WordUtils.capitalizeFully(ipdModule.ipdSharing);
+
+                if (ConverterUtils.isYes(planToShareIPD)) {
+                    StringBuilder dssSb = new StringBuilder();
+
+                    if (!ConverterUtils.isBlankOrNull(ipdModule.description)) {
+                        dssSb.append(ipdModule.description);
+
+                        if (!ipdModule.description.endsWith(".")) {
+                            dssSb.append(".");
+                        }
+                    }
+
+                    if (ipdModule.infoTypes != null && ipdModule.infoTypes.size() > 0) {
+                        dssSb.append(" Supporting documents that will be shared: ");
+                        for (int i = 0; i < ipdModule.infoTypes.size(); i++) {
+                            dssSb.append(ipdModule.infoTypes.get(i));
+                            if (i < ipdModule.infoTypes.size() - 1) {
+                                dssSb.append(", ");
+                            } else {
+                                dssSb.append(".");
+                            }
+                        }
+                    }
+
+                    if (!ConverterUtils.isBlankOrNull(ipdModule.timeFrame)) {
+                        dssSb.append(" Time frame: ");
+                        dssSb.append(ipdModule.timeFrame);
+
+                        if (!ipdModule.timeFrame.endsWith(".")) {
+                            dssSb.append(".");
+                        }
+                    }
+
+                    if (!ConverterUtils.isBlankOrNull(ipdModule.accessCriteria)) {
+                        dssSb.append(" Access criteria : ");
+                        dssSb.append(ipdModule.accessCriteria);
+
+                        if (!ipdModule.accessCriteria.endsWith(".")) {
+                            dssSb.append(".");
+                        }
+                    }
+
+                    study.setAttributeIfNotNull("dataSharingStatement", dssSb.toString());
+
+                    /* StudyObject: IPD */
+                    String ipdUrl = ipdModule.url;
+                    String objectId = null;
+
+                    // Attempting to find IPD URL in AvailIpd list
+                    if (ConverterUtils.isBlankOrNull(ipdUrl)) {
+                        if (Optional.ofNullable(ctgStudy.protocolSection)
+                                .map(ProtocolSection::getReferencesModule)
+                                .map(ReferencesModule::getAvailIpds)
+                                .map(availIpds -> !availIpds.isEmpty())
+                                .orElse(false)) {
+
+                            for (AvailIpd availIpd : ctgStudy.protocolSection.referencesModule.availIpds) {
+
+                                if (!ConverterUtils.isBlankOrNull(availIpd.type)
+                                        && !ConverterUtils.isBlankOrNull(availIpd.url)
+                                        && (availIpd.type.toLowerCase().contains("individual")
+                                                || availIpd.type.toLowerCase().equals("ipd"))) {
+
+                                    if (ConverterUtils.isBlankOrNull(ipdUrl)) {
+                                        ipdUrl = availIpd.url;
+                                        objectId = availIpd.id;
+                                    } else if (ipdUrl.equalsIgnoreCase(availIpd.url)) {
+                                        this.writeLog(
+                                                "Warning: found a different IPD URL in a study which already has one: "
+                                                        + availIpd.url);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (!ConverterUtils.isBlankOrNull(ipdUrl)) {
+                        Item ipdDO = this.createAndStoreClassItem(study, "StudyObject",
+                                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_IPD },
+                                        { "objectId", objectId },
+                                        { "type", ConverterCVT.O_TYPE_IPD },
+                                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
+                                        { "accessUrl", ipdUrl } });
+                    }
+                } else { // Other fields are empty
+                    study.setAttributeIfNotNull("dataSharingStatement", ipdModule.description);
+                }
+            }
+
+            study.setAttributeIfNotNull("planToShareIPD", planToShareIPD);
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param ctgStudy
+     * @throws Exception
+     */
+    public void parseReferences(Item study, CtgStudy ctgStudy) throws Exception {
+        if (Optional.ofNullable(ctgStudy.protocolSection)
+                .map(ProtocolSection::getReferencesModule)
+                .map(ReferencesModule::getReferences)
+                .map(references -> !references.isEmpty())
+                .orElse(false)) {
+            for (Reference ref : ctgStudy.protocolSection.referencesModule.references) {
+                if (!ConverterUtils.isBlankOrNull(ref.pmid)) {
+                    this.createAndStoreClassItem(study, "Publication",
+                            new String[][] { { "pubMedId", ref.pmid } });
+                }
+            }
         }
     }
 
@@ -1127,6 +1605,16 @@ public class CtgConverter extends BaseConverter {
                     " out of bounds this study's values (length: " + lineValues.length + ")");
             return null;
         }
+    }
+
+    /**
+     * Clean value and strip
+     * 
+     * @param s
+     * @return
+     */
+    public String cleanValue(String s) {
+        return this.cleanValue(s, true);
     }
 
     public String cleanValue(String s, boolean strip) {
