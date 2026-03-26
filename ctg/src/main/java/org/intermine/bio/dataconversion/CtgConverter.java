@@ -95,29 +95,6 @@ public class CtgConverter extends BaseConverter {
             }
         }
 
-        // // CtgStudy object reader
-        // ObjectReader<CtgStudy> objectReader =
-        // JSONFactory.getDefaultObjectReaderProvider()
-        // .getObjectReader(CtgStudy.class);
-
-        // try (JSONReader jr = JSONReader.of(reader)) {
-        // if (!jr.nextIfArrayStart()) {
-        // throw new IllegalStateException("JSON does not start with array");
-        // }
-
-        // while (!jr.nextIfArrayEnd()) {
-        // try {
-        // CtgStudy jsonStudy = objectReader.readObject(jr, null, null, 0L); // 0L = no
-        // features
-        // this.parseAndStoreTrial(jsonStudy);
-        // } catch (JSONException e) {
-        // this.writeLog("Failed to read JSON study: " + e);
-        // }
-        // }
-        // } catch (Exception e) {
-        // e.printStackTrace();
-        // }
-
         this.storeCountries();
         this.stopLogging();
         /* BufferedReader is closed in FileConverterTask.execute() */
