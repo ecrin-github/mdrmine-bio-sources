@@ -100,8 +100,12 @@ public class ConverterUtils {
             int lastEndOfLine = currentEndOfLine;
             // lastIndexOf starts looking backwards from given index
             currentEndOfLine = string.lastIndexOf("\n", lastEndOfLine - 1);
-            String lastLine = string.substring(currentEndOfLine + 1, lastEndOfLine);
-            lines.add(0, lastLine);
+            if (currentEndOfLine != -1) {
+                String lastLine = string.substring(currentEndOfLine + 1, lastEndOfLine);
+                lines.add(0, lastLine);
+            } else {
+                break;
+            }
         }
         return lines;
     }
@@ -139,6 +143,13 @@ public class ConverterUtils {
             }
         }
 
+        return false;
+    }
+
+    public static boolean isYes(String s) {
+        if (!ConverterUtils.isBlankOrNull(s) && s.equalsIgnoreCase("yes")) {
+            return true;
+        }
         return false;
     }
 
