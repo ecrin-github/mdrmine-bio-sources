@@ -759,12 +759,6 @@ public class EuctrConverter extends CacheConverter {
     public void parseHealthConditions(Item study, String hcFreetext, List<String> hcCodes, List<String> hcKeywords)
             throws Exception {
         if (!this.existingStudy()) {
-            // Free text
-            if (!ConverterUtils.isBlankOrNull(hcFreetext)) {
-                this.createAndStoreClassItem(study, "StudyCondition",
-                        new String[][] { { "originalValue", WordUtils.capitalizeFully(hcFreetext, ' ', '-') } });
-            }
-
             Set<String> seenOriginalValues = new HashSet<String>(); // Avoid adding duplicates
 
             // HC Codes (MeSH tree)
@@ -820,6 +814,19 @@ public class EuctrConverter extends CacheConverter {
                     } else {
                         this.writeLog("Failed to match health condition keyword: " + hcKw);
                     }
+                }
+            }
+
+            // Free text
+            // Note: adding this at the end because there can be duplicates between HCs and
+            // free text, in which it's preferable to use HCs with CT codes
+            if (!ConverterUtils.isBlankOrNull(hcFreetext)) {
+                String freeTextValue = WordUtils.capitalizeFully(hcFreetext, ' ', '-');
+
+                if (!seenOriginalValues.contains(freeTextValue)) {
+                    this.createAndStoreClassItem(study, "StudyCondition",
+                            new String[][] { { "originalValue", freeTextValue } });
+                    seenOriginalValues.add(freeTextValue);
                 }
             }
         }
