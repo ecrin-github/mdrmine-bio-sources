@@ -17,7 +17,6 @@ import java.util.stream.Collectors;
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
-import org.intermine.model.bio.IPDDataset;
 import org.intermine.xml.full.Item;
 
 import com.alibaba.fastjson2.JSON;
@@ -25,7 +24,6 @@ import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONFactory;
 import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.reader.ObjectReader;
-import com.opencsv.CSVReader;
 
 /**
  * 
@@ -1517,41 +1515,6 @@ public class CtgConverter extends BaseConverter {
     }
 
     /**
-     * TODO
-     * 
-     * @param s
-     * @return
-     */
-    public static String cleanLocationSubstring(String s) {
-        s = s.toLowerCase();
-        if (!s.contains("multiple locations") && !s.contains("many locations") && !s.contains("multiple sites")
-                && !s.contains("many facilities")) {
-            return WordUtils.capitalizeFully(s);
-        }
-        return "";
-    }
-
-    /**
-     * TODO
-     * 
-     * @param c1 either part of the country (e.g. "Korea"), or city name
-     * @param c2 either part of the country (e.g. "Republic Of") or full country
-     *           name
-     * @return
-     */
-    public static String cleanCountryString(String c1, String c2) {
-        String countryName = "";
-        if (c2.equalsIgnoreCase("Republic Of") || c2.equalsIgnoreCase("Islamic Republic of")
-                || c2.equalsIgnoreCase("The Democratic Republic of the")
-                || c2.equalsIgnoreCase("The Former Yugoslav Republic of")) {
-            countryName = WordUtils.capitalizeFully(c1 + ", " + c2, ' ', '-');
-        } else {
-            countryName = c2;
-        }
-        return countryName;
-    }
-
-    /**
      * Add -01 prefix to date only composed of year + month
      * 
      * @param dateString
@@ -1562,26 +1525,6 @@ public class CtgConverter extends BaseConverter {
             dateString = dateString + "-01";
         }
         return dateString;
-    }
-
-    /**
-     * Get field value from array of values using a field's position-lookup Map,
-     * value is also cleaned.
-     * 
-     * @param lineValues the list of all values for a line in the data file
-     * @param field      the name of the field to get the value of
-     * @return the cleaned value of the field
-     * @see //#cleanValue()
-     */
-    public String getAndCleanValue(String[] lineValues, String field) {
-        int fieldInd = this.fieldsToInd.get(field);
-        if (fieldInd < lineValues.length) {
-            return this.cleanValue(lineValues[this.fieldsToInd.get(field)], true);
-        } else {
-            this.writeLog("Field index " + fieldInd +
-                    " out of bounds this study's values (length: " + lineValues.length + ")");
-            return null;
-        }
     }
 
     /**
@@ -1601,25 +1544,5 @@ public class CtgConverter extends BaseConverter {
             return ConverterUtils.removeQuotes(s).strip();
         }
         return ConverterUtils.removeQuotes(s);
-    }
-
-    /**
-     * TODO
-     * 
-     * @return map of data file field names and their corresponding column index
-     */
-    public Map<String, Integer> getHeaders(CSVReader csvReader) throws Exception {
-        Map<String, Integer> fieldsToInd = new HashMap<String, Integer>();
-        String[] fields = csvReader.readNext();
-
-        if (fields.length == 0) {
-            throw new Exception("CTG data file is empty (failed getting headers)");
-        }
-
-        for (int ind = 0; ind < fields.length; ind++) {
-            fieldsToInd.put(fields[ind], ind);
-        }
-
-        return fieldsToInd;
     }
 }
