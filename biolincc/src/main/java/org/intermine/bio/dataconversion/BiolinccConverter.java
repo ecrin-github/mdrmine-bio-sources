@@ -488,13 +488,14 @@ public class BiolinccConverter extends BaseConverter {
         if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
             Set<String> studyConditions = Stream.of(conditionsStr.split(","))
                     .map(String::strip)
+                    .map(c -> WordUtils.capitalizeFully(c, ' ', '-'))
                     .collect(Collectors.toSet());
 
             Iterator<String> conditionsIter = studyConditions.iterator();
             while (conditionsIter.hasNext()) {
                 this.createAndStoreClassItem(study, "StudyCondition",
                         new String[][] {
-                                { "originalValue", WordUtils.capitalizeFully(conditionsIter.next(), ' ', '-') } });
+                                { "originalValue", conditionsIter.next() } });
             }
         }
     }
