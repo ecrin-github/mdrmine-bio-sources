@@ -42,6 +42,7 @@ public class EuctrConverter extends CacheConverter {
     private static final String DATASET_TITLE = "EUCTR_2026-03-04";
     private static final String DATA_SOURCE_NAME = "EUCTR";
     private static final String DATA_SOURCE_DESC = "EU Clinical Trials Register";
+    private static final String REG_NAME_CTIS = "clinical trials information system";
 
     private static final Pattern P_TITLE_NA = Pattern.compile("^-|_|N\\/?A$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_HC_CODE = Pattern.compile(
@@ -56,6 +57,10 @@ public class EuctrConverter extends CacheConverter {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern P_ID_NA = Pattern.compile("^\\h*(?:n[\\.\\/]?(?:a|d)\\.?|not\\h*.*|-+|none)\\h*$",
             Pattern.CASE_INSENSITIVE); // N/A (all forms) or - or none
+    // Issuing authority match
+    // Does not match "EU ET No.", matches "EUROPA TRIAL" and "Master Protocol
+    // EU-SolidAct v2.0" (both should only appear once in the data)
+    public static final Pattern P_EUCTR_ISS_AUTH = Pattern.compile(".*EU\\s*.*(?:CT|Clinical|trial).*");
     private static final Set<String> dummyIDs = Set.of("ISRCTN00000000", "NCT00000000", "ISRCTN12345678",
             "NCT12345678");
 
@@ -138,18 +143,50 @@ public class EuctrConverter extends CacheConverter {
             this.currentCountry = null;
 
             String mainId = this.getAndCleanValue(mainInfo, "trialId");
+            String ctisID = null;
 
             // Handling ID
             // TODO: handle "Outside-EU/EEA" ID suffix
             if (mainId.length() != 17) {
                 this.writeLog("Unexpected length for study id: " + mainId);
             } else {
+                // Always EUCTR except in 20251208.xml where its CTIS
+                String regName = this.getAndCleanValue(mainInfo, "regName");
+                if (!ConverterUtils.isBlankOrNull(regName) && REG_NAME_CTIS.equalsIgnoreCase(regName)) {
+                    boolean foundEuctr = false;
+                    ctisID = mainId.substring(0, 14); // Removing resubmission suffix
+
+                    // TODO: Temporary, proper handling of IDs to be done later
+                    // If reg_name is CTIS, attempting to find an EUCTR ID, if fails, skip trial
+                    List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
+                    for (EuctrSecondaryId secIdObj : secondaryIDs) {
+                        String secId = secIdObj.getSecondaryId();
+
+                        if (!ConverterUtils.isBlankOrNull(secId)) {
+                            String issAuth = secIdObj.getIssuingAuthority();
+                            Matcher mEUCTR = P_EUCTR_ISS_AUTH.matcher(issAuth);
+
+                            if (mEUCTR.matches()) {
+                                mainId = secId; // Replacing mainId by found EUCTR ID
+                                foundEuctr = true;
+                                break; // TODO: handle finding multiple EUCTR IDs
+                            }
+                        }
+                    }
+
+                    if (!foundEuctr) {
+                        return;
+                    }
+                }
+
                 // ID without country code suffix
                 String cleanedID = mainId.substring(0, 14);
-                String countryCode = mainId.substring(15, 17);
 
-                // Adding EUCTR prefix
-                // cleanedID = "EUCTR" + cleanedID;
+                // TODO: temporary
+                String countryCode = null;
+                if (mainId.length() == 17) {
+                    countryCode = mainId.substring(15, 17);
+                }
 
                 if (this.studies.containsKey(cleanedID)) { // Adding country-specific info to existing trial
                     this.existingStudy = this.studies.get(cleanedID);
@@ -175,8 +212,10 @@ public class EuctrConverter extends CacheConverter {
                 if (!this.existingStudy()) {
                     // study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
                     study.setAttributeIfNotNull("euctrID", this.currentTrialID);
-                    this.createAndStoreStudyIdentifier(study, this.currentTrialID, ConverterCVT.ID_TYPE_TRIAL_REGISTRY,
-                            trialUrl);
+                    study.setAttributeIfNotNull("primaryIdentifier", ctisID); // TODO (see above)
+                    // this.createAndStoreStudyIdentifier(study, this.currentTrialID,
+                    // ConverterCVT.ID_TYPE_TRIAL_REGISTRY,
+                    // trialUrl);
                 }
 
                 // TODO: make title object
@@ -195,9 +234,6 @@ public class EuctrConverter extends CacheConverter {
                 if (!this.existingStudy()) {
                     this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
                 }
-
-                // Unused, name of registry, seems to always be EUCTR
-                String regName = this.getAndCleanValue(mainInfo, "regName");
 
                 // "Date on which this record was first entered in the EudraCT database" (from
                 // trials-full.txt dat format)

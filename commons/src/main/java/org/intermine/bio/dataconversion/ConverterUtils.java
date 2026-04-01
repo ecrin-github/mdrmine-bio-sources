@@ -49,9 +49,9 @@ public class ConverterUtils {
      */
     public static final Pattern P_PUBMED_ID = Pattern.compile(".*pubmed.*\\/([^?\\/]+).*");
     public static final Pattern P_ID_AT_END_OF_URL = Pattern.compile(".*\\/([^?\\/]+).*");
+    // Both EUCTR and CTIS (they might have the same format)
     public static final Pattern P_EU_ID = Pattern
-            .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?"); // Both EUCTR and CTIS (they
-                                                                                       // might have the same format)
+            .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?");
     public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
     public static final Pattern P_WHO_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
     // public static final Pattern P_ANZCTR_ID = Pattern.compile();
