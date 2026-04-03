@@ -71,17 +71,12 @@ public class CtisConverter extends CacheConverter {
     }
 
     /**
-     * Process CTIS data file by iterating on each line of the data file.
-     * Method called by InterMine.
-     * {@inheritDoc}
+     * TODO
+     * 
+     * @param reader
+     * @throws Exception
      */
-    public void process(Reader reader) throws Exception {
-        /*
-         * Opened BufferedReader is passed as argument (from
-         * FileConverterTask.execute())
-         */
-        this.startLogging("ctis");
-
+    public void parseData(Reader reader) throws Exception {
         final CSVParser parser = new CSVParserBuilder()
                 .withSeparator(',')
                 .withQuoteChar('"')
@@ -115,11 +110,6 @@ public class CtisConverter extends CacheConverter {
         }
 
         csvReader.close();
-
-        this.storeAllItems();
-
-        this.stopLogging();
-        /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
     /**
@@ -271,7 +261,7 @@ public class CtisConverter extends CacheConverter {
      * @param trialID
      * @return
      */
-    public boolean parseTrialID(Item study, String trialID) {
+    public boolean parseTrialID(Item study, String trialID) throws Exception {
         boolean continueParsing = false;
 
         if (trialID.length() == 17) {
@@ -632,9 +622,7 @@ public class CtisConverter extends CacheConverter {
         // TODO: separate multiple conditions somehow?
         // TODO: match with MedDRA/other medical terms
         if (!ConverterUtils.isBlankOrNull(studyConditions)) {
-            this.createAndStoreClassItem(study, "StudyCondition",
-                    new String[][] { { "originalValue", studyConditions },
-                            { "originalCTType", ConverterCVT.CV_MEDDRA } });
+            this.linkStudyToStudyCondition(study, studyConditions, null, null);
         }
     }
 

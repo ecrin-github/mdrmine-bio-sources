@@ -34,7 +34,7 @@ import java.util.stream.Stream;
  * 
  * @author
  */
-public class BiolinccConverter extends BaseConverter {
+public class BiolinccConverter extends CacheConverter {
     //
     private static final String DATASET_TITLE = "BioLINCC full";
     private static final String DATA_SOURCE_NAME = "BioLINCC";
@@ -66,17 +66,12 @@ public class BiolinccConverter extends BaseConverter {
     }
 
     /**
+     * TODO
      * 
-     *
-     * {@inheritDoc}
+     * @param reader
+     * @throws Exception
      */
-    public void process(Reader reader) throws Exception {
-        /*
-         * Opened BufferedReader is passed as argument (from
-         * FileConverterTask.execute())
-         */
-        this.startLogging("biolincc");
-
+    public void parseData(Reader reader) throws Exception {
         final CSVParser parser = new CSVParserBuilder()
                 .withSeparator(',')
                 // TODO check if withquotechar working, otherwise needs removeQuotes
@@ -113,24 +108,27 @@ public class BiolinccConverter extends BaseConverter {
         }
 
         csvReader.close();
-
-        this.stopLogging();
-        /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
     public void parseAndStoreTrial(String[] lineValues) throws Exception {
         Item study = createItem("Study");
+
+        /*
+         * Parsing ClinicalTrials.gov url list, sets nctID (if any found), hence doing
+         * this at the beginning
+         */
+        String clinicalTrialUrls = this.getAndCleanValue(lineValues, "Clinical trial urls");
+        List<String> ctgUrls = this.parseClinicalTrialUrls(study, clinicalTrialUrls);
+
+        /* StudyIdentifier: BioLINCC ID */
+        String biolinccID = this.getAndCleanValue(lineValues, "Accession Number");
+        this.parseID(study, biolinccID);
 
         /* Study title */
         String studyName = this.getAndCleanValue(lineValues, "Study Name");
         // Study acronym
         String acronym = this.getAndCleanValue(lineValues, "Acronym");
         this.parseStudyTitle(study, studyName, acronym);
-
-        // Study ID Note: parsing ID after title to log title if ID is empty
-        /* StudyIdentifier: BioLINCC ID */
-        String biolinccID = this.getAndCleanValue(lineValues, "Accession Number");
-        this.parseID(study, biolinccID);
 
         // Unused, not in our model? (says if biolincc study or not)
         String collectionType = this.getAndCleanValue(lineValues, "Collection Type");
@@ -146,13 +144,9 @@ public class BiolinccConverter extends BaseConverter {
         // Unused, not in our model
         String covidStudyClassification = this.getAndCleanValue(lineValues, "COVID study classification");
 
-        /* CTG registry entries */
-        String clinicalTrialUrls = this.getAndCleanValue(lineValues, "Clinical trial urls");
-        // study.setAttributeIfNotNull("testField3", clinicalTrialUrls);
-
         /* Registry entry SOs */
         // Also sets Study.nctID (should probably be moved outside of this function)
-        this.createAndStoreRegistryEntryDO(study, biolinccUrl, clinicalTrialUrls);
+        this.createAndStoreRegistryEntryDO(study, biolinccUrl, ctgUrls);
 
         /* Study age IC */
         String cohortType = this.getAndCleanValue(lineValues, "Cohort type");
@@ -168,7 +162,6 @@ public class BiolinccConverter extends BaseConverter {
 
         // TODO: unused free text
         String design = this.getAndCleanValue(lineValues, "Design");
-        // study.setAttributeIfNotNull("testField1", design);
 
         // Unused, "Has Specimens" and "Has Study Datasets" have the same information
         String availableResources = this.getAndCleanValue(lineValues, "Available resources");
@@ -179,7 +172,8 @@ public class BiolinccConverter extends BaseConverter {
         String specificConsentRestrictions = this.getAndCleanValue(lineValues, "Specific Consent Restrictions");
 
         /* StudyObject + IPDDataset for clinical data */
-        String commercialUseDataRestrictions = this.getAndCleanValue(lineValues, "Commercial use data restrictions");
+        String commercialUseDataRestrictions = this.getAndCleanValue(lineValues,
+                "Commercial use data restrictions");
         String dataRestrictionsBasedOnAreaOfResearch = this.getAndCleanValue(lineValues,
                 "Data restrictions based on area of research");
         String irbApprovalRequiredForData = this.getAndCleanValue(lineValues, "IRB approval required for data");
@@ -202,7 +196,8 @@ public class BiolinccConverter extends BaseConverter {
                 "Non-genetic use specimen restrictions based on area of use");
         String geneticUseAreaOfResearchRestrictions = this.getAndCleanValue(lineValues,
                 "Genetic use area of research restrictions");
-        String geneticUseOfSpecimensAllowed = this.getAndCleanValue(lineValues, "Genetic use of specimens allowed?");
+        String geneticUseOfSpecimensAllowed = this.getAndCleanValue(lineValues,
+                "Genetic use of specimens allowed?");
         String materialTypes = this.getAndCleanValue(lineValues, "Material Types");
         String studyOpenDateSpecimens = this.getAndCleanValue(lineValues, "Study Open Date (Specimens)");
         String hasSpecimens = this.getAndCleanValue(lineValues, "Has Specimens");
@@ -244,13 +239,10 @@ public class BiolinccConverter extends BaseConverter {
 
         String publicationUrls = this.getAndCleanValue(lineValues, "Publication urls");
         String publications = this.getAndCleanValue(lineValues, "Publications");
-        // study.setAttributeIfNotNull("testField6", publicationUrls);
-        // study.setAttributeIfNotNull("testField7", publications);
         this.parsePublications(study, publicationUrls, publications);
 
         // TODO: use for Relationship items (for now not really possible)
         String relatedStudies = this.getAndCleanValue(lineValues, "Related studies");
-        // study.setAttributeIfNotNull("testField2", relatedStudies);
 
         /* Study website SO */
         String studyWebsite = this.getAndCleanValue(lineValues, "Study Website");
@@ -264,7 +256,13 @@ public class BiolinccConverter extends BaseConverter {
         String studyType = this.getAndCleanValue(lineValues, "Study type");
         this.parseStudyType(study, studyType);
 
-        store(study);
+        // Store study in cache
+        if (this.currentTrialID != null) {
+            this.studies.put(this.currentTrialID, study);
+        } else {
+            this.studiesWithNoID.add(study);
+        }
+
         this.currentTrialID = null;
     }
 
@@ -276,9 +274,12 @@ public class BiolinccConverter extends BaseConverter {
      */
     public void parseID(Item study, String biolinccID) throws Exception {
         if (!ConverterUtils.isBlankOrNull(biolinccID)) {
+            if (this.currentTrialID == null) { // Before StudyIdentifier for caching in map
+                this.currentTrialID = biolinccID;
+            }
+
             this.createAndStoreClassItem(study, "StudyIdentifier",
                     new String[][] { { "identifierValue", biolinccID } });
-            this.currentTrialID = biolinccID;
         } else {
             this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "displayTitle"));
         }
@@ -429,7 +430,7 @@ public class BiolinccConverter extends BaseConverter {
         return new ArrayList<String>(parsedUrls);
     }
 
-    public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, String clinicalTrialUrls)
+    public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, List<String> ctgUrls)
             throws Exception {
         // Display title
         String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
@@ -451,7 +452,6 @@ public class BiolinccConverter extends BaseConverter {
         }
 
         /* CTG Registry entry SOs */
-        List<String> ctgUrls = this.parseClinicalTrialUrls(study, clinicalTrialUrls);
         for (String ctgUrl : ctgUrls) {
             this.createAndStoreClassItem(study, "StudyObject",
                     new String[][] { { "displayTitle", doDisplayTitle },
@@ -493,9 +493,7 @@ public class BiolinccConverter extends BaseConverter {
 
             Iterator<String> conditionsIter = studyConditions.iterator();
             while (conditionsIter.hasNext()) {
-                this.createAndStoreClassItem(study, "StudyCondition",
-                        new String[][] {
-                                { "originalValue", conditionsIter.next() } });
+                this.linkStudyToStudyCondition(study, conditionsIter.next(), null, null);
             }
         }
     }

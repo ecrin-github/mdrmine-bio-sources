@@ -41,6 +41,7 @@ import org.intermine.objectstore.query.Results;
 import org.intermine.objectstore.query.ResultsRow;
 import org.intermine.util.PropertiesUtil;
 import org.intermine.xml.full.Item;
+import org.intermine.xml.full.ReferenceList;
 
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
@@ -55,6 +56,8 @@ import com.opencsv.exceptions.CsvMalformedLineException;
  *         Note: this.getModel() to access model
  */
 public abstract class BaseConverter extends BioFileConverter {
+    protected String dataSourceName = "";
+    protected String dataSetTitle = "";
     private String countriesFP = "";
     private String countriesAltNamesFP = "";
     private String logDir = "";
@@ -67,23 +70,8 @@ public abstract class BaseConverter extends BioFileConverter {
     public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
             String dataSetTitle) {
         super(writer, model, dataSourceName, dataSetTitle);
-        this.initObjectStore();
-    }
-
-    public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
-            String dataSetTitle, String licence) {
-        super(writer, model, dataSourceName, dataSetTitle, licence);
-        this.initObjectStore();
-    }
-
-    public BaseConverter(ItemWriter writer, Model model, String dataSourceName,
-            String dataSetTitle, String licence, boolean storeOntology) {
-        super(writer, model, dataSourceName, dataSetTitle, licence, storeOntology);
-        this.initObjectStore();
-    }
-
-    public BaseConverter(ItemWriter writer, Model model) {
-        super(writer, model);
+        this.dataSourceName = dataSourceName;
+        this.dataSetTitle = dataSetTitle;
         this.initObjectStore();
     }
 
@@ -145,7 +133,11 @@ public abstract class BaseConverter extends BioFileConverter {
      * Close opened log writer.
      */
     public void stopLogging() throws IOException {
-        this.logger.stopLogging();
+        if (this.logger != null) {
+            this.logger.stopLogging();
+        } else {
+            System.out.println("Attempted to stop logging on a null logger");
+        }
     }
 
     /**
@@ -562,6 +554,60 @@ public abstract class BaseConverter extends BioFileConverter {
         }
 
         return foundRD;
+    }
+
+    /**
+     * TODO
+     * InterMine does not provide such a method
+     * Note: items (reference ids) in collections are stored in a list instead of a set for some reason
+     */
+    public boolean removeItemFromCollection(Item item, Item itemToRemove) throws Exception {
+        boolean success = false;
+
+        if (item == null) {
+            throw new Exception("Item with collection is null");
+        }
+
+        if (itemToRemove == null) {
+            throw new Exception("Item to remove from collection is null");
+        }
+
+        ReferenceDescriptor rd = this.getReferenceDescriptorInItemAOfItemB(item, itemToRemove);
+        if (rd == null) {
+            throw new Exception("Couldn't find collection of " + this.getClassDescriptor(itemToRemove).getSimpleName() + " in " + this.getClassDescriptor(item).getSimpleName());
+        }
+        if (!rd.isCollection()) {
+            throw new Exception("Item to remove from collection is null");
+        }
+
+        String collectionName = rd.getName();
+        ReferenceList collection = item.getCollection(collectionName);
+        if (collection == null) {   // Shouldn't be null since getCollection() throws error before
+            throw new Exception("Attempted to remove an item from an empty (uninitialised) collection (" + collectionName + ")");
+        }
+
+        List<String> refIds = collection.getRefIds();
+        String itemToRemoveId = itemToRemove.getIdentifier();
+
+        if (refIds == null || refIds.size() == 0) {
+            throw new Exception("Attempted to remove an item from an empty collection (" + collectionName + ")");
+        }
+
+        Iterator<String> it = refIds.iterator();
+        while (it.hasNext()) {
+            if (itemToRemoveId.equals(it.next())) {
+                it.remove();
+                success = true;
+                break;
+            }
+        }
+
+        // TODO: exception if not found?
+        if (success) {
+            item.setCollection(collectionName, refIds);
+        }
+
+        return success;
     }
 
     /**

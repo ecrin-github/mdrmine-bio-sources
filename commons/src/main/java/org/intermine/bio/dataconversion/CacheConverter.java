@@ -5,6 +5,7 @@ import org.intermine.metadata.Model;
 import org.intermine.metadata.ReferenceDescriptor;
 import org.intermine.xml.full.Item;
 
+import java.io.Reader;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -20,13 +21,16 @@ public abstract class CacheConverter extends BaseConverter {
 
     // Cache of studies, key is primary identifier (not Item or DB id)
     protected Map<String, Item> studies = new HashMap<String, Item>();
+    protected List<Item> studiesWithNoID = new ArrayList<Item>();
     // Study-related classes
     protected Map<String, List<Item>> studyConditions = new HashMap<String, List<Item>>();
+    protected Map<CompositeKey, Item> allConditions = new HashMap<CompositeKey, Item>();
     protected Map<String, List<Item>> studyCountries = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> countries = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyFeatures = new HashMap<String, List<Item>>();
     protected Map<String, List<Item>> studyIdentifiers = new HashMap<String, List<Item>>();
-    protected Map<String, List<Item>> dataSources = new HashMap<String, List<Item>>();
+    protected Map<String, List<Item>> dataSources = new HashMap<String, List<Item>>();  // TODO?
+    protected Map<String, List<Item>> publications = new HashMap<String, List<Item>>();
     // SOs
     protected Map<String, List<Item>> objects = new HashMap<String, List<Item>>();
     // SO-related maps
@@ -47,22 +51,29 @@ public abstract class CacheConverter extends BaseConverter {
         this.initObjectStore();
     }
 
-    public CacheConverter(ItemWriter writer, Model model, String dataSourceName,
-            String dataSetTitle, String licence) {
-        super(writer, model, dataSourceName, dataSetTitle, licence);
-        this.initObjectStore();
+    /**
+     * Method called by InterMine
+     *
+     * {@inheritDoc}
+     */
+    public void process(Reader reader) throws Exception {
+        /* Opened BufferedReader is passed as argument (from FileConverterTask.execute()) */
+        this.startLogging(this.dataSourceName);
+        this.loadCountries();
+
+        // Parsing in subclass
+        this.parseData(reader);
+
+        this.storeCountries();
+        this.storeAllItems();
+        this.stopLogging(); // TODO: ideally should be in same method as startLogging()
+        /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
-    public CacheConverter(ItemWriter writer, Model model, String dataSourceName,
-            String dataSetTitle, String licence, boolean storeOntology) {
-        super(writer, model, dataSourceName, dataSetTitle, licence, storeOntology);
-        this.initObjectStore();
-    }
-
-    public CacheConverter(ItemWriter writer, Model model) {
-        super(writer, model);
-        this.initObjectStore();
-    }
+    /**
+     * TODO
+     */
+    protected abstract void parseData(Reader reader) throws Exception;
 
     /**
      * 
@@ -123,6 +134,34 @@ public abstract class CacheConverter extends BaseConverter {
 
     /**
      * TODO
+     */
+    public Item linkStudyToStudyCondition(Item study, String term, String code, String terminology) throws Exception {
+        Item studyCondition = null;
+
+        CompositeKey k = new CompositeKey(term, code);
+
+        if (this.allConditions.containsKey(k)) {
+            studyCondition = this.allConditions.get(k);
+        } else { // Create StudyCondition
+            studyCondition = this.createClassItem(study, "StudyCondition",
+                new String[][] { { "term", term }, { "code", code }, { "terminology", terminology } });
+
+            // Add to map (using composite key) with all StudyConditions
+            this.allConditions.put(k, studyCondition);
+        }
+
+        if (studyCondition != null) {
+            // Add StudyCondition to collection in Study
+            this.handleReferencesAndCollections(study, studyCondition);
+            // Storing in cache, even if the StudyCondition already existed, because Studies and its linked items can be removed from item maps later
+            this.storeClassItem(study, studyCondition);
+        }
+
+        return studyCondition;
+    }
+
+    /**
+     * TODO
      * 
      * @param field name of field for comparison to find the item
      * @param value value for comparison to find the item, should be unique!
@@ -152,21 +191,38 @@ public abstract class CacheConverter extends BaseConverter {
     public void storeAllItems() throws Exception {
         List<Map<String, List<Item>>> itemMaps = Arrays.asList(
                 this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers,
-                this.dataSources,
+                this.dataSources, this.publications,
                 this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics,
-                this.objects, this.relationships);
+                this.objects, this.relationships, this.datasets, this.biosamples);
+
+        this.writeLog("Storing all items");
+
+        // Used to check for duplicates (right now, useful for Studies and StudyConditions)
+        HashSet<String> seenIds;
 
         for (Map<String, List<Item>> itemMap : itemMaps) {
+            seenIds = new HashSet<String>(); // New set for each map, to avoid constructing a huge set with all item IDs
             for (List<Item> items : itemMap.values()) {
                 for (Item item : items) {
-                    store(item);
+                    if (!seenIds.contains(item.getIdentifier())) {
+                        store(item);
+                        seenIds.add(item.getIdentifier());
+                    }
                 }
             }
         }
 
-        // TODO: check for duplicates and don't store them
-        HashSet<String> seenIds = new HashSet<String>();
+        seenIds = new HashSet<String>(); // For studies
+
+        // TODO: check for duplicates? (as in, with the various studies IDs) and don't store them
         for (Item study : this.studies.values()) {
+            if (!seenIds.contains(study.getIdentifier())) {
+                store(study);
+                seenIds.add(study.getIdentifier());
+            }
+        }
+        // Adding studies with no ID
+        for (Item study : this.studiesWithNoID) {
             if (!seenIds.contains(study.getIdentifier())) {
                 store(study);
                 seenIds.add(study.getIdentifier());
@@ -193,10 +249,13 @@ public abstract class CacheConverter extends BaseConverter {
 
     public void clearMaps() {
         this.studies = null;
+        this.studiesWithNoID = null;
         this.studyConditions = null;
+        this.allConditions = null;
         this.studyCountries = null;
         this.studyFeatures = null;
         this.studyIdentifiers = null;
+        this.publications = null;
         this.dataSources = null;
         this.locations = null;
         this.organisations = null;
@@ -205,25 +264,26 @@ public abstract class CacheConverter extends BaseConverter {
         this.titles = null;
         this.topics = null;
         this.objects = null;
+        this.datasets = null;
+        this.biosamples = null;
         this.relationships = null;
     }
 
     /**
      * TODO
-     * 
+     * Does not work for studies with no ID
      */
-    public void removeStudyAndLinkedItems(String mainTrialID) {
-        // Maps where key is or can be study ID (-objects)
+    public void removeStudyAndLinkedItems(String mainTrialID) throws Exception {
+        // Maps where key is or can be study ID (minus objects and study conditions (different handling))
         List<Map<String, List<Item>>> studyMaps = Arrays.asList(
-                this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers,
-                this.dataSources,
-                this.locations, this.organisations, this.people, this.relationships, this.titles, this.topics,
-                this.relationships);
+                this.studyCountries, this.studyFeatures, this.studyIdentifiers,
+                this.dataSources, this.publications, this.locations, this.organisations, 
+                this.people, this.relationships, this.titles, this.topics, this.relationships);
 
         // Maps where key is or can be object ID
         List<Map<String, List<Item>>> objectMaps = Arrays.asList(
                 this.locations, this.organisations, this.people, 
-                this.relationships, this.titles, this.topics, this.relationships);
+                this.relationships, this.titles, this.topics, this.relationships, this.datasets, this.biosamples);
 
         Item study = this.studies.get(mainTrialID);
         String studyId = study.getIdentifier();
@@ -231,6 +291,15 @@ public abstract class CacheConverter extends BaseConverter {
         // Removing items linked to study
         for (Map<String, List<Item>> itemMap : studyMaps) {
             itemMap.remove(studyId);
+        }
+
+        // Different handling for study conditions, need to remove study in StudyCondition's collection as well
+        List<Item> studyConditions = this.studyConditions.getOrDefault(studyId, null);
+        if (studyConditions != null) {
+            for (Item studyCondition : studyConditions) {
+                this.removeItemFromCollection(studyCondition, study);
+            }
+            this.studyConditions.remove(studyId);
         }
 
         List<Item> objects = this.objects.get(studyId);
