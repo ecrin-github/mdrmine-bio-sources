@@ -79,18 +79,12 @@ public class EuctrConverter extends CacheConverter {
     }
 
     /**
+     * TODO
      * 
-     *
-     * {@inheritDoc}
+     * @param reader
+     * @throws Exception
      */
-    public void process(Reader reader) throws Exception {
-        /*
-         * Opened BufferedReader is passed as argument (from
-         * FileConverterTask.execute())
-         */
-        this.startLogging("euctr");
-        this.loadCountries();
-
+    public void parseData(Reader reader) throws Exception {
         XMLInputFactory xi = XMLInputFactory.newInstance();
 
         // Disable DTD check in DOCTYPE for file(s) with CTIS entries to avoid errors
@@ -121,12 +115,6 @@ public class EuctrConverter extends CacheConverter {
             }
         }
         xr.close();
-
-        this.storeCountries();
-        this.storeAllItems();
-
-        this.stopLogging();
-        /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
     /**
@@ -807,22 +795,16 @@ public class EuctrConverter extends CacheConverter {
                         // TODO: remove if too generic? therapeutic area (diseases/body conditions)
                         String firstCode = WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-');
                         if (!seenOriginalValues.contains(firstCode)) {
-                            this.createAndStoreClassItem(study, "StudyCondition",
-                                    new String[][] {
-                                            { "originalValue", firstCode },
-                                            { "originalCTType", ConverterCVT.CV_MESH_TREE },
-                                            { "originalCTCode", mHcCode.group(2) } });
+                            this.linkStudyToStudyCondition(study, firstCode, mHcCode.group(2),
+                                    ConverterCVT.CV_MESH_TREE);
                             seenOriginalValues.add(firstCode);
                         }
 
                         // More specific condition
                         String secondCode = WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-');
                         if (!seenOriginalValues.contains(secondCode)) {
-                            this.createAndStoreClassItem(study, "StudyCondition",
-                                    new String[][] {
-                                            { "originalValue", secondCode },
-                                            { "originalCTType", ConverterCVT.CV_MESH_TREE },
-                                            { "originalCTCode", mHcCode.group(4) } });
+                            this.linkStudyToStudyCondition(study, secondCode, mHcCode.group(4),
+                                    ConverterCVT.CV_MESH_TREE);
                             seenOriginalValues.add(secondCode);
                         }
                     } else {
@@ -840,11 +822,8 @@ public class EuctrConverter extends CacheConverter {
                     if (mHcKeyword.matches()) {
                         String formattedKeyword = WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-');
                         if (!seenOriginalValues.contains(formattedKeyword)) {
-                            this.createAndStoreClassItem(study, "StudyCondition",
-                                    new String[][] {
-                                            { "originalValue", formattedKeyword },
-                                            { "originalCTType", ConverterCVT.CV_MEDDRA },
-                                            { "originalCTCode", mHcKeyword.group(1) } });
+                            this.linkStudyToStudyCondition(study, formattedKeyword, mHcKeyword.group(1),
+                                    ConverterCVT.CV_MEDDRA);
                             seenOriginalValues.add(formattedKeyword);
                         }
                     } else {
@@ -860,8 +839,7 @@ public class EuctrConverter extends CacheConverter {
                 String freeTextValue = WordUtils.capitalizeFully(hcFreetext, ' ', '-');
 
                 if (!seenOriginalValues.contains(freeTextValue)) {
-                    this.createAndStoreClassItem(study, "StudyCondition",
-                            new String[][] { { "originalValue", freeTextValue } });
+                    this.linkStudyToStudyCondition(study, freeTextValue, null, null);
                     seenOriginalValues.add(freeTextValue);
                 }
             }

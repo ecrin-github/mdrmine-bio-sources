@@ -18,8 +18,6 @@ import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.text.WordUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
@@ -42,8 +40,6 @@ import java.util.stream.Stream;
  * @author ECRIN
  */
 public class WhoConverter extends CacheConverter {
-    private static final Logger LOGGER = LogManager.getLogger("mdrmine");
-
     private static final Pattern P_NONVALID_ID = Pattern.compile(
             "(?:\\bnull\\b)|(?:\\bnill?(?:\\h*known)?\\.?)|(?:not\\h*applicable)|(?:not\\h*available)|(?:N[\\/\\.]?A\\.?)|(?:none\\.?)|(?:NCT00000000)|(?:NCT12345678)|(?:ISRCTN00000000)|(?:ISRCTN12345678)|(?:[0\\.-:\\?\\h\\*]+)",
             Pattern.CASE_INSENSITIVE);
@@ -134,18 +130,12 @@ public class WhoConverter extends CacheConverter {
     }
 
     /**
-     * Process WHO data file by iterating on each line of the data file.
-     * Method called by InterMine.
-     * {@inheritDoc}
+     * TODO
+     * 
+     * @param reader
+     * @throws Exception
      */
-    public void process(Reader reader) throws Exception {
-        /*
-         * Opened BufferedReader is passed as argument (from
-         * FileConverterTask.execute())
-         */
-        this.startLogging("who");
-        this.loadCountries();
-
+    public void parseData(Reader reader) throws Exception {
         this.fieldsToInd = this.getHeaders();
 
         final CSVParser parser = new CSVParserBuilder()
@@ -182,12 +172,6 @@ public class WhoConverter extends CacheConverter {
         }
 
         csvReader.close();
-
-        this.storeCountries();
-        this.storeAllItems();
-
-        this.stopLogging();
-        /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
     /**
@@ -1380,18 +1364,18 @@ public class WhoConverter extends CacheConverter {
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         if (!this.existingStudy()) {
             // TODO: match values with CT codes/ICD Codes
-            if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
+            if (conditionsStr != null) {
                 // TODO: some values contain semicolons (e.g. NCT00112593 trial)
                 // Not adding duplicate StudyConditions
                 Set<String> studyConditions = Stream.of(conditionsStr.split(";"))
                         .map(String::strip)
+                        .filter(s -> !ConverterUtils.isBlankOrNull(s))
                         .map(c -> WordUtils.capitalizeFully(c, ' ', '-'))
                         .collect(Collectors.toSet());
 
                 Iterator<String> conditionsIter = studyConditions.iterator();
                 while (conditionsIter.hasNext()) {
-                    this.createAndStoreClassItem(study, "StudyCondition",
-                        new String[][] { { "originalValue", conditionsIter.next() } });
+                    this.linkStudyToStudyCondition(study, conditionsIter.next(), null, null);
                 }
             }
         }

@@ -29,7 +29,7 @@ import com.alibaba.fastjson2.reader.ObjectReader;
  * 
  * @author
  */
-public class CtgConverter extends BaseConverter {
+public class CtgConverter extends CacheConverter {
     //
     private static final String DATASET_TITLE = "CTG-Studies";
     private static final String DATA_SOURCE_NAME = "CTG";
@@ -61,18 +61,12 @@ public class CtgConverter extends BaseConverter {
     }
 
     /**
+     * TODO
      * 
-     *
-     * {@inheritDoc}
+     * @param reader
+     * @throws Exception
      */
-    public void process(Reader reader) throws Exception {
-        /*
-         * Opened BufferedReader is passed as argument (from
-         * FileConverterTask.execute())
-         */
-        this.startLogging("ctg");
-        this.loadCountries();
-
+    public void parseData(Reader reader) throws Exception {
         BufferedReader br = (BufferedReader) reader;
 
         // CtgStudy object reader
@@ -92,10 +86,6 @@ public class CtgConverter extends BaseConverter {
                 }
             }
         }
-
-        this.storeCountries();
-        this.stopLogging();
-        /* BufferedReader is closed in FileConverterTask.execute() */
     }
 
     public void parseAndStoreTrial(CtgStudy ctgStudy) throws Exception {
@@ -173,7 +163,10 @@ public class CtgConverter extends BaseConverter {
 
             // TODO: seeAlsoLinks?
 
-            store(study);
+            // Store study in cache
+            if (!this.existingStudy()) {
+                this.studies.put(this.currentTrialID, study);
+            }
 
         }
 
@@ -499,12 +492,9 @@ public class CtgConverter extends BaseConverter {
                     String condition = conditionsIter.next();
                     String meshId = meshTerms.getOrDefault(condition.toLowerCase(), null);
                     if (meshId != null) {
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] { { "originalValue", condition },
-                                        { "originalCTType", ConverterCVT.CV_MESH }, { "originalCTCode", meshId } });
+                        this.linkStudyToStudyCondition(study, condition, meshId, ConverterCVT.CV_MESH);
                     } else {
-                        this.createAndStoreClassItem(study, "StudyCondition",
-                                new String[][] { { "originalValue", condition } });
+                        this.linkStudyToStudyCondition(study, condition, null, null);
                     }
                 }
             }
