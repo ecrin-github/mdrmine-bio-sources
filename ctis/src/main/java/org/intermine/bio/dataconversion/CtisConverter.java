@@ -25,6 +25,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -44,11 +45,16 @@ public class CtisConverter extends CacheConverter {
             .compile("^[^\\d]*?(<?\\d+)[^a-zA-Z]+(\\w+).*?(\\d+\\+?)\\h+(\\w+)[^\\d]*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_AGE_PRIMARY = Pattern.compile("^\\h*(\\d+\\+?|[^\\d]+)(?:-?(\\d+))?\\h*(\\w+)?\\h*$",
             Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_STUDY_TOPICS = Pattern.compile(
+    private static final Pattern P_STUDY_INTERVENTIONS = Pattern.compile(
             "^(?:\\[\\\")?(?:not\\h*possible\\h*to\\h*specify|([^\\[]+)\\h+\\[([^\\]]+)]\\h*-\\h*([^\\[]+)\\[([^\\]]+)])(?:\\\"])?$",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_PHASES = Pattern
             .compile("^.*?phase\\h*(iv|iii|ii|i).*?(?:phase\\h*(iv|iii|ii|i).*)?$", Pattern.CASE_INSENSITIVE);
+
+    private static final String AGE_GROUP_IN_UTERO = "In utero";
+    private static final String AGE_GROUP_CHILD = "0-17 years";
+    private static final String AGE_GROUP_ADULT = "18-64 years";
+    private static final String AGE_GROUP_OLDER_ADULT = "65+ years";
 
     private static final String REGISTRY_ENTRY_BASE_URL = "https://euclinicaltrials.eu/ctis-public/view/";
 
@@ -129,7 +135,6 @@ public class CtisConverter extends CacheConverter {
         // Not parsing if existing study is found and with a more recent resubmission
         // number than the current
         if (this.parseTrialID(study, trialID)) {
-
             /* Study title (need to get it before protocol SO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
             if (!ConverterUtils.isBlankOrNull(trialTitle)) {
@@ -156,13 +161,8 @@ public class CtisConverter extends CacheConverter {
 
             /* Min/max age */
             String ageGroup = this.getAndCleanValue(lineValues, "Age group");
-            // TODO: the multiple ranges may not be continuous but our current model only
-            // takes into account min and max ages (no range)
             String ageRangeSecondaryIdentifier = this.getAndCleanValue(lineValues, "Age range secondary identifier");
             this.parseAgeRanges(study, ageGroup, ageRangeSecondaryIdentifier);
-            // study.setAttributeIfNotNull("testField1", "CTIS_" + ageGroup);
-            // study.setAttributeIfNotNull("testField2", "CTIS_" +
-            // ageRangeSecondaryIdentifier);
 
             /* Gender */
             String gender = this.getAndCleanValue(lineValues, "Gender");
@@ -181,17 +181,16 @@ public class CtisConverter extends CacheConverter {
             // TODO: match with MedDRA terminology
             String medicalConditions = this.getAndCleanValue(lineValues, "Medical conditions");
             this.parseStudyConditions(study, medicalConditions);
-            // study.setAttributeIfNotNull("testField3", "CTIS_" + medicalConditions);
 
-            /* Study topics */
+            /* Unused: not in our model */
             String therapeuticArea = this.getAndCleanValue(lineValues, "Therapeutic area");
-            this.parseStudyTopics(study, therapeuticArea);
+            // this.parseTherapeuticArea(study, therapeuticArea);
 
             /* Study phase */
             String trialPhase = this.getAndCleanValue(lineValues, "Trial phase");
             this.parseTrialPhase(study, trialPhase);
 
-            /* Study topic: product */
+            /* Study intervention: product */
             String product = this.getAndCleanValue(lineValues, "Product");
             this.parseProduct(study, product);
 
@@ -221,24 +220,20 @@ public class CtisConverter extends CacheConverter {
             String endDate = this.getAndCleanValue(lineValues, "End date");
             String globalEndOfTrial = this.getAndCleanValue(lineValues, "Global end of the trial");
             this.parseTrialEndDate(study, endDate, globalEndOfTrial);
-            // study.setAttributeIfNotNull("testField4", "CTIS_" + endDate);
-            // study.setAttributeIfNotNull("testField5", "CTIS_" + globalEndOfTrial);
 
-            // Unused, same as WHO, yes or no value (majority of no)
+            /* Study hasResults */
             String trialResults = this.getAndCleanValue(lineValues, "Trial results");
+            this.parseTrialResults(study, trialResults);
 
             /* Study organisation: sponsors */
             String sponsors = this.getAndCleanValue(lineValues, "Sponsor/Co-Sponsors");
             String sponsorType = this.getAndCleanValue(lineValues, "Sponsor type");
             this.parseSponsors(study, sponsors, sponsorType);
-            // study.setAttributeIfNotNull("testField6", "CTIS_" + sponsors);
-            // study.setAttributeIfNotNull("testField7", "CTIS_" + sponsorType);
 
             /* Trial registry entry SO + instance + last updated date */
             String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
             LocalDate lastUpdated = this.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
             this.createAndStoreRegistryEntryDO(study, lastUpdated);
-            // study.setAttributeIfNotNull("testField8", "CTIS_" + lastUpdated);
 
             /* Description (constructed) */
             // TODO: missing Main Objective field from CTIS UI
@@ -393,41 +388,29 @@ public class CtisConverter extends CacheConverter {
 
     /**
      * TODO
-     * Note: using secondary identifier first and trying to parse ageGroup if N/A
+     * 
+     * @param study
+     * @param ageGroup
+     * @param ageRangeSecondaryIdentifier
      */
     public void parseAgeRanges(Item study, String ageGroup, String ageRangeSecondaryIdentifier) {
-        // TODO: unknown on empty values?
-        // TODO: harmonise N/A / None values and cases with WHO parser
-        boolean notEmpty = false; // Used for setting value if no string couldn't be used but at least one of the
-                                  // string is N/A
-        boolean alreadyParsed = false;
-        if (!ConverterUtils.isBlankOrNull(ageRangeSecondaryIdentifier)) {
-            notEmpty = true;
-            Matcher mAgeNASecondary = P_NOT_APPLICABLE.matcher(ageRangeSecondaryIdentifier);
-            if (!mAgeNASecondary.matches()) {
-                alreadyParsed = true;
-                this.parseAgeRangeSecondaryIdentifier(study, ageRangeSecondaryIdentifier);
-            }
-        }
-        if (!alreadyParsed && !ConverterUtils.isBlankOrNull(ageGroup)) {
-            notEmpty = true;
-            Matcher mAgeNAPrimary = P_NOT_APPLICABLE.matcher(ageGroup);
-            if (!mAgeNAPrimary.matches()) {
-                alreadyParsed = true;
-                this.parseAgeGroup(study, ageGroup);
-            }
-        }
-        if (!alreadyParsed && !notEmpty) { // None of the two values used for parsing but one or both of the values are
-                                           // N/A
-            study.setAttributeIfNotNull("minAge", ConverterCVT.NOT_APPLICABLE);
-            study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.NOT_APPLICABLE);
-            study.setAttributeIfNotNull("maxAge", ConverterCVT.NOT_APPLICABLE);
-            study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.NOT_APPLICABLE);
+        // There are inconsistencies between ageGroup and ageRangeSecondaryIdentifier
+        // The ageGroup field is more normalised (same ranges as CTG + "In utero")
+        // so we use this one, and fallback to secondary identifier if empty
+        // Note: in practice, ageGroup is never null, so ageRangeSecondaryIdentifier is
+        // unused
+        if (!ConverterUtils.isBlankOrNull(ageGroup)) {
+            this.parseAgeGroup(study, ageGroup);
+        } else if (!ConverterUtils.isBlankOrNull(ageRangeSecondaryIdentifier)) {
+            this.parseAgeRangeSecondaryIdentifier(study, ageRangeSecondaryIdentifier);
+            // Fallback to calculating age group if age group field
+            study.setAttributeIfNotNull("ageGroup", ConverterUtils.calculateAgeGroup(study));
         }
     }
 
     /**
      * TODO
+     * Unused
      */
     public void parseAgeRangeSecondaryIdentifier(Item study, String ageRangeSecondaryIdentifier) {
         Matcher mAgeSingle = P_AGE_SECONDARY_SINGLE.matcher(ageRangeSecondaryIdentifier);
@@ -436,57 +419,60 @@ public class CtisConverter extends CacheConverter {
         String minAgeUnit = null;
         String maxAgeUnit = null;
 
-        if (mAgeSingle.matches()) { // Single range
-            String a1 = mAgeSingle.group(1);
-            String a2 = mAgeSingle.group(2);
-            String u1 = mAgeSingle.group(3);
-            if (a2 != null) { // Age range
-                minAge = a1;
-                minAgeUnit = u1;
-                if (a2.endsWith("+")) { // No maximum if 85+
-                    maxAge = ConverterCVT.NONE;
-                } else {
-                    maxAge = a2;
-                    maxAgeUnit = u1;
-                }
-            } else { // One number with a < or + sign
-                if (a1.startsWith("<")) { // Gestational age up to <37 weeks, no minimum
-                    minAge = ConverterCVT.NONE;
-                    // TODO: this value isn't actually a maximum age, more of a IC
-                    maxAge = "Preterm newborn infants (up to gestational age<37 weeks)";
-                } else if (a1.endsWith("+")) { // 85+, no maximum
-                    minAge = a1.substring(0, a1.length() - 1);
-                    minAgeUnit = u1;
-                    maxAge = ConverterCVT.NONE;
-                } else {
-                    this.writeLog("parseAgeRanges(): only 1 number matched for age but no < or + sign found, string: "
-                            + ageRangeSecondaryIdentifier);
-                }
-            }
-        } else { // Multiple ranges
-            // Note: multiple range Regex assumes that the ranges are sorted from earliest
-            // to latest
-            Matcher mAgeMultiple = P_AGE_SECONDARY_MULTIPLE.matcher(ageRangeSecondaryIdentifier);
-            if (mAgeMultiple.matches()) {
-                String a1 = mAgeMultiple.group(1);
-                String u1 = mAgeMultiple.group(2);
-                String a2 = mAgeMultiple.group(3);
-                String u2 = mAgeMultiple.group(4);
-                if (a1.startsWith("<")) { // Gestational age up to <37 weeks
-                    minAge = ConverterCVT.NONE;
-                } else {
+        // N/A check
+        Matcher mAgeNASecondary = P_NOT_APPLICABLE.matcher(ageRangeSecondaryIdentifier);
+
+        if (!mAgeNASecondary.matches()) {
+            if (mAgeSingle.matches()) { // Single range
+                String a1 = mAgeSingle.group(1);
+                String a2 = mAgeSingle.group(2);
+                String u1 = mAgeSingle.group(3);
+                if (a2 != null) { // Age range
                     minAge = a1;
                     minAgeUnit = u1;
+                    if (a2.endsWith("+")) { // No maximum if 85+
+                        maxAge = ConverterCVT.AGE_MAX_YEARS;
+                    } else {
+                        maxAge = a2;
+                        maxAgeUnit = u1;
+                    }
+                } else { // One number with a < or + sign
+                    if (a1.endsWith("+")) { // 85+, no maximum
+                        minAge = a1.substring(0, a1.length() - 1);
+                        minAgeUnit = u1;
+                        maxAge = ConverterCVT.AGE_MAX_YEARS;
+                    } else if (!a1.startsWith("<")) { // Ignoring "Gestational age up to <37 weeks, no minimum"
+                        this.writeLog(
+                                "parseAgeRanges(): only 1 number matched for age but no < or + sign found, string: "
+                                        + ageRangeSecondaryIdentifier);
+                    }
                 }
-                if (a2.endsWith("+")) { // 85+
-                    maxAge = ConverterCVT.NONE;
+            } else { // Multiple ranges
+                // Note: multiple range Regex assumes that the ranges are sorted from earliest
+                // to latest
+                Matcher mAgeMultiple = P_AGE_SECONDARY_MULTIPLE.matcher(ageRangeSecondaryIdentifier);
+                if (mAgeMultiple.matches()) {
+                    String a1 = mAgeMultiple.group(1);
+                    String u1 = mAgeMultiple.group(2);
+                    String a2 = mAgeMultiple.group(3);
+                    String u2 = mAgeMultiple.group(4);
+                    if (a1.startsWith("<")) { // Gestational age up to <37 weeks
+                        minAge = ConverterCVT.AGE_MIN_YEARS;
+                    } else {
+                        minAge = a1;
+                        minAgeUnit = u1;
+                    }
+                    if (a2.endsWith("+")) { // 85+
+                        maxAge = ConverterCVT.AGE_MAX_YEARS;
+                    } else {
+                        maxAge = a2;
+                        maxAgeUnit = u2;
+                    }
                 } else {
-                    maxAge = a2;
-                    maxAgeUnit = u2;
+                    this.writeLog(
+                            "parseAgeRanges(): age range string is not empty but couldn't match anything, string: "
+                                    + ageRangeSecondaryIdentifier);
                 }
-            } else {
-                this.writeLog("parseAgeRanges(): age range string is not empty but couldn't match anything, string: "
-                        + ageRangeSecondaryIdentifier);
             }
         }
 
@@ -500,89 +486,96 @@ public class CtisConverter extends CacheConverter {
      * 
      */
     public void parseAgeGroup(Item study, String ageGroup) {
-        String minAge = null;
-        String minAgeUnit = null;
-        String maxAge = null;
-        String maxAgeUnit = null;
+        Set<String> ageGroups = new HashSet<String>();
+        Integer minAge = null;
+        String minAgeUnit = ConverterCVT.AGE_UNIT_YEARS;
+        Integer maxAge = null;
+        String maxAgeUnit = ConverterCVT.AGE_UNIT_YEARS;
 
-        String[] ranges = ageGroup.split(",");
-        for (String range : ranges) {
-            Matcher mAgePrimary = P_AGE_PRIMARY.matcher(range);
-            if (mAgePrimary.matches()) {
-                String a1 = mAgePrimary.group(1);
-                String a2 = mAgePrimary.group(2);
-                String u = mAgePrimary.group(3);
-                if (ConverterUtils.isBlankOrNull(u)) {
-                    if (a1.toLowerCase().contains("utero")) {
-                        minAge = ConverterCVT.AGE_IN_UTERO;
-                    } else {
-                        this.writeLog("parseAgeGroup(): matched a string with no number but it is not \"in utero\": "
-                                + range);
-                    }
-                } else {
-                    try {
-                        if (!ConverterUtils.isBlankOrNull(a2)) {
-                            if (maxAge == null || (!maxAge.equals(ConverterCVT.NONE)
-                                    && Integer.parseInt(a2) > Integer.parseInt(maxAge))) {
-                                maxAge = a2;
-                                maxAgeUnit = u;
-                            }
-                            if (minAge == null || (!minAge.equals(ConverterCVT.AGE_IN_UTERO)
-                                    && Integer.parseInt(a1) < Integer.parseInt(minAge))) {
-                                minAge = a1;
-                                minAgeUnit = u;
-                            }
-                        } else {
-                            if (a1.endsWith("+")) {
-                                maxAge = ConverterCVT.NONE;
-                                if (minAge == null) { // Since this is the max age in the data, we only check that
-                                                      // minAge has not been set yet (otherwise the set value is lower)
-                                    minAge = a1.substring(0, a1.length() - 1);
-                                    minAgeUnit = u;
-                                }
-                            } else {
-                                this.writeLog(
-                                        "parseAgeGroup(): only one number found but it doesn't end with a plus sign: "
-                                                + a1 + ", range: " + range);
-                            }
+        if (!ConverterUtils.isBlankOrNull(ageGroup)) {
+            minAgeUnit = ConverterCVT.AGE_UNIT_YEARS;
+            maxAgeUnit = ConverterCVT.AGE_UNIT_YEARS;
+
+            String[] ranges = ageGroup.split(", ");
+            for (String range : ranges) {
+                switch (range) {
+                    case AGE_GROUP_CHILD:
+                        minAge = Integer.valueOf(ConverterCVT.AGE_MIN_YEARS);
+                        if (maxAge == null || 17 > maxAge) {
+                            maxAge = 17;
                         }
-                    } catch (NumberFormatException e) {
-                        this.writeLog("parseAgeGroup(): NumberFormatException in parsing these values: " + a1 + ", "
-                                + maxAge);
-                    }
 
-                    // Logging changes in the possible values (new units)
-                    if (!u.equalsIgnoreCase("years")) {
-                        this.writeLog("ageGroup field: new values, units can be different than years, range:" + range);
-                    }
+                        ageGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC);
+                        break;
+                    case AGE_GROUP_ADULT:
+                        if (minAge == null || 18 < minAge) {
+                            minAge = 18;
+                        }
+                        if (maxAge == null || 64 > maxAge) {
+                            maxAge = 64;
+                        }
+
+                        ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                        break;
+                    case AGE_GROUP_OLDER_ADULT:
+                        if (minAge == null || 65 < minAge) {
+                            minAge = 65;
+                        }
+                        maxAge = Integer.valueOf(ConverterCVT.AGE_MAX_YEARS);
+
+                        ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                        break;
+                    case AGE_GROUP_IN_UTERO:
+                        minAge = Integer.valueOf(ConverterCVT.AGE_MIN_YEARS); // TODO
+                        maxAge = Integer.valueOf(ConverterCVT.AGE_MIN_YEARS);
+
+                        ageGroups.add(ConverterCVT.AGE_IN_UTERO);
+                        break;
+                    default:
+                        this.writeLog("Unknown age range: " + range);
+                        break;
                 }
-            } else {
-                this.writeLog("parseAgeGroup(): couldn't match anything in substring: " + range);
             }
         }
 
-        this.setAgesAndUnits(study, minAge, maxAge, minAgeUnit, maxAgeUnit);
+        String minAgeStr = null;
+        String maxAgeStr = null;
+
+        if (minAge != null) {
+            minAgeStr = String.valueOf(minAge);
+        }
+        if (maxAge != null) {
+            maxAgeStr = String.valueOf(maxAge);
+        }
+
+        // Age group
+        if (ageGroups.size() > 0) {
+            study.setAttributeIfNotNull("ageGroup",
+                    ConverterUtils.constructAgeGroupStr(ageGroups.toArray(String[]::new)));
+        }
+
+        // Min/max age + units
+        this.setAgesAndUnits(study, minAgeStr, maxAgeStr, minAgeUnit, maxAgeUnit);
     }
 
     /**
      * TODO
+     * Setting age fields if not empty and study does not already have values for
+     * the fields
      */
     public void setAgesAndUnits(Item study, String minAge, String maxAge, String minAgeUnit, String maxAgeUnit) {
-        if (minAge != null) {
-            study.setAttributeIfNotNull("minAge", minAge);
-            if (minAgeUnit != null && !minAge.equals(ConverterCVT.AGE_IN_UTERO)) {
-                study.setAttributeIfNotNull("minAgeUnit", minAgeUnit);
-            } else {
-                study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.NOT_APPLICABLE);
-            }
+        // Min age
+        if (!ConverterUtils.isBlankOrNull(minAge) && !ConverterUtils.isBlankOrNull(minAgeUnit)
+                && ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MIN_AGE))) {
+            study.setAttribute("minAge", minAge);
+            study.setAttributeIfNotNull("minAgeUnit", minAgeUnit);
         }
-        if (maxAge != null) {
-            study.setAttributeIfNotNull("maxAge", maxAge);
-            if (maxAgeUnit != null && !maxAge.equals(ConverterCVT.NONE)) {
-                study.setAttributeIfNotNull("maxAgeUnit", maxAgeUnit);
-            } else {
-                study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.NOT_APPLICABLE);
-            }
+
+        // Max age
+        if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)
+                && ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MAX_AGE))) {
+            study.setAttribute("maxAge", maxAge);
+            study.setAttributeIfNotNull("maxAgeUnit", maxAgeUnit);
         }
     }
 
@@ -622,47 +615,48 @@ public class CtisConverter extends CacheConverter {
         // TODO: separate multiple conditions somehow?
         // TODO: match with MedDRA/other medical terms
         if (!ConverterUtils.isBlankOrNull(studyConditions)) {
-            this.linkStudyToStudyCondition(study, studyConditions, null, null);
+            this.linkStudyToStudyCondition(study, studyConditions, null, null, null);
         }
     }
 
     /**
      * TODO
+     * Unused
      */
-    public void parseStudyTopics(Item study, String studyTopics) throws Exception {
+    public void parseTherapeuticArea(Item study, String studyInterventions) throws Exception {
         HashSet<String> addedCodes = new HashSet<String>();
 
-        String[] separatedTopics = studyTopics.split("\",\"");
-        for (String topicPair : separatedTopics) {
-            Matcher mStudyTopics = P_STUDY_TOPICS.matcher(topicPair);
-            if (mStudyTopics.matches()) {
-                String t1 = mStudyTopics.group(1);
-                String c1 = mStudyTopics.group(2);
-                String t2 = mStudyTopics.group(3);
-                String c2 = mStudyTopics.group(4);
+        String[] separatedInterventions = studyInterventions.split("\",\"");
+        for (String interventionPair : separatedInterventions) {
+            Matcher mStudyInterventions = P_STUDY_INTERVENTIONS.matcher(interventionPair);
+            if (mStudyInterventions.matches()) {
+                String t1 = mStudyInterventions.group(1);
+                String c1 = mStudyInterventions.group(2);
+                String t2 = mStudyInterventions.group(3);
+                String c2 = mStudyInterventions.group(4);
                 if (t1 != null) {
                     if (!addedCodes.contains(c1)) {
-                        // TODO: topic type
                         // TODO: matching with mesh code and value
                         // Note: these seem to be MeSH Tree codes but couldn't find the version of the
                         // vocabulary, C13 in dataset is C12.050 in MeSH
-                        this.createAndStoreClassItem(study, "Topic",
-                                new String[][] { { "value", t1 }, { "ctType", ConverterCVT.CV_MESH_TREE },
-                                        { "ctCode", c1 } });
+                        // TODO: intervention type
+                        // TODO: normalisation
+                        this.linkStudyToIntervention(study, null, t1, null, c1);
                         addedCodes.add(c1);
                     }
-                    if (!addedCodes.contains(c2)) { // In theory only the first (parent) topic can appear multiple
-                                                    // times, but we check for the child topic anyway
-                        // TODO: topic type
+                    if (!addedCodes.contains(c2)) { // In theory only the first (parent) intervention can appear
+                                                    // multiple
+                                                    // times, but we check for the child intervention anyway
                         // TODO: matching with mesh code and value
-                        this.createAndStoreClassItem(study, "Topic",
-                                new String[][] { { "value", t2 }, { "ctType", ConverterCVT.CV_MESH_TREE },
-                                        { "ctCode", c2 } });
+                        // TODO: intervention type
+                        // TODO: normalisation
+                        this.linkStudyToIntervention(study, null, t2, null, c2);
                         addedCodes.add(c2);
                     }
                 } // else, "not possible to specify" matched
             } else {
-                this.writeLog("parseStudyTopics(): couldn't parse study topics pair: " + topicPair);
+                this.writeLog(
+                        "parseTherapeuticArea(): couldn't parse study interventions pair: " + interventionPair);
             }
         }
     }
@@ -678,12 +672,12 @@ public class CtisConverter extends CacheConverter {
                 String p2 = mPhases.group(2);
                 if (p2 == null) { // One phase number
                     this.createAndStoreClassItem(study, "StudyFeature",
-                            new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
-                                    { "featureValue", ConverterUtils.convertPhaseNumber(p1) } });
+                            new String[][] { { "type", ConverterCVT.FEATURE_T_PHASE },
+                                    { "value", ConverterUtils.convertPhaseNumber(p1) } });
                 } else { // Two phase numbers
                     this.createAndStoreClassItem(study, "StudyFeature",
-                            new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
-                                    { "featureValue", ConverterUtils.constructMultiplePhasesString(p1, p2) } });
+                            new String[][] { { "type", ConverterCVT.FEATURE_T_PHASE },
+                                    { "value", ConverterUtils.constructMultiplePhasesString(p1, p2) } });
                 }
             } else {
                 this.writeLog("parseTrialPhase(): couldn't parse trial phase string: " + trialPhase);
@@ -697,13 +691,13 @@ public class CtisConverter extends CacheConverter {
     public void parseProduct(Item study, String product) throws Exception {
         if (!ConverterUtils.isBlankOrNull(product)) {
             // Setting interventions field as well
-            study.setAttribute("interventions", product);
+            study.setAttribute("interventionsDescription", product);
 
             Matcher mNA = P_NOT_APPLICABLE.matcher(product);
             // TODO: match with CT
             if (!mNA.matches() && !product.equals("-")) {
-                this.createAndStoreClassItem(study, "Topic",
-                        new String[][] { { "type", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT }, { "value", product } });
+                this.linkStudyToIntervention(study, ConverterCVT.INTERVENTION_T_DRUG,
+                        product, null, null);
             }
         }
     }
@@ -842,6 +836,22 @@ public class CtisConverter extends CacheConverter {
             if (endDate != null) {
                 study.setAttribute("endDate", endDate.toString());
             }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param trialResults
+     */
+    public void parseTrialResults(Item study, String trialResults) {
+        if (!ConverterUtils.isBlankOrNull(trialResults)) {
+            boolean hasResults = false;
+            if (trialResults.equalsIgnoreCase("yes")) {
+                hasResults = true;
+            }
+            study.setAttribute("hasResults", String.valueOf(hasResults));
         }
     }
 

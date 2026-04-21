@@ -73,9 +73,15 @@ public class ConverterCVT {
     public static final String GENDER_ALL = "All";
     public static final String GENDER_WOMEN = "Female";
     public static final String GENDER_MEN = "Male";
-    public static final String AGE_IN_UTERO = "In utero";
+    public static final String AGE_IN_UTERO = "In utero";   // TODO
     public static final String AGE_UNIT_YEARS = "Years";
-    public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
+    public static final String AGE_MIN_YEARS = "0";
+    public static final String AGE_MAX_YEARS = "150";
+    public static final String AGE_GROUP_IN_UTERO = "In Utero";
+    public static final String AGE_GROUP_PEDIATRIC = "Pediatric";
+    public static final String AGE_GROUP_ADULT = "Adult";
+    public static final String AGE_GROUP_OLDER_ADULT = "Older Adult";
+    public static final String INTERVENTION_T_DRUG = "Drug";
 
     /* Objects */
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
@@ -117,6 +123,12 @@ public class ConverterCVT {
     public static final String TITLE_TYPE_ACRONYM = "Acronym or abbreviation";
     public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
     public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
+
+    /* Model field names */
+    public static final String FIELD_MIN_AGE = "minAge";
+    public static final String FIELD_MIN_AGE_UNIT = "minAgeUnit";
+    public static final String FIELD_MAX_AGE = "maxAge";
+    public static final String FIELD_MAX_AGE_UNIT = "maxAgeUnit";
 
     /* External CVs */
     public static final String CV_MEDDRA = "MedDRA";

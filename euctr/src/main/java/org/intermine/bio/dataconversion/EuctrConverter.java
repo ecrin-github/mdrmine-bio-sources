@@ -49,7 +49,8 @@ public class EuctrConverter extends CacheConverter {
             "\\h*therapeutic\\h*area:\\h*(.*)\\h+\\[(\\w+)\\]\\h*-\\h*(.*)\\h+\\[(\\w+)\\]\\h*",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_HC_KEYWORD = Pattern.compile(
-            ".*classification\\h*code\\h*(\\w+).*term:?\\h*([^\\n]+).*", Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
+            ".*classification\\h*code\\h*(\\w+).*term:\\h+(?!<|&lt;)([^\\n]+).*", // TODO: test
+            Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern P_PHASE = Pattern.compile(
             ".*Phase\\h*i\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*ii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iii\\):\\h*(no|yes|)?\\n.*\\(Phase\\h*iv\\):\\h*(no|yes|)?.*",
             Pattern.CASE_INSENSITIVE);
@@ -57,6 +58,9 @@ public class EuctrConverter extends CacheConverter {
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
     private static final Pattern P_ID_NA = Pattern.compile("^\\h*(?:n[\\.\\/]?(?:a|d)\\.?|not\\h*.*|-+|none)\\h*$",
             Pattern.CASE_INSENSITIVE); // N/A (all forms) or - or none
+    private static final Pattern P_PRODUCT_NA = Pattern.compile(
+            "^(?:(?:not|to)\\h|none?(?:\\h|$)|(?:n[.\\/]?a\\.?|-|\\.|tbd)$|unknown).*",
+            Pattern.CASE_INSENSITIVE); // Invalid values for product name or INN
     // Issuing authority match
     // Does not match "EU ET No.", matches "EUROPA TRIAL" and "Master Protocol
     // EU-SolidAct v2.0" (both should only appear once in the data)
@@ -247,10 +251,6 @@ public class EuctrConverter extends CacheConverter {
                 String dateEnrolmentStr = this.getAndCleanValue(mainInfo, "dateEnrolment");
                 LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
                 this.setStudyStartDate(study, dateEnrolment);
-                if (dateEnrolment != null) { // (?)
-                    // study.setAttributeIfNotNull("testField1", "EUCTR_" + (dateEnrolment != null ?
-                    // dateEnrolment.toString() : null));
-                }
 
                 // Unused, "Date trial authorised"
                 String typeEnrolment = this.getAndCleanValue(mainInfo, "typeEnrolment");
@@ -282,7 +282,6 @@ public class EuctrConverter extends CacheConverter {
 
                 /* Study features */
                 String studyDesign = this.getAndCleanValue(mainInfo, "studyDesign");
-                // study.setAttributeIfNotNull("testField3", "EUCTR_" + studyDesign);
                 this.parseStudyDesign(study, studyDesign);
 
                 /* Study feature: phase */
@@ -295,7 +294,7 @@ public class EuctrConverter extends CacheConverter {
                 List<String> hcKeywords = trial.getHealthConditionKeywords();
                 this.parseHealthConditions(study, hcFreetext, hcCodes, hcKeywords);
 
-                /* Study topic: products */
+                /* Study intervention: products */
                 String iFreetext = this.getAndCleanValue(mainInfo, "iFreetext");
                 // Unused, always empty
                 List<String> iCodes = trial.getInterventionCodes();
@@ -309,7 +308,6 @@ public class EuctrConverter extends CacheConverter {
 
                 /* Study end date ("global completion date") */
                 String resultsDateCompletedStr = this.getAndCleanValue(mainInfo, "resultsDateCompleted");
-                // study.setAttributeIfNotNull("testField4", resultsDateCompletedStr);
                 LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr,
                         ConverterUtils.P_DATE_D_M_Y_SLASHES);
                 this.setStudyEndDate(study, resultsDateCompleted);
@@ -356,10 +354,12 @@ public class EuctrConverter extends CacheConverter {
                 // Trial IEC
                 EuctrCriteria criteria = trial.getCriteria();
 
-                /* IEC */
+                /* IEC, including min/max age */
                 String ic = criteria.getInclusionCriteria();
                 String ec = criteria.getExclusionCriteria();
                 this.parseIEC(study, ic, ec);
+
+                study.setAttributeIfNotNull("ageGroup", ConverterUtils.calculateAgeGroup(study));
 
                 /* Gender */
                 String gender = criteria.getGender();
@@ -530,7 +530,6 @@ public class EuctrConverter extends CacheConverter {
     public void setPlannedEnrolment(Item study, String plannedEnrolment) {
         if (ConverterUtils.isPosWholeNumber(plannedEnrolment)
                 && !(Long.valueOf(plannedEnrolment) > Integer.MAX_VALUE)) {
-            // study.setAttributeIfNotNull("testField2", "EUCTR_" + plannedEnrolment);
             if (!this.existingStudy() || this.newerLastUpdate) { // Updating planned enrolment for more recent record
                                                                  // registration date
                 study.setAttributeIfNotNull("plannedEnrolment", plannedEnrolment);
@@ -610,12 +609,12 @@ public class EuctrConverter extends CacheConverter {
                         case "randomised":
                             if (tuple[1].toLowerCase().equals(FEATURE_YES)) {
                                 this.createAndStoreClassItem(study, "StudyFeature",
-                                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_ALLOCATION },
-                                                { "featureValue", ConverterCVT.FEATURE_V_RANDOMISED } });
+                                        new String[][] { { "type", ConverterCVT.FEATURE_T_ALLOCATION },
+                                                { "value", ConverterCVT.FEATURE_V_RANDOMISED } });
                             } else if (tuple[1].toLowerCase().equals(FEATURE_NO)) {
                                 this.createAndStoreClassItem(study, "StudyFeature",
-                                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_ALLOCATION },
-                                                { "featureValue", ConverterCVT.FEATURE_V_NONRANDOMISED } });
+                                        new String[][] { { "type", ConverterCVT.FEATURE_T_ALLOCATION },
+                                                { "value", ConverterCVT.FEATURE_V_NONRANDOMISED } });
                             } else {
                                 this.writeLog("Unknown study design randomised value: " + tuple[1]);
                             }
@@ -624,8 +623,8 @@ public class EuctrConverter extends CacheConverter {
                             if (tuple[1].toLowerCase().equals(FEATURE_YES)) {
                                 if (!maskingSet) {
                                     this.createAndStoreClassItem(study, "StudyFeature",
-                                            new String[][] { { "featureType", ConverterCVT.FEATURE_T_MASKING },
-                                                    { "featureValue", ConverterCVT.FEATURE_V_NO_BLINDING } });
+                                            new String[][] { { "type", ConverterCVT.FEATURE_T_MASKING },
+                                                    { "value", ConverterCVT.FEATURE_V_NO_BLINDING } });
                                     maskingSet = true;
                                 } else {
                                     this.writeLog(
@@ -637,8 +636,8 @@ public class EuctrConverter extends CacheConverter {
                             if (tuple[1].toLowerCase().equals(FEATURE_YES)) {
                                 if (!maskingSet) {
                                     this.createAndStoreClassItem(study, "StudyFeature",
-                                            new String[][] { { "featureType", ConverterCVT.FEATURE_T_MASKING },
-                                                    { "featureValue", ConverterCVT.FEATURE_V_SINGLE_BLIND } });
+                                            new String[][] { { "type", ConverterCVT.FEATURE_T_MASKING },
+                                                    { "value", ConverterCVT.FEATURE_V_SINGLE_BLIND } });
                                     maskingSet = true;
                                 } else {
                                     this.writeLog(
@@ -650,8 +649,8 @@ public class EuctrConverter extends CacheConverter {
                             if (tuple[1].toLowerCase().equals(FEATURE_YES)) {
                                 if (!maskingSet) {
                                     this.createAndStoreClassItem(study, "StudyFeature",
-                                            new String[][] { { "featureType", ConverterCVT.FEATURE_T_MASKING },
-                                                    { "featureValue", ConverterCVT.FEATURE_V_DOUBLE_BLIND } });
+                                            new String[][] { { "type", ConverterCVT.FEATURE_T_MASKING },
+                                                    { "value", ConverterCVT.FEATURE_V_DOUBLE_BLIND } });
                                     maskingSet = true;
                                 } else {
                                     this.writeLog(
@@ -664,8 +663,8 @@ public class EuctrConverter extends CacheConverter {
                                 if (!interventionSet) {
                                     this.createAndStoreClassItem(study, "StudyFeature",
                                             new String[][] {
-                                                    { "featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
-                                                    { "featureValue", ConverterCVT.FEATURE_V_PARALLEL } });
+                                                    { "type", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
+                                                    { "value", ConverterCVT.FEATURE_V_PARALLEL } });
                                     interventionSet = true;
                                 } else {
                                     this.writeLog(
@@ -678,8 +677,8 @@ public class EuctrConverter extends CacheConverter {
                                 if (!interventionSet) {
                                     this.createAndStoreClassItem(study, "StudyFeature",
                                             new String[][] {
-                                                    { "featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
-                                                    { "featureValue", ConverterCVT.FEATURE_V_CROSSOVER } });
+                                                    { "type", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
+                                                    { "value", ConverterCVT.FEATURE_V_CROSSOVER } });
                                     interventionSet = true;
                                 } else {
                                     this.writeLog(
@@ -765,8 +764,8 @@ public class EuctrConverter extends CacheConverter {
 
             if (!ConverterUtils.isBlankOrNull(phaseValue)) {
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
-                                { "featureValue", phaseValue } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_PHASE },
+                                { "value", phaseValue } });
             }
         }
     }
@@ -793,18 +792,16 @@ public class EuctrConverter extends CacheConverter {
 
                     if (mHcCode.matches()) {
                         // TODO: remove if too generic? therapeutic area (diseases/body conditions)
-                        String firstCode = WordUtils.capitalizeFully(mHcCode.group(1), ' ', '-');
+                        String firstCode = mHcCode.group(1);
                         if (!seenOriginalValues.contains(firstCode)) {
-                            this.linkStudyToStudyCondition(study, firstCode, mHcCode.group(2),
-                                    ConverterCVT.CV_MESH_TREE);
+                            this.linkStudyToStudyCondition(study, firstCode, null, null, mHcCode.group(2));
                             seenOriginalValues.add(firstCode);
                         }
 
                         // More specific condition
-                        String secondCode = WordUtils.capitalizeFully(mHcCode.group(3), ' ', '-');
+                        String secondCode = mHcCode.group(3);
                         if (!seenOriginalValues.contains(secondCode)) {
-                            this.linkStudyToStudyCondition(study, secondCode, mHcCode.group(4),
-                                    ConverterCVT.CV_MESH_TREE);
+                            this.linkStudyToStudyCondition(study, secondCode, null, null, mHcCode.group(4));
                             seenOriginalValues.add(secondCode);
                         }
                     } else {
@@ -822,8 +819,7 @@ public class EuctrConverter extends CacheConverter {
                     if (mHcKeyword.matches()) {
                         String formattedKeyword = WordUtils.capitalizeFully(mHcKeyword.group(2), ' ', '-');
                         if (!seenOriginalValues.contains(formattedKeyword)) {
-                            this.linkStudyToStudyCondition(study, formattedKeyword, mHcKeyword.group(1),
-                                    ConverterCVT.CV_MEDDRA);
+                            this.linkStudyToStudyCondition(study, formattedKeyword, mHcKeyword.group(1), null, null);
                             seenOriginalValues.add(formattedKeyword);
                         }
                     } else {
@@ -839,7 +835,7 @@ public class EuctrConverter extends CacheConverter {
                 String freeTextValue = WordUtils.capitalizeFully(hcFreetext, ' ', '-');
 
                 if (!seenOriginalValues.contains(freeTextValue)) {
-                    this.linkStudyToStudyCondition(study, freeTextValue, null, null);
+                    this.linkStudyToStudyCondition(study, freeTextValue, null, null, null);
                     seenOriginalValues.add(freeTextValue);
                 }
             }
@@ -856,15 +852,84 @@ public class EuctrConverter extends CacheConverter {
      */
     public void parseInterventions(Item study, String iFreetext) throws Exception {
         // TODO: Relevant? doing same thing as in WHO
-        study.setAttributeIfNotNull("interventions", iFreetext);
+        if (iFreetext != null) {
+            iFreetext = iFreetext.strip();
 
-        // TODO: filter out "empty" products ("Pharmaceutical Form:")
-        // TODO: match with CV
-        String[] products = iFreetext.split("\n\n");
-        for (String p : products) {
-            if (!ConverterUtils.isBlankOrNull(p)) {
-                this.createAndStoreClassItem(study, "Topic",
-                        new String[][] { { "type", ConverterCVT.TOPIC_TYPE_CHEMICAL_AGENT }, { "value", p } });
+            if (!iFreetext.isEmpty()) {
+                if (!iFreetext.equalsIgnoreCase("Pharmaceutical Form:")) {
+                    study.setAttributeIfNotNull("interventionsDescription", iFreetext);
+
+                    // TODO: match with CV
+                    // TODO: could optimise code by taking advantage of field order
+                    String[] products = iFreetext.split("\n\n");
+                    for (String p : products) {
+                        String tradeName = null;
+                        String productName = null;
+                        String productCode = null;
+                        StringBuilder productInn = new StringBuilder();
+
+                        for (String pLine : p.split("\n")) {
+                            String[] lineSplit = pLine.split(": ");
+                            if (lineSplit.length == 2) {
+                                if (lineSplit[0].equalsIgnoreCase("Trade Name")) {
+                                    if (!ConverterUtils.isBlankOrNull(lineSplit[1])
+                                            && !P_PRODUCT_NA.matcher(lineSplit[1]).matches()) {
+                                        tradeName = ConverterUtils.normaliseIntervention(lineSplit[1]);
+                                    }
+                                } else if (lineSplit[0].equalsIgnoreCase("Product Name")) {
+                                    if (productName == null) {
+                                        if (!ConverterUtils
+                                                .isBlankOrNull(lineSplit[1])
+                                                && !P_PRODUCT_NA.matcher(lineSplit[1]).matches()) {
+                                            productName = ConverterUtils.normaliseIntervention(lineSplit[1]);
+                                        }
+                                    } else {
+                                        this.writeLog(
+                                                "Warning: found multiple product names for the same product: " + p);
+                                    }
+                                } else if (lineSplit[0].equalsIgnoreCase("Product Code")) {
+                                    if (!ConverterUtils.isBlankOrNull(lineSplit[1])
+                                            && !P_PRODUCT_NA.matcher(lineSplit[1]).matches()) {
+                                        productCode = ConverterUtils.normaliseIntervention(lineSplit[1]);
+                                    }
+                                } else if (lineSplit[0].equalsIgnoreCase("INN or Proposed INN")) {
+                                    if (!ConverterUtils.isBlankOrNull(lineSplit[1])) {
+                                        // INN or Proposed INN is after all previous fields, but there can be multiple
+                                        // of these, if we find one with an invalid value, we break and use another
+                                        // field for intervention name instead
+                                        if (P_PRODUCT_NA.matcher(lineSplit[1]).matches()) {
+                                            productInn.setLength(0);
+                                            break;
+                                        }
+
+                                        if (productInn.length() > 0) {
+                                            productInn.append("/");
+                                        }
+
+                                        productInn.append(ConverterUtils.normaliseIntervention(lineSplit[1]));
+                                    }
+                                }
+                            }
+                        }
+
+                        if (productInn.length() > 0) {
+                            this.linkStudyToIntervention(study, ConverterCVT.INTERVENTION_T_DRUG, productInn.toString(),
+                                    null,
+                                    null);
+                        } else if (productName != null) {
+                            this.linkStudyToIntervention(study, ConverterCVT.INTERVENTION_T_DRUG, productName, null,
+                                    null);
+                        } else if (tradeName != null) {
+                            this.linkStudyToIntervention(study, ConverterCVT.INTERVENTION_T_DRUG, tradeName, null,
+                                    null);
+                        } else if (productCode != null) {
+                            this.linkStudyToIntervention(study, ConverterCVT.INTERVENTION_T_DRUG, productCode, null,
+                                    null);
+                        } else {
+                            this.writeLog("Couldn't find product name from product: " + p);
+                        }
+                    }
+                }
             }
         }
     }
@@ -999,7 +1064,7 @@ public class EuctrConverter extends CacheConverter {
         Set<Item> seenCountries = null; // Already cached countries (if existing study) + countries parsed
 
         if (this.existingStudy()) { // Getting already stored (cached) Country items
-            List<Item> cachedCountries = this.countries.get(study.getIdentifier());
+            Set<Item> cachedCountries = this.countries.get(study.getIdentifier());
             if (cachedCountries != null) {
                 seenCountries = new HashSet<Item>(cachedCountries);
             }
@@ -1089,8 +1154,6 @@ public class EuctrConverter extends CacheConverter {
                 // The age criteria is at the end of the IC string
                 List<String> ageLines = ConverterUtils.getLastLines(icStr, 6);
 
-                // study.setAttributeIfNotNull("testField5", String.join(";", ageLines));
-
                 if (ageLines.size() != 6 || !ageLines.get(0).startsWith("Are the")) {
                     this.writeLog("Malformed IC age end section: " + String.join(";", ageLines));
                 } else {
@@ -1116,7 +1179,8 @@ public class EuctrConverter extends CacheConverter {
 
                     // < 18 years
                     if (under18Value.equalsIgnoreCase("yes")) {
-                        minAge = "0"; // Used when checking over65Value to only set minAge to 65 if minAge is empty
+                        minAge = ConverterCVT.AGE_MIN_YEARS; // Used when checking over65Value to only set minAge to 65
+                                                             // if minAge is empty
                         if (maxAge.equals("")) {
                             maxAge = "17";
                         }
@@ -1124,14 +1188,10 @@ public class EuctrConverter extends CacheConverter {
 
                     // >= 65 years
                     if (over65Value.equalsIgnoreCase("yes")) {
-                        maxAge = "";
+                        maxAge = ConverterCVT.AGE_MAX_YEARS;
                         if (minAge.equals("")) {
                             minAge = "65";
                         }
-                    }
-
-                    if (minAge.equals("0")) {
-                        minAge = "";
                     }
 
                     if (!ConverterUtils.isBlankOrNull(minAge)) {

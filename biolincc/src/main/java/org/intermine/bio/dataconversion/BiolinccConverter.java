@@ -359,31 +359,45 @@ public class BiolinccConverter extends CacheConverter {
      */
     public void parseAge(Item study, String cohortType) {
         if (!ConverterUtils.isBlankOrNull(cohortType)) {
-            String minAge = "";
-            String maxAge = "";
+            String minAge = null;
+            String maxAge = null;
+            String ageGroup = null;
 
             if (cohortType.equalsIgnoreCase(BiolinccConverter.AGE_ADULT)) {
                 minAge = "18";
+                maxAge = ConverterCVT.AGE_MAX_YEARS;
+
+                // Assuming here that adult includes older adults as well
+                ageGroup = ConverterUtils.constructAgeGroupStr(ConverterCVT.AGE_GROUP_ADULT,
+                        ConverterCVT.AGE_GROUP_OLDER_ADULT);
             } else if (cohortType.equalsIgnoreCase(BiolinccConverter.AGE_PEDIATRIC)) {
+                minAge = ConverterCVT.AGE_MIN_YEARS;
                 maxAge = "17";
-            } else if (!cohortType.equalsIgnoreCase(BiolinccConverter.AGE_ALL)) {
+                ageGroup = ConverterCVT.AGE_GROUP_PEDIATRIC;
+            } else if (cohortType.equalsIgnoreCase(BiolinccConverter.AGE_ALL)) {
+                minAge = ConverterCVT.AGE_MIN_YEARS;
+                maxAge = ConverterCVT.AGE_MAX_YEARS;
+
+                // Assuming all doesn't include in utero
+                ageGroup = ConverterUtils.constructAgeGroupStr(ConverterCVT.AGE_GROUP_PEDIATRIC,
+                        ConverterCVT.AGE_GROUP_ADULT, ConverterCVT.AGE_GROUP_OLDER_ADULT);
+            } else {
                 this.writeLog("Unknown cohort type value: " + cohortType);
-                // TODO: unknown value
             }
 
-            // TODO: none on no minimum?
-            if (!ConverterUtils.isBlankOrNull(minAge)) {
+            if (minAge != null) {
                 study.setAttributeIfNotNull("minAge", minAge);
                 study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
 
-            if (!ConverterUtils.isBlankOrNull(maxAge)) {
+            if (maxAge != null) {
                 study.setAttributeIfNotNull("maxAge", maxAge);
                 study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
-        } else {
-            study.setAttributeIfNotNull("minAge", ConverterCVT.UNKNOWN);
-            study.setAttributeIfNotNull("maxAge", ConverterCVT.UNKNOWN);
+
+            if (ageGroup != null) {
+                study.setAttributeIfNotNull("ageGroup", ageGroup);
+            }
         }
     }
 
@@ -486,14 +500,8 @@ public class BiolinccConverter extends CacheConverter {
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         // TODO: match values with CT codes/ICD Codes
         if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
-            Set<String> studyConditions = Stream.of(conditionsStr.split(","))
-                    .map(String::strip)
-                    .map(c -> WordUtils.capitalizeFully(c, ' ', '-'))
-                    .collect(Collectors.toSet());
-
-            Iterator<String> conditionsIter = studyConditions.iterator();
-            while (conditionsIter.hasNext()) {
-                this.linkStudyToStudyCondition(study, conditionsIter.next(), null, null);
+            for (String c : conditionsStr.split(",")) {
+                this.linkStudyToStudyCondition(study, c, null, null, null);
             }
         }
     }

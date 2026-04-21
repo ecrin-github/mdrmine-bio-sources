@@ -256,7 +256,6 @@ public class WhoConverter extends CacheConverter {
         /* Date enrolment (start date) */
         // "Date of Competent Authority Decision" in EUCTR
         String dateEnrolmentStr = this.getAndCleanValue(lineValues, "Date_enrollement");
-        // study.setAttributeIfNotNull("testField3", dateEnrolmentStr);
         LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, null);
         this.setStudyStartDate(study, dateEnrolment);
 
@@ -264,10 +263,6 @@ public class WhoConverter extends CacheConverter {
         String resultsDatePostedStr = this.getAndCleanValue(lineValues, "results_date_posted");
         LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, null);
         String publicationYear = resultsDatePosted != null ? String.valueOf(resultsDatePosted.getYear()) : "";
-        // study.setAttributeIfNotNull("testField1", lastUpdate != null ?
-        // lastUpdate.toString() : null);
-        // study.setAttributeIfNotNull("testField2", registrationDate != null ?
-        // registrationDate.toString() : null);
 
         // TODO EUCTR: replace updated date + registration date + publication year if
         // existing study + start date more recent
@@ -329,7 +324,6 @@ public class WhoConverter extends CacheConverter {
         /* Ethics decision date, can be a semi colon list */
         // TODO
         String ethicsApprovalDateStr = this.getAndCleanValue(lineValues, "Ethics_Approval_Date");
-        // study.setAttributeIfNotNull("testField4", ethicsApprovalDateStr);
 
         /* Study countries */
         String countries = this.getAndCleanValue(lineValues, "Countries");
@@ -340,21 +334,19 @@ public class WhoConverter extends CacheConverter {
         this.parseConditions(study, conditions);
 
         /* Interventions */
-        // TODO: use for study topics
+        // TODO: use for study interventions
         String interventions = this.getAndCleanValue(lineValues, "Interventions");
-        study.setAttributeIfNotNull("interventions", interventions);
-
-        /* Description 2/3 (interventions) */
-        if (!this.existingStudy()) {
-            ConverterUtils.addToDescription(study, interventions);
-        }
+        this.parseInterventions(study, interventions);
 
         /* Min age */
         String ageMin = this.getAndCleanValue(lineValues, "Agemin");
-        this.parseAgeField(study, ageMin, "minAge", "minAgeUnit");
+        this.parseAgeField(study, ageMin, ConverterCVT.FIELD_MIN_AGE, ConverterCVT.FIELD_MIN_AGE_UNIT);
         /* Max age */
         String ageMax = this.getAndCleanValue(lineValues, "Agemax");
-        this.parseAgeField(study, ageMax, "maxAge", "maxAgeUnit");
+        this.parseAgeField(study, ageMax, ConverterCVT.FIELD_MAX_AGE, ConverterCVT.FIELD_MAX_AGE_UNIT);
+
+        /* Study age group */
+        study.setAttributeIfNotNull("ageGroup", ConverterUtils.calculateAgeGroup(study));
 
         /* Gender */
         String gender = this.getAndCleanValue(lineValues, "Gender");
@@ -412,6 +404,10 @@ public class WhoConverter extends CacheConverter {
 
         /* Results */
 
+        /* Study hasResults */
+        String resultsYesNo = this.getAndCleanValue(lineValues, "results_yes_no");
+        this.parseResultsYesNo(study, resultsYesNo);
+
         // Not in MDR, baseline chars = Factors that describe study participants at the
         // beginning of the study
         // Could fall under ObjectDescription, creating a new SO? -> what would be
@@ -435,9 +431,6 @@ public class WhoConverter extends CacheConverter {
         // plan details
         String resultsIPDDescription = this.getAndCleanValue(lineValues, "results_IPD_description");
         this.parseDataSharingStatement(study, resultsIPDPlan, resultsIPDDescription);
-
-        // In MDR WHO model but unused, 9% of yes, 91% of empty values
-        String resultsYesNo = this.getAndCleanValue(lineValues, "results_yes_no");
 
         /* Ethics */
         // Not in MDR, ethics approval status, can have a list of values
@@ -953,6 +946,17 @@ public class WhoConverter extends CacheConverter {
                         { "fullName", fullName }, { "affiliation", affiliation }, { "contribType", contribType } });
     }
 
+    public void parseInterventions(Item study, String interventions) {
+        if (!ConverterUtils.isBlankOrNull(interventions)) {
+            study.setAttribute("interventionsDescription", interventions);
+        }
+
+        /* Description 2/3 (interventions) */
+        if (!this.existingStudy()) {
+            ConverterUtils.addToDescription(study, interventions);
+        }
+    }
+
     /**
      * Parse min/max age value to set age value and unit fields.
      * 
@@ -962,79 +966,102 @@ public class WhoConverter extends CacheConverter {
      * @param unitAttr the unit attribute name to set (either minAgeUnit or
      *                 maxAgeUnit)
      */
-    public void parseAgeField(Item study, String ageStr, String ageAttr, String unitAttr) {
+    public void parseAgeField(Item study, String ageStr, String ageAttr, String unitAttr) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(ageStr)) {
+            if (!((ageAttr.equals(ConverterCVT.FIELD_MIN_AGE) || ageAttr.equals(ConverterCVT.FIELD_MAX_AGE))
+                && (unitAttr.equals(ConverterCVT.FIELD_MIN_AGE_UNIT) || unitAttr.equals(ConverterCVT.FIELD_MAX_AGE_UNIT)))) {
+                throw new Exception("Wrong age field names: " + ageStr + ", " + unitAttr);
+            }
+
+            // TODO: add handling of case where "0" is value for max to signify no limit
+
             // Check for N/A or no limit
             Matcher mAgeNotApplicable = P_AGE_NOT_APPLICABLE.matcher(ageStr);
-            if (mAgeNotApplicable.matches()) {
-                study.setAttributeIfNotNull(ageAttr, ConverterCVT.NOT_APPLICABLE);
-            } else { // Not stated
-                Matcher mAgeNotStated = P_UNKNOWN.matcher(ageStr);
-                if (mAgeNotStated.matches()) {
-                    study.setAttributeIfNotNull(ageAttr, ConverterCVT.NOT_STATED);
+            if (mAgeNotApplicable.matches()) { // Assuming N/A means no limit, which should be true in most cases?
+                if (ageAttr.equals(ConverterCVT.FIELD_MIN_AGE)) {
+                    study.setAttribute(ageAttr, ConverterCVT.AGE_MIN_YEARS);
                 } else {
-                    Matcher mAge = P_AGE.matcher(ageStr);
-                    boolean successful = false;
-                    if (mAge.matches()) {
-                        String g1 = mAge.group(1); // GT or LT
-                        String g2 = mAge.group(2); // age value
-                        String g3 = mAge.group(3); // age unit
-                        if (!(g2 == null)) {
-                            if (NumberUtils.isParsable(g2)) {
-                                if (NumberUtils.isDigits(g2)) {
-                                    int ageNumber = -1;
-                                    if (Long.valueOf(g2) > Integer.MAX_VALUE) {
-                                        ageNumber = Integer.MAX_VALUE;
-                                    } else {
-                                        ageNumber = Integer.parseInt(g2);
-                                    }
+                    study.setAttribute(ageAttr, ConverterCVT.AGE_MAX_YEARS);
+                }
+                
+                study.setAttribute(unitAttr, ConverterCVT.AGE_UNIT_YEARS);
+            } else { // Not stated
+                Matcher mAge = P_AGE.matcher(ageStr);
+                boolean successful = false;
+                if (mAge.matches()) {
+                    String g1 = mAge.group(1); // GT or LT
+                    String g2 = mAge.group(2); // age value
+                    String g3 = mAge.group(3); // age unit
+                    if (!(g2 == null)) {
+                        if (NumberUtils.isParsable(g2)) {
+                            if (NumberUtils.isDigits(g2)) {
+                                int ageNumber = -1;
+                                if (Long.valueOf(g2) > Integer.MAX_VALUE) { // UMIN000032023
+                                    ageNumber = Integer.parseInt(ConverterCVT.AGE_MAX_YEARS);
+                                } else {
+                                    ageNumber = Integer.parseInt(g2);
+                                }
 
-                                    if (g1 != null) { // GT/LT
-                                        if (ageAttr.equalsIgnoreCase("minage")) {
-                                            if (g1.equals(">")) {
-                                                ageNumber++;
-                                            } else {
-                                                this.writeLog("Wrong inequality sign for minAgeUnit: "
-                                                        + g1 + " full string: " + ageStr);
-                                            }
-                                        } else if (ageAttr.equalsIgnoreCase("maxage")) {
-                                            if (g1.equals("<")) {
-                                                ageNumber--;
-                                            } else {
-                                                this.writeLog("Wrong inequality sign for maxAgeUnit: "
-                                                        + g1 + " full string: " + ageStr);
-                                            }
+                                if (g1 != null) { // GT/LT
+                                    if (ageAttr.equals(ConverterCVT.FIELD_MIN_AGE)) {
+                                        if (g1.equals(">")) {
+                                            ageNumber++;
+                                        } else {
+                                            this.writeLog("Wrong inequality sign for minAgeUnit: "
+                                                    + g1 + " full string: " + ageStr);
+                                        }
+                                    } else if (ageAttr.equals(ConverterCVT.FIELD_MAX_AGE)) {
+                                        if (g1.equals("<")) {
+                                            ageNumber--;
+                                        } else {
+                                            this.writeLog("Wrong inequality sign for maxAgeUnit: "
+                                                    + g1 + " full string: " + ageStr);
                                         }
                                     }
-
-                                    study.setAttributeIfNotNull(ageAttr, String.valueOf(ageNumber));
-                                } else { // Case where min age value is float
-                                    study.setAttributeIfNotNull(ageAttr, g2);
                                 }
 
-                                // TODO: how to check unit against data?
-                                if (!(g3 == null || g3.equalsIgnoreCase("age"))) {
-                                    study.setAttributeIfNotNull(unitAttr, ConverterUtils.normaliseUnit(g3));
-                                } else { // If no unit (or unit is "age"), we assume it's years
-                                    study.setAttributeIfNotNull(unitAttr, "Years");
-                                }
-
-                                successful = true;
-                            } else {
-                                this.writeLog("Wrong format minAge value: "
-                                        + g2 + " full string: " + ageStr);
+                                study.setAttributeIfNotNull(ageAttr, String.valueOf(ageNumber));
+                            } else { // Case where min age value is float
+                                study.setAttributeIfNotNull(ageAttr, g2);
                             }
+
+                            // TODO: how to check unit against data?
+                            if (g3 != null) {
+                                if (g3.equalsIgnoreCase("age")) {   // Assuming "age" means years
+                                    study.setAttributeIfNotNull(unitAttr, ConverterCVT.AGE_UNIT_YEARS);
+                                } else {
+                                    study.setAttributeIfNotNull(unitAttr, ConverterUtils.normaliseUnit(g3));
+                                }
+                            } else {    // No unit, attempt to get it from the other age field unit, otherwise default to Years
+                                String unit = null;
+                                if (unitAttr.equals(ConverterCVT.FIELD_MIN_AGE_UNIT)) {
+                                    unit = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MAX_AGE_UNIT);
+                                } else {
+                                    unit = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MIN_AGE_UNIT);
+                                }
+
+                                if (ConverterUtils.isBlankOrNull(unit)) {
+                                    unit = ConverterCVT.AGE_UNIT_YEARS;
+                                }
+
+                                study.setAttribute(unitAttr, unit);
+                            }
+
+                            successful = true;
+                        } else {
+                            this.writeLog("Wrong format minAge value: "
+                                    + g2 + " full string: " + ageStr);
                         }
-                        if (!successful) {
-                            this.writeLog(
-                                    "Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr +
-                                            ", parsed groups: -g1: " + g1 + " -g2: " + g2 + " -g3: " + g3);
-                        }
-                    } else {
+                    }
+                    if (!successful) {
                         this.writeLog(
                                 "Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr +
-                                        ", no matches found");
+                                        ", parsed groups: -g1: " + g1 + " -g2: " + g2 + " -g3: " + g3);
                     }
+                } else {
+                    this.writeLog(
+                            "Couldn't parse " + ageAttr + " and " + unitAttr + " properly, string: " + ageStr +
+                                    ", no matches found");
                 }
             }
         }
@@ -1162,8 +1189,8 @@ public class WhoConverter extends CacheConverter {
 
             if (!ConverterUtils.isBlankOrNull(featureValue)) {
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
-                                { "featureValue", featureValue } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_PHASE },
+                                { "value", featureValue } });
             }
         }
     }
@@ -1172,7 +1199,7 @@ public class WhoConverter extends CacheConverter {
      * TODO
      */
     public boolean hasPhaseFeature(Item study) {
-        return this.getItemFromItemMap(study, this.studyFeatures, "featureType", ConverterCVT.FEATURE_T_PHASE) != null;
+        return this.getItemFromItemMap(study, this.studyFeatures, "type", ConverterCVT.FEATURE_T_PHASE) != null;
     }
 
     /**
@@ -1193,20 +1220,20 @@ public class WhoConverter extends CacheConverter {
                 String masking = mFeatureInterventional.group(9);
 
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_ALLOCATION },
-                                { "featureValue", allocation } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_ALLOCATION },
+                                { "value", allocation } });
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
-                                { "featureValue", model } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
+                                { "value", model } });
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE },
-                                { "featureValue", purpose } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE },
+                                { "value", purpose } });
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_MASKING },
-                                { "featureValue", masking } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_MASKING },
+                                { "value", masking } });
             } else { // Using raw value
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureValue", featuresStr } });
+                        new String[][] { { "value", featuresStr } });
             }
         }
     }
@@ -1297,7 +1324,7 @@ public class WhoConverter extends CacheConverter {
         Set<Item> seenCountries = null; // Already cached countries (if existing study) + countries parsed
 
         if (this.existingStudy()) { // Getting already stored (cached) Country items
-            List<Item> cachedCountries = this.countries.get(study.getIdentifier());
+            Set<Item> cachedCountries = this.countries.get(study.getIdentifier());
             if (cachedCountries != null) {
                 seenCountries = new HashSet<Item>(cachedCountries);
             }
@@ -1363,19 +1390,11 @@ public class WhoConverter extends CacheConverter {
      */
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         if (!this.existingStudy()) {
-            // TODO: match values with CT codes/ICD Codes
             if (conditionsStr != null) {
+                // TODO: match values with CT codes/ICD Codes
                 // TODO: some values contain semicolons (e.g. NCT00112593 trial)
-                // Not adding duplicate StudyConditions
-                Set<String> studyConditions = Stream.of(conditionsStr.split(";"))
-                        .map(String::strip)
-                        .filter(s -> !ConverterUtils.isBlankOrNull(s))
-                        .map(c -> WordUtils.capitalizeFully(c, ' ', '-'))
-                        .collect(Collectors.toSet());
-
-                Iterator<String> conditionsIter = studyConditions.iterator();
-                while (conditionsIter.hasNext()) {
-                    this.linkStudyToStudyCondition(study, conditionsIter.next(), null, null);
+                for (String c: conditionsStr.split(";")) {
+                    this.linkStudyToStudyCondition(study, c, null, null, null);
                 }
             }
         }
@@ -1388,8 +1407,8 @@ public class WhoConverter extends CacheConverter {
         if (!ConverterUtils.isBlankOrNull(retrospectiveFlag) && !this.existingStudy()) {
             if (retrospectiveFlag.equalsIgnoreCase("1")) {
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE },
-                                { "featureValue", ConverterCVT.FEATURE_V_RETROSPECTIVE } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE },
+                                { "value", ConverterCVT.FEATURE_V_RETROSPECTIVE } });
             } else {
                 this.writeLog("Retrospective flag: value is not empty but not equal to 1: " + retrospectiveFlag);
             }
@@ -1433,6 +1452,20 @@ public class WhoConverter extends CacheConverter {
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
                             { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void parseResultsYesNo(Item study, String resultsYesNo) {
+        // In WHO, value is either "yes" or empty, we could also assume empty means no results
+        if (!ConverterUtils.isBlankOrNull(resultsYesNo) && resultsYesNo.equalsIgnoreCase("yes")) {
+            boolean hasResults = false;
+            if (resultsYesNo.equalsIgnoreCase("yes")) {
+                hasResults = true;
+            }
+            study.setAttribute("hasResults", String.valueOf(hasResults));
         }
     }
 

@@ -42,6 +42,10 @@ public class CtgConverter extends CacheConverter {
     private static final String SPONSOR = "SPONSOR";
     private static final String SPONSOR_INVESTIGATOR = "SPONSOR_INVESTIGATOR";
 
+    private static final String AGE_GROUP_CHILD = "CHILD";
+    private static final String AGE_GROUP_ADULT = "ADULT";
+    private static final String AGE_GROUP_OLDER_ADULT = "OLDER_ADULT";
+
     private static final Pattern P_PHASE = Pattern.compile("(NA)|(early_)?phase(\\d)(?:\\|phase(\\d))?",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_DOC = Pattern.compile("(.*?),\\h*(http\\S+)\\h*", Pattern.CASE_INSENSITIVE);
@@ -104,7 +108,7 @@ public class CtgConverter extends CacheConverter {
             /* Study conditions */
             this.parseConditions(study, ctgStudy);
 
-            /* Study topics */
+            /* Study interventions */
             this.parseInterventions(study, ctgStudy);
 
             /* Primary outcomes */
@@ -142,6 +146,9 @@ public class CtgConverter extends CacheConverter {
 
             /* Study end date */
             this.parseCompletionDates(study, ctgStudy);
+
+            /* Study hasResults */
+            this.parseHasResults(study, ctgStudy);
 
             /* Trial registry entry SO */
             this.createAndStoreRegistryEntrySO(study, ctgStudy);
@@ -481,20 +488,13 @@ public class CtgConverter extends CacheConverter {
                     }
                 }
 
-                // Probably not needed, but just in case
-                Set<String> studyConditions = condModule.conditions.stream()
-                        .map(String::strip)
-                        .collect(Collectors.toSet());
-
                 /* StudyConditions */
-                Iterator<String> conditionsIter = studyConditions.iterator();
-                while (conditionsIter.hasNext()) {
-                    String condition = conditionsIter.next();
-                    String meshId = meshTerms.getOrDefault(condition.toLowerCase(), null);
+                for (String c : condModule.conditions) {
+                    String meshId = meshTerms.getOrDefault(c.toLowerCase(), null);
                     if (meshId != null) {
-                        this.linkStudyToStudyCondition(study, condition, meshId, ConverterCVT.CV_MESH);
+                        this.linkStudyToStudyCondition(study, c, null, meshId, null);
                     } else {
-                        this.linkStudyToStudyCondition(study, condition, null, null);
+                        this.linkStudyToStudyCondition(study, c, null, null, null);
                     }
                 }
             }
@@ -512,7 +512,7 @@ public class CtgConverter extends CacheConverter {
         ArmsInterventionsModule armsModule = ctgStudy.protocolSection.armsInterventionsModule;
 
         if (armsModule != null) {
-            // TODO: set Study.interventions?
+            // TODO: set Study.interventionsDescription?
 
             if (armsModule.interventions != null && armsModule.interventions.size() > 0) {
                 /*
@@ -535,7 +535,7 @@ public class CtgConverter extends CacheConverter {
                 // treating them as duplicates for now (NCT04745767)
                 Set<String> seenInterventionNames = new HashSet<String>();
 
-                /* Topics */
+                /* Interventions */
                 Iterator<Intervention> interventionsIter = armsModule.interventions.iterator();
                 while (interventionsIter.hasNext()) {
 
@@ -547,12 +547,9 @@ public class CtgConverter extends CacheConverter {
 
                         String meshId = meshTerms.getOrDefault(intervention.name.toLowerCase(), null);
                         if (meshId != null) {
-                            this.createAndStoreClassItem(study, "Topic",
-                                    new String[][] { { "type", interventionType }, { "value", intervention.name },
-                                            { "ctType", ConverterCVT.CV_MESH }, { "ctCode", meshId } });
+                            this.linkStudyToIntervention(study, interventionType, intervention.name, meshId, null);
                         } else {
-                            this.createAndStoreClassItem(study, "Topic",
-                                    new String[][] { { "type", interventionType }, { "value", intervention.name } });
+                            this.linkStudyToIntervention(study, interventionType, intervention.name, null, null);
                         }
 
                         seenInterventionNames.add(intervention.name.toLowerCase());
@@ -876,26 +873,50 @@ public class CtgConverter extends CacheConverter {
         EligibilityModule eligModule = ctgStudy.protocolSection.eligibilityModule;
 
         if (eligModule != null) {
+            /* Study min/max age */
             if (!ConverterUtils.isBlankOrNull(eligModule.minimumAge)) {
                 String[] minAgeSplit = eligModule.minimumAge.split(" ");
 
                 if (minAgeSplit.length > 1) {
                     study.setAttributeIfNotNull("minAge", minAgeSplit[0]);
-                    study.setAttributeIfNotNull("minAgeUnit",
-                            minAgeSplit[1] + (minAgeSplit[1].endsWith("s") ? "" : "s"));
+                    study.setAttributeIfNotNull("minAgeUnit", ConverterUtils.normaliseUnit(minAgeSplit[1]));
                 } else {
                     this.writeLog("Warning: failed to split minimum age string: " + eligModule.minimumAge);
                 }
             }
+
             if (!ConverterUtils.isBlankOrNull(eligModule.maximumAge)) {
                 String[] maxAgeSplit = eligModule.maximumAge.split(" ");
 
                 if (maxAgeSplit.length > 1) {
                     study.setAttributeIfNotNull("maxAge", maxAgeSplit[0]);
-                    study.setAttributeIfNotNull("maxAgeUnit",
-                            maxAgeSplit[1] + (maxAgeSplit[1].endsWith("s") ? "" : "s"));
+                    study.setAttributeIfNotNull("maxAgeUnit", ConverterUtils.normaliseUnit(maxAgeSplit[1]));
                 } else {
                     this.writeLog("Warning: failed to split maximum age string: " + eligModule.maximumAge);
+                }
+            }
+
+            /* Study age group */
+            if (eligModule.stdAges != null && eligModule.stdAges.size() > 0) {
+                Set<String> ageGroups = new HashSet<String>();
+
+                if (eligModule.stdAges.contains(AGE_GROUP_CHILD)) {
+                    ageGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC);
+                }
+
+                if (eligModule.stdAges.contains(AGE_GROUP_ADULT)) {
+                    ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                }
+
+                if (eligModule.stdAges.contains(AGE_GROUP_OLDER_ADULT)) {
+                    ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                }
+
+                if (ageGroups.size() > 0) {
+                    study.setAttributeIfNotNull("ageGroup",
+                            ConverterUtils.constructAgeGroupStr(ageGroups.toArray(String[]::new)));
+                } else {
+                    this.writeLog("Warning: did not find any known age group: " + eligModule.stdAges);
                 }
             }
         }
@@ -938,8 +959,8 @@ public class CtgConverter extends CacheConverter {
                     }
 
                     this.createAndStoreClassItem(study, "StudyFeature",
-                            new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
-                                    { "featureValue", ConverterCVT.FEATURE_T_PHASE + " " + phaseValue } });
+                            new String[][] { { "type", ConverterCVT.FEATURE_T_PHASE },
+                                    { "value", ConverterCVT.FEATURE_T_PHASE + " " + phaseValue } });
                 } else {
                     this.writeLog("Failed to match phase value: " + phasesStr);
                 }
@@ -1014,8 +1035,8 @@ public class CtgConverter extends CacheConverter {
 
                     this.createAndStoreClassItem(study, "StudyFeature",
                             new String[][] {
-                                    { "featureType", ConverterCVT.FEATURE_T_ALLOCATION },
-                                    { "featureValue", allocation } });
+                                    { "type", ConverterCVT.FEATURE_T_ALLOCATION },
+                                    { "value", allocation } });
                 }
 
                 // StudyFeature: Interventional model
@@ -1023,8 +1044,8 @@ public class CtgConverter extends CacheConverter {
                 if (!ConverterUtils.isBlankOrNull(designInfo.interventionModel)) {
                     this.createAndStoreClassItem(study, "StudyFeature",
                             new String[][] {
-                                    { "featureType", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
-                                    { "featureValue", ConverterUtils
+                                    { "type", ConverterCVT.FEATURE_T_INTERVENTION_MODEL },
+                                    { "value", ConverterUtils
                                             .capitaliseAndReplaceCharBySpace(designInfo.interventionModel, '_') } });
                 }
 
@@ -1054,16 +1075,16 @@ public class CtgConverter extends CacheConverter {
                     String maskingValue = designInfo.maskingInfo.masking;
                     this.createAndStoreClassItem(study, "StudyFeature",
                             new String[][] {
-                                    { "featureType", ConverterCVT.FEATURE_T_MASKING },
-                                    { "featureValue", maskingSb.toString() } });
+                                    { "type", ConverterCVT.FEATURE_T_MASKING },
+                                    { "value", maskingSb.toString() } });
                 }
 
                 // StudyFeature: Observational model
                 if (!ConverterUtils.isBlankOrNull(designInfo.observationalModel)) {
                     this.createAndStoreClassItem(study, "StudyFeature",
                             new String[][] {
-                                    { "featureType", ConverterCVT.FEATURE_T_OBSERVATIONAL_MODEL },
-                                    { "featureValue", ConverterUtils
+                                    { "type", ConverterCVT.FEATURE_T_OBSERVATIONAL_MODEL },
+                                    { "value", ConverterUtils
                                             .capitaliseAndReplaceCharBySpace(designInfo.observationalModel, '_') } });
                 }
 
@@ -1072,8 +1093,8 @@ public class CtgConverter extends CacheConverter {
                 if (!ConverterUtils.isBlankOrNull(designInfo.primaryPurpose)) {
                     this.createAndStoreClassItem(study, "StudyFeature",
                             new String[][] {
-                                    { "featureType", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE },
-                                    { "featureValue", ConverterUtils
+                                    { "type", ConverterCVT.FEATURE_T_PRIMARY_PURPOSE },
+                                    { "value", ConverterUtils
                                             .capitaliseAndReplaceCharBySpace(designInfo.primaryPurpose, '_') } });
                 }
 
@@ -1081,8 +1102,8 @@ public class CtgConverter extends CacheConverter {
                 if (!ConverterUtils.isBlankOrNull(designInfo.timePerspective)) {
                     this.createAndStoreClassItem(study, "StudyFeature",
                             new String[][] {
-                                    { "featureType", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE },
-                                    { "featureValue", ConverterUtils
+                                    { "type", ConverterCVT.FEATURE_T_TIME_PERSPECTIVE },
+                                    { "value", ConverterUtils
                                             .capitaliseAndReplaceCharBySpace(designInfo.timePerspective, '_') } });
                 }
             }
@@ -1133,6 +1154,10 @@ public class CtgConverter extends CacheConverter {
         }
 
         study.setAttributeIfNotNull("endDate", studyEndDateStr);
+    }
+
+    public void parseHasResults(Item study, CtgStudy ctgStudy) {
+        study.setAttribute("hasResults", String.valueOf(ctgStudy.hasResults));
     }
 
     /**

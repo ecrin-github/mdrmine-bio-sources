@@ -15,11 +15,14 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.Set;
 
-import org.apache.commons.lang.WordUtils;
+import org.apache.commons.text.WordUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
 import org.jsoup.Jsoup;
@@ -169,6 +172,9 @@ public class ConverterUtils {
      * @see #normaliseWord()
      */
     public static String normaliseUnit(String u) {
+        if (u.endsWith("s")) {
+            return ConverterUtils.normaliseWord(u);
+        }
         return ConverterUtils.normaliseWord(u) + "s";
     }
 
@@ -183,6 +189,26 @@ public class ConverterUtils {
             w = w.substring(0, 1).toUpperCase() + w.substring(1).toLowerCase();
         }
         return w;
+    }
+
+    /**
+     * TODO
+     */
+    public static String normaliseCondition(String c) {
+        if (c != null) {
+            return WordUtils.capitalizeFully(c.strip(), ' ', '-');
+        }
+        return c;
+    }
+
+    /**
+     * TODO
+     */
+    public static String normaliseIntervention(String i) {
+        if (i != null) {
+            return WordUtils.capitalizeFully(i.strip(), ' ', '-');
+        }
+        return i;
     }
 
     /**
@@ -270,6 +296,103 @@ public class ConverterUtils {
      */
     public static String constructMultiplePhasesString(String p1, String p2) {
         return ConverterUtils.convertPhaseNumber(p1) + "/" + ConverterUtils.convertPhaseNumber(p2);
+    }
+
+    /**
+     * TODO
+     */
+    public static String constructAgeGroupStr(CharSequence... ageGroups) {
+        return String.join(", ", ageGroups);
+    }
+
+    /**
+     * TODO
+     * overload
+     */
+    public static String constructAgeGroupStr(Set<String> ageGroups) {
+        return String.join(", ", ageGroups);
+    }
+
+    /**
+     * TODO
+     * Note: "In utero" age group edge case is only present and therefore only handled in CTIS
+     */
+    public static String calculateAgeGroup(Item study) {
+        Set<String> ageGroups = new HashSet<String>();
+
+        String minAge = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MIN_AGE);
+        String minAgeUnit = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MIN_AGE_UNIT);
+        String maxAge = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MAX_AGE);
+        String maxAgeUnit = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MAX_AGE_UNIT);
+
+        // Checking min age
+        if (!ConverterUtils.isBlankOrNull(minAge) && !ConverterUtils.isBlankOrNull(minAgeUnit)) {
+            if (!minAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {  // If unit is not years, means it's a smaller unit
+                ageGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC);
+            } else {
+                if (NumberUtils.isParsable(minAge)) {
+                    Float minAgeF = Float.parseFloat(minAge);
+                    if (minAgeF < 18) {
+                        ageGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC);
+                    } else if (minAgeF < 65) {
+                        ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                    } else {
+                        ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                    }
+                } else {
+                    // TODO: write log?
+                }
+            }
+
+            // Checking max age
+            if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
+                // If unit is not years it's a smaller unit, and child age group has already been added with min age
+                if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
+                    if (NumberUtils.isParsable(maxAge)) {
+                        Float maxAgeF = Float.parseFloat(maxAge);
+                        if (maxAgeF >= 18 && maxAgeF < 65) {
+                            ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                        } else if (maxAgeF >= 65) {
+                            ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+
+                            // If minAge is of child age group and max age of older adult age group, need to add adult age group as well
+                            if (ageGroups.contains(ConverterCVT.AGE_GROUP_PEDIATRIC)) {
+                                ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                            }
+                        }
+                    } else {
+                        // TODO: write log?
+                    }
+                }
+            } else {    // No max age, adding all groups older than the one added with minAge
+                if (ageGroups.contains(ConverterCVT.AGE_GROUP_PEDIATRIC)) {
+                    ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                    ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                } else if (ageGroups.contains(ConverterCVT.AGE_GROUP_PEDIATRIC)) {
+                    ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                }   // Else OLDER_ADULT, nothing to add
+            }
+        } else {    // Checking max age with no min age
+            if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
+                ageGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC); // No min age, adding child age group in any case
+                if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
+                    if (NumberUtils.isParsable(maxAge)) {
+                        Float maxAgeF = Float.parseFloat(maxAge);
+                        if (maxAgeF >= 18) {
+                            ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+
+                            if (maxAgeF >= 65) {
+                                ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                            }
+                        }
+                    } else {
+                        // TODO: write log?
+                    }
+                }
+            }
+        }
+
+        return ConverterUtils.constructAgeGroupStr(ageGroups);
     }
 
     /**
