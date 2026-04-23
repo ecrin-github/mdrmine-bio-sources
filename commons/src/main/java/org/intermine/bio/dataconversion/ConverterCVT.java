@@ -77,6 +77,7 @@ public class ConverterCVT {
     public static final String AGE_UNIT_YEARS = "Years";
     public static final String AGE_MIN_YEARS = "0";
     public static final String AGE_MAX_YEARS = "150";
+    public static enum AgeGroup {InUtero, Pediatric, Adult, OlderAdult};
     public static final String AGE_GROUP_IN_UTERO = "In Utero";
     public static final String AGE_GROUP_PEDIATRIC = "Pediatric";
     public static final String AGE_GROUP_ADULT = "Adult";

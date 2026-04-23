@@ -22,6 +22,7 @@ import org.intermine.xml.full.Item;
 
 import java.io.Reader;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -486,7 +487,8 @@ public class CtisConverter extends CacheConverter {
      * 
      */
     public void parseAgeGroup(Item study, String ageGroup) {
-        Set<String> ageGroups = new HashSet<String>();
+        EnumSet<ConverterCVT.AgeGroup> ageGroups = EnumSet.noneOf(ConverterCVT.AgeGroup.class);
+
         Integer minAge = null;
         String minAgeUnit = ConverterCVT.AGE_UNIT_YEARS;
         Integer maxAge = null;
@@ -496,6 +498,7 @@ public class CtisConverter extends CacheConverter {
             minAgeUnit = ConverterCVT.AGE_UNIT_YEARS;
             maxAgeUnit = ConverterCVT.AGE_UNIT_YEARS;
 
+            // TODO: ageGroup order
             String[] ranges = ageGroup.split(", ");
             for (String range : ranges) {
                 switch (range) {
@@ -505,7 +508,7 @@ public class CtisConverter extends CacheConverter {
                             maxAge = 17;
                         }
 
-                        ageGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC);
+                        ageGroups.add(ConverterCVT.AgeGroup.Pediatric);
                         break;
                     case AGE_GROUP_ADULT:
                         if (minAge == null || 18 < minAge) {
@@ -515,7 +518,7 @@ public class CtisConverter extends CacheConverter {
                             maxAge = 64;
                         }
 
-                        ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                        ageGroups.add(ConverterCVT.AgeGroup.Adult);
                         break;
                     case AGE_GROUP_OLDER_ADULT:
                         if (minAge == null || 65 < minAge) {
@@ -523,13 +526,13 @@ public class CtisConverter extends CacheConverter {
                         }
                         maxAge = Integer.valueOf(ConverterCVT.AGE_MAX_YEARS);
 
-                        ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                        ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
                         break;
                     case AGE_GROUP_IN_UTERO:
                         minAge = Integer.valueOf(ConverterCVT.AGE_MIN_YEARS); // TODO
                         maxAge = Integer.valueOf(ConverterCVT.AGE_MIN_YEARS);
 
-                        ageGroups.add(ConverterCVT.AGE_IN_UTERO);
+                        ageGroups.add(ConverterCVT.AgeGroup.InUtero);
                         break;
                     default:
                         this.writeLog("Unknown age range: " + range);
@@ -550,8 +553,7 @@ public class CtisConverter extends CacheConverter {
 
         // Age group
         if (ageGroups.size() > 0) {
-            study.setAttributeIfNotNull("ageGroup",
-                    ConverterUtils.constructAgeGroupStr(ageGroups.toArray(String[]::new)));
+            study.setAttributeIfNotNull("ageGroup", ConverterUtils.getAgeGroupStr(ageGroups));
         }
 
         // Min/max age + units

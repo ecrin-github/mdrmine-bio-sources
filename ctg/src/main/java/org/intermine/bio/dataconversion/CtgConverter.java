@@ -3,6 +3,7 @@ package org.intermine.bio.dataconversion;
 import java.io.BufferedReader;
 import java.io.Reader;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -898,23 +899,22 @@ public class CtgConverter extends CacheConverter {
 
             /* Study age group */
             if (eligModule.stdAges != null && eligModule.stdAges.size() > 0) {
-                Set<String> ageGroups = new HashSet<String>();
+                EnumSet<ConverterCVT.AgeGroup> ageGroups = EnumSet.noneOf(ConverterCVT.AgeGroup.class);
 
                 if (eligModule.stdAges.contains(AGE_GROUP_CHILD)) {
-                    ageGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC);
+                    ageGroups.add(ConverterCVT.AgeGroup.Pediatric);
                 }
 
                 if (eligModule.stdAges.contains(AGE_GROUP_ADULT)) {
-                    ageGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+                    ageGroups.add(ConverterCVT.AgeGroup.Adult);
                 }
 
                 if (eligModule.stdAges.contains(AGE_GROUP_OLDER_ADULT)) {
-                    ageGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                    ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
                 }
 
                 if (ageGroups.size() > 0) {
-                    study.setAttributeIfNotNull("ageGroup",
-                            ConverterUtils.constructAgeGroupStr(ageGroups.toArray(String[]::new)));
+                    study.setAttributeIfNotNull("ageGroup", ConverterUtils.getAgeGroupStr(ageGroups));
                 } else {
                     this.writeLog("Warning: did not find any known age group: " + eligModule.stdAges);
                 }

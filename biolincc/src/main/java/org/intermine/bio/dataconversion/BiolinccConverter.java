@@ -368,8 +368,8 @@ public class BiolinccConverter extends CacheConverter {
                 maxAge = ConverterCVT.AGE_MAX_YEARS;
 
                 // Assuming here that adult includes older adults as well
-                ageGroup = ConverterUtils.constructAgeGroupStr(ConverterCVT.AGE_GROUP_ADULT,
-                        ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                ageGroup = ConverterUtils
+                        .getAgeGroupStr(EnumSet.of(ConverterCVT.AgeGroup.Adult, ConverterCVT.AgeGroup.OlderAdult));
             } else if (cohortType.equalsIgnoreCase(BiolinccConverter.AGE_PEDIATRIC)) {
                 minAge = ConverterCVT.AGE_MIN_YEARS;
                 maxAge = "17";
@@ -379,8 +379,8 @@ public class BiolinccConverter extends CacheConverter {
                 maxAge = ConverterCVT.AGE_MAX_YEARS;
 
                 // Assuming all doesn't include in utero
-                ageGroup = ConverterUtils.constructAgeGroupStr(ConverterCVT.AGE_GROUP_PEDIATRIC,
-                        ConverterCVT.AGE_GROUP_ADULT, ConverterCVT.AGE_GROUP_OLDER_ADULT);
+                ageGroup = ConverterUtils.getAgeGroupStr(EnumSet.of(ConverterCVT.AgeGroup.Pediatric,
+                        ConverterCVT.AgeGroup.Adult, ConverterCVT.AgeGroup.OlderAdult));
             } else {
                 this.writeLog("Unknown cohort type value: " + cohortType);
             }
