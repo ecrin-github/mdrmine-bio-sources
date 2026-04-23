@@ -170,26 +170,23 @@ public class ConverterUtils {
      * 
      * @param u the unit to normalise
      * @return the normalised unit
-     * @see #normaliseWord()
+     * @see #capitaliseFirstLetter()
      */
     public static String normaliseUnit(String u) {
         if (u.endsWith("s")) {
-            return ConverterUtils.normaliseWord(u);
+            return ConverterUtils.capitaliseFirstLetter(u, true);
         }
-        return ConverterUtils.normaliseWord(u) + "s";
+        return ConverterUtils.capitaliseFirstLetter(u, true) + "s";
     }
 
     /**
-     * Uppercase first letter and lowercase the rest.
-     * 
-     * @param w the word to normalise
-     * @return the normalised word
+     * TODO
      */
-    public static String normaliseWord(String w) {
-        if (w.length() > 0) {
-            w = w.substring(0, 1).toUpperCase() + w.substring(1).toLowerCase();
+    public static String normaliseStatus(String s) {
+        if (s != null) {
+            s = ConverterUtils.capitaliseFirstLetter(s.replace('_', ' '), true);
         }
-        return w;
+        return s;
     }
 
     /**
@@ -213,16 +210,21 @@ public class ConverterUtils {
     }
 
     /**
-     * TODO
+     * Uppercase first letter and lowercase the rest or not.
      * 
-     * @param w
-     * @return
+     * @param s the string to normalise
+     * @param restToLowercase whether to convert to lowercase all characters after the first
+     * @return the normalised string
      */
-    public static String capitaliseFirstLetter(String w) {
-        if (w.length() > 0) {
-            w = w.substring(0, 1).toUpperCase() + w.substring(1);
+    public static String capitaliseFirstLetter(String s, boolean restToLowercase) {
+        if (s.length() > 0) {
+            if (restToLowercase) {
+                s = s.substring(0, 1).toUpperCase() + s.substring(1).toLowerCase();
+            } else {
+                s = s.substring(0, 1).toUpperCase() + s.substring(1);
+            }
         }
-        return w;
+        return s;
     }
 
     /**

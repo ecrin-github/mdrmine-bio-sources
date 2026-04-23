@@ -435,9 +435,7 @@ public class CtgConverter extends CacheConverter {
 
         if (statusModule != null) {
             if (!ConverterUtils.isBlankOrNull(statusModule.overallStatus)) {
-                // TODO: proper normalisation
-                String cleanedStatus = ConverterUtils.capitaliseAndReplaceCharBySpace(statusModule.overallStatus,
-                        '_');
+                String cleanedStatus = ConverterUtils.normaliseStatus(statusModule.overallStatus);
                 if (cleanedStatus.equals("Active not recruiting")) { // Temporary
                     cleanedStatus = ConverterCVT.STATUS_ACTIVE_NOT_RECRUITING;
                 }

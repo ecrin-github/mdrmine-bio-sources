@@ -295,9 +295,7 @@ public class WhoConverter extends CacheConverter {
         // TODO EUCTR: logically replace values (e.g. recruiting instead of recruitment
         // ended)
         String studyStatus = this.getAndCleanValue(lineValues, "Recruitment_status");
-        if (!this.existingStudy()) {
-            study.setAttributeIfNotNull("status", studyStatus);
-        }
+        this.parseRecruitmentStatus(study, studyStatus);
 
         /* Study people: sponsors */
         String primarySponsor = this.getAndCleanValue(lineValues, "Primary_sponsor");
@@ -1265,6 +1263,15 @@ public class WhoConverter extends CacheConverter {
             if (!ConverterUtils.isBlankOrNull(constructedSecondaryOutcomes.toString())) {
                 study.setAttributeIfNotNull("secondaryOutcomes", constructedSecondaryOutcomes.toString());
             }
+        }
+    }
+
+    /**
+     * TODO
+     */
+    public void parseRecruitmentStatus(Item study, String studyStatus) {
+        if (!this.existingStudy()) {
+            study.setAttributeIfNotNull("status", ConverterUtils.normaliseStatus(studyStatus));
         }
     }
 

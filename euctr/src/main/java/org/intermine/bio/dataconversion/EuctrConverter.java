@@ -261,10 +261,7 @@ public class EuctrConverter extends CacheConverter {
 
                 // "Not Recruiting" or "Authorised-recruitment may be ongoing or finished" or NA
                 String recruitmentStatus = this.getAndCleanValue(mainInfo, "recruitmentStatus");
-                if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(recruitmentStatus)
-                        && !recruitmentStatus.equalsIgnoreCase("NA")) {
-                    study.setAttributeIfNotNull("status", recruitmentStatus);
-                }
+                this.parseRecruitmentStatus(study, recruitmentStatus);
 
                 /*
                  * Note: from https://www.clinicaltrialsregister.eu/about.html, we can read:
@@ -549,6 +546,13 @@ public class EuctrConverter extends CacheConverter {
                                                                  // registration date
                 study.setAttributeIfNotNull("actualEnrolment", actualEnrolment);
             }
+        }
+    }
+
+    public void parseRecruitmentStatus(Item study, String studyStatus) {
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(studyStatus)
+                && !studyStatus.equalsIgnoreCase("NA")) {
+            study.setAttributeIfNotNull("status", ConverterUtils.normaliseStatus(studyStatus));
         }
     }
 
@@ -1426,7 +1430,7 @@ public class EuctrConverter extends CacheConverter {
      * @throws Exception
      */
     public String getAndCleanValue(Object euctrObj, String fieldName) throws Exception {
-        Method method = euctrObj.getClass().getMethod("get" + ConverterUtils.capitaliseFirstLetter(fieldName),
+        Method method = euctrObj.getClass().getMethod("get" + ConverterUtils.capitaliseFirstLetter(fieldName, false),
                 (Class<?>[]) null);
         String value = (String) method.invoke(euctrObj);
         if (value != null) {

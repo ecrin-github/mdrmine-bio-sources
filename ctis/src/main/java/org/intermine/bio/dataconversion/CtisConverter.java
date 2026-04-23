@@ -335,8 +335,7 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parseStudyStatus(Item study, String overallTrialStatus) {
-        // TODO: normalise values
-        study.setAttributeIfNotNull("status", overallTrialStatus);
+        study.setAttributeIfNotNull("status", ConverterUtils.normaliseStatus(overallTrialStatus));
     }
 
     /**
@@ -726,6 +725,7 @@ public class CtisConverter extends CacheConverter {
 
         // Check study status to add ethics approval notification
         // TODO: no info of decision date in model if not authorised
+        // TODO: values to CVT?
         if (!ConverterUtils.isBlankOrNull(studyStatus)
                 && !studyStatus.toLowerCase().equals("not authorised")
                 && !studyStatus.toLowerCase().equals("revoked")) {
