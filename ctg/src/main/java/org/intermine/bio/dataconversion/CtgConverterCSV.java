@@ -425,31 +425,15 @@ public class CtgConverterCSV extends BaseConverter {
      * @param studyTitle
      */
     public void parseStudyTitle(Item study, String studyTitle, String acronym) throws Exception {
-        boolean displayTitleSet = false;
-
         // TODO: && !title.equals("-") && !title.equals("_") && !title.equals(".") ?
         /* Public title */
         if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            study.setAttributeIfNotNull("displayTitle", studyTitle);
-            displayTitleSet = true;
-
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", studyTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
+            study.setAttributeIfNotNull("publicTitle", studyTitle);
         }
 
         /* Acronym */
         if (!ConverterUtils.isBlankOrNull(acronym)) {
-            if (!displayTitleSet) {
-                study.setAttributeIfNotNull("displayTitle", acronym);
-            }
-
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
-        }
-
-        // Unknown title if not set before
-        if (!displayTitleSet) {
-            study.setAttribute("displayTitle", ConverterCVT.TITLE_UNKNOWN);
+            study.setAttributeIfNotNull("acronym", acronym);
         }
     }
 
@@ -978,10 +962,10 @@ public class CtgConverterCSV extends BaseConverter {
      */
     public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate firstPosted, LocalDate lastUpdate)
             throws Exception {
-        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+        String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
         String doDisplayTitle;
-        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-            doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+            doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
@@ -1023,10 +1007,10 @@ public class CtgConverterCSV extends BaseConverter {
             String resultsURLLink = entryURL + "?tab=results";
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }

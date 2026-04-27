@@ -88,7 +88,7 @@ public class ConverterCVT {
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_TYPE_BIOSPECIMEN = "Biospecimen data";
     public static final String O_TYPE_ICF = "Informed consent form";
-    public static final String O_TYPE_IPD = "Individual partipant data";
+    public static final String O_TYPE_IPD = "Individual participant data";
     public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
     public static final String O_TYPE_SAP = "Statistical analysis plan";
     public static final String O_TYPE_PROT = "Study protocol";
@@ -110,6 +110,7 @@ public class ConverterCVT {
     public static final String CONTRIB_TYPE_SPONSOR_INVESTIGATOR = "Sponsor Investigator";
     public static final String CONTRIB_TYPE_STUDY_FUNDER = "Study funder";
     public static final String CONTRIB_TYPE_COLLABORATING_ORG = "Collaborating organisation";
+    public static final String CONTRIB_TYPE_SITE_CONTACT = "Clinical site contact";
     // Note: not in current MDR, this is for now used for CTG Collaborators that are not orgs
     public static final String CONTRIB_TYPE_COLLABORATING_PERSON = "Collaborating person";
     public static final String ORG_TYPE_FEDERAL_US = "US Federal agency";
@@ -118,10 +119,6 @@ public class ConverterCVT {
     public static final String ORG_TYPE_NETWORK = "Network";
     public static final String ORG_TYPE_NIH = "US NIH Institute";
     public static final String ORG_TYPE_OTHER = "Other";
-    public static final String TITLE_UNKNOWN = "Unknown title";
-    public static final String TITLE_TYPE_PUBLIC = "Public title";
-    public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";
-    public static final String TITLE_TYPE_ACRONYM = "Acronym or abbreviation";
     public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
     public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
 

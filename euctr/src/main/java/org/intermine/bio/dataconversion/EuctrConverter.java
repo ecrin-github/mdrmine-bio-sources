@@ -215,9 +215,7 @@ public class EuctrConverter extends CacheConverter {
                 String publicTitle = this.getAndCleanValue(mainInfo, "publicTitle");
                 String scientificTitle = this.getAndCleanValue(mainInfo, "scientificTitle");
                 String scientificAcronym = this.getAndCleanValue(mainInfo, "scientificAcronym");
-                if (!this.existingStudy()) {
-                    this.parseTitles(study, publicTitle, scientificTitle, scientificAcronym);
-                }
+                this.parseTitles(study, publicTitle, scientificTitle, scientificAcronym);
 
                 /* WHO universal trial number */
                 String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
@@ -415,41 +413,33 @@ public class EuctrConverter extends CacheConverter {
             // TODO: only 1 matcher object?
             /* Public title */
             Matcher mPublicTitleNA = P_TITLE_NA.matcher(publicTitle);
-            if (!mPublicTitleNA.matches()) {
+            if (!ConverterUtils.isBlankOrNull(publicTitle) && !mPublicTitleNA.matches()) {
                 study.setAttributeIfNotNull("displayTitle", publicTitle);
                 displayTitleSet = true;
 
-                this.createAndStoreClassItem(study, "Title",
-                        new String[][] { { "text", publicTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
+                study.setAttributeIfNotNull("publicTitle", publicTitle);
             }
 
             /* Scientific title */
             Matcher mScientificTitleNA = P_TITLE_NA.matcher(scientificTitle);
-            if (!mScientificTitleNA.matches()) {
+            if (!ConverterUtils.isBlankOrNull(scientificTitle) && !mScientificTitleNA.matches()) {
                 if (!displayTitleSet) {
                     study.setAttributeIfNotNull("displayTitle", scientificTitle);
                     displayTitleSet = true;
                 }
 
-                this.createAndStoreClassItem(study, "Title",
-                        new String[][] { { "text", scientificTitle }, { "type", ConverterCVT.TITLE_TYPE_SCIENTIFIC } });
+                study.setAttributeIfNotNull("scientificTitle", scientificTitle);
             }
 
             /* Acronym */
             Matcher mScientificAcronymNA = P_TITLE_NA.matcher(scientificAcronym);
-            if (!mScientificAcronymNA.matches()) {
+            if (!ConverterUtils.isBlankOrNull(scientificAcronym) && !mScientificAcronymNA.matches()) {
                 if (!displayTitleSet) {
                     study.setAttributeIfNotNull("displayTitle", scientificAcronym);
                     displayTitleSet = true;
                 }
 
-                this.createAndStoreClassItem(study, "Title",
-                        new String[][] { { "text", scientificAcronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
-            }
-
-            // Unknown title if not set before
-            if (!displayTitleSet) {
-                study.setAttributeIfNotNull("displayTitle", ConverterCVT.TITLE_UNKNOWN);
+                study.setAttributeIfNotNull("acronym", scientificAcronym);
             }
         }
     }
@@ -479,42 +469,46 @@ public class EuctrConverter extends CacheConverter {
      */
     public void createAndStoreRegistryEntryDO(Item study, LocalDate creationDate, String url) throws Exception {
         if (!this.existingStudy()) {
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
 
             /* Trial registry entry SO */
-            if (!ConverterUtils.isBlankOrNull(url)) {
-                Item doRegistryEntry = this.createAndStoreClassItem(study, "StudyObject",
-                        new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                                { "dateCreated", creationDate != null ? creationDate.toString() : null },
-                                { "accessUrl", url },
-                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                                { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                                { "displayTitle", doDisplayTitle } });
-            }
+            // TODO
+            // if (!ConverterUtils.isBlankOrNull(url)) {
+            // Item doRegistryEntry = this.createAndStoreClassItem(study, "StudyObject",
+            // new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
+            // { "dateCreated", creationDate != null ? creationDate.toString() : null },
+            // { "accessUrl", url },
+            // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+            // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+            // { "displayTitle", doDisplayTitle } });
+            // }
         } else {
             // Update SO creation date
-            if (creationDate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
-                        ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
-                if (doRegistryEntry != null) {
-                    String existingDateStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateCreated");
-                    // Updating creation date if older than known creation date or there was no
-                    // previous date
-                    if (!ConverterUtils.isBlankOrNull(existingDateStr) || creationDate
-                            .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
-                        doRegistryEntry.setAttributeIfNotNull("dateCreated", creationDate.toString());
-                        // Using record registration date as "newer last update"
-                        // TODO: use a different variable (name)?
-                        this.newerLastUpdate = true;
-                    }
-                }
-            }
+            // TODO
+            // if (creationDate != null) {
+            // Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
+            // ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+            // if (doRegistryEntry != null) {
+            // String existingDateStr = ConverterUtils.getAttrValue(doRegistryEntry,
+            // "dateCreated");
+            // // Updating creation date if older than known creation date or there was no
+            // // previous date
+            // if (!ConverterUtils.isBlankOrNull(existingDateStr) || creationDate
+            // .compareTo(ConverterUtils.getDateFromString(existingDateStr, null)) < 0) {
+            // doRegistryEntry.setAttributeIfNotNull("dateCreated",
+            // creationDate.toString());
+            // // Using record registration date as "newer last update"
+            // // TODO: use a different variable (name)?
+            // this.newerLastUpdate = true;
+            // }
+            // }
+            // }
         }
     }
 
@@ -952,10 +946,10 @@ public class EuctrConverter extends CacheConverter {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && resultsDatePosted != null) {
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
@@ -967,16 +961,13 @@ public class EuctrConverter extends CacheConverter {
             }
 
             /* Results summary SO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "StudyObject",
+            Item resultsSummaryDO = this.createAndStoreClassItem(study, "RegistryResultsSummary",
                     new String[][] { { "displayTitle", doDisplayTitle },
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
-                            // Note: was ConverterCVT.DATE_TYPE_AVAILABLE before model change
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
                             { "accessUrl", resultsUrlLink },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
         }
     }
 
@@ -989,13 +980,13 @@ public class EuctrConverter extends CacheConverter {
      */
     public void parseContacts(Item study, List<EuctrContact> contacts) throws Exception {
         if (!this.existingStudy()) {
-            String type, firstName, affiliation;
             for (EuctrContact contact : contacts) {
-                type = contact.getType();
-                firstName = contact.getFirstname();
-                affiliation = contact.getAffiliation();
-                if (!ConverterUtils.isBlankOrNull(firstName)) {
+                String type = contact.getType();
+                String firstName = contact.getFirstname();
+                String email = contact.getEmail();
+                String affiliation = contact.getAffiliation();
 
+                if (!ConverterUtils.isBlankOrNull(firstName)) {
                     if (!ConverterUtils.isBlankOrNull(type)) {
                         if (type.equalsIgnoreCase("public")) {
                             type = ConverterCVT.CONTRIB_TYPE_PUBLIC_CONTACT;
@@ -1011,46 +1002,20 @@ public class EuctrConverter extends CacheConverter {
                     // TODO: add reference to organisation affiliation
                     // TODO: differentiate people from organisations
                     if (!firstName.equalsIgnoreCase("not applicable")) {
-                        this.createAndStoreClassItem(study, "Person",
-                                new String[][] { { "fullName", firstName }, { "affiliation", affiliation },
+                        Item contactPerson = this.createAndStoreClassItem(study, "Person",
+                                new String[][] { { "fullName", firstName },
+                                        { "email", ConverterUtils.filterNonEmailString(email) },
                                         { "contribType", type } });
-                    } // TODO: else
+
+                        if (!ConverterUtils.isBlankOrNull(affiliation)) {
+                            Item affiliationOrg = this.createAndStoreClassItem(study, "Organisation",
+                                    new String[][] { { "name", affiliation } });
+                            this.handleReferencesAndCollections(contactPerson, affiliationOrg);
+                        }
+                    }
                 }
             }
         }
-
-        /*
-         * <contact>
-         * <type>Public</type>
-         * <firstname>Principal Investigator</firstname>
-         * <middlename />
-         * <lastname />
-         * <address>Liebigstrasse 10-14</address>
-         * <city>Leipzig</city>
-         * <country1>Germany</country1>
-         * <zip>04103</zip>
-         * <telephone>0049034197 21 650</telephone>
-         * <email>augen@medizin.uni-leipzig.de</email>
-         * <affiliation>University of Leipzig</affiliation>
-         * </contact>
-         */
-
-        /*
-         * <class name="Person" is-interface="true">
-         * <attribute name="contribType" type="java.lang.String"/>
-         * <attribute name="givenName" type="java.lang.String"/>
-         * <attribute name="familyName" type="java.lang.String"/>
-         * <attribute name="fullName" type="java.lang.String"/>
-         * <attribute name="affiliation" type="java.lang.String"/>
-         * <attribute name="orcid" type="java.lang.String"/>
-         * <collection name="studies" referenced-type="Study"
-         * reverse-reference="people"/>
-         * <collection name="objects" referenced-type="StudyObject"
-         * reverse-reference="people"/>
-         * <collection name="affiliations" referenced-type="Organisation"
-         * reverse-reference="people"/>
-         * </class>
-         */
     }
 
     /**
@@ -1346,19 +1311,17 @@ public class EuctrConverter extends CacheConverter {
     public void createAndStoreProtocolDO(Item study, String protocolCode) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(protocolCode)) {
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_PROT;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
             } else {
                 doDisplayTitle = ConverterCVT.O_TYPE_PROT;
             }
 
             /* Protocol SO */
-            Item protocolDO = this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "objectId", protocolCode },
-                            { "primaryIdentifierType", ConverterCVT.ID_TYPE_SPONSOR },
-                            { "type", ConverterCVT.O_TYPE_PROT },
+            Item protocolDO = this.createAndStoreClassItem(study, "Protocol",
+                    new String[][] { { "protocolSponsorId", protocolCode },
                             { "displayTitle", doDisplayTitle } });
         }
     }

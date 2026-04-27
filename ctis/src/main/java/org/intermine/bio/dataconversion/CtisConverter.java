@@ -138,13 +138,7 @@ public class CtisConverter extends CacheConverter {
         if (this.parseTrialID(study, trialID)) {
             /* Study title (need to get it before protocol SO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
-            if (!ConverterUtils.isBlankOrNull(trialTitle)) {
-                study.setAttributeIfNotNull("displayTitle", trialTitle);
-                this.createAndStoreClassItem(study, "Title",
-                        new String[][] { { "text", trialTitle }, { "type", ConverterCVT.TITLE_TYPE_SCIENTIFIC } });
-            } else {
-                study.setAttributeIfNotNull("displayTitle", ConverterCVT.TITLE_UNKNOWN);
-            }
+            this.parseTrialTitle(study, trialTitle);
 
             // Sponsor protocol code
             String protocolCode = this.getAndCleanValue(lineValues, "Protocol code");
@@ -304,6 +298,19 @@ public class CtisConverter extends CacheConverter {
     /**
      * TODO
      * 
+     * @param study
+     * @param trialTitle
+     */
+    public void parseTrialTitle(Item study, String trialTitle) {
+        if (!ConverterUtils.isBlankOrNull(trialTitle)) {
+            study.setAttributeIfNotNull("displayTitle", trialTitle);
+            study.setAttributeIfNotNull("scientificTitle", trialTitle);
+        }
+    }
+
+    /**
+     * TODO
+     * 
      * Note: The sponsor's protocol code can be modified at any time so we can't set
      * a date/publication year from the fields in the data file
      * https://www.bfarm.de/SharedDocs/Downloads/DE/Arzneimittel/KlinischePruefung/EudraCT_EU-CTR_QuA.pdf?__blob=publicationFile
@@ -314,19 +321,17 @@ public class CtisConverter extends CacheConverter {
             // protocol can be in trial documents tab
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_PROT;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
             } else {
                 doDisplayTitle = ConverterCVT.O_TYPE_PROT;
             }
 
             /* Protocol SO */
-            Item protocolDO = this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "objectId", protocolCode },
-                            { "primaryIdentifierType", ConverterCVT.ID_TYPE_SPONSOR },
-                            { "type", ConverterCVT.O_TYPE_PROT },
+            Item protocolDO = this.createAndStoreClassItem(study, "Protocol",
+                    new String[][] { { "protocolSponsorId", protocolCode },
                             { "displayTitle", doDisplayTitle } });
         }
     }
@@ -734,19 +739,18 @@ public class CtisConverter extends CacheConverter {
                     ConverterUtils.P_DATE_D_M_Y_SLASHES);
             if (decisionDate != null) {
                 // Display title
-                String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+                String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
                 String doDisplayTitle;
-                if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                    doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
+                if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                    doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
                 } else {
                     doDisplayTitle = ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
                 }
 
                 /* Ethics approval notification SO */
-                Item ethicsApprovalDO = this.createAndStoreClassItem(study, "StudyObject",
-                        new String[][] { { "type", ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION },
-                                { "datePublished", decisionDate.toString() }, // Note: was ConverterCVT.DATE_TYPE_ISSUED
-                                                                              // type before model change
+                // TODO: decision field?
+                Item ethicsApprovalDO = this.createAndStoreClassItem(study, "EthicsApprovalNotification",
+                        new String[][] { { "datePublished", decisionDate.toString() },
                                 { "displayTitle", doDisplayTitle } });
             }
         }
@@ -799,22 +803,23 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void createAndStoreRegistryEntryDO(Item study, LocalDate lastUpdated) throws Exception {
-        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+        String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
         String doDisplayTitle;
-        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-            doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+            doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
             doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
         /* Trial registry entry SO */
-        this.createAndStoreClassItem(study, "StudyObject",
-                new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                        { "dateUpdated", lastUpdated != null ? lastUpdated.toString() : null },
-                        { "accessUrl", REGISTRY_ENTRY_BASE_URL + this.currentTrialID },
-                        { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                        { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                        { "displayTitle", doDisplayTitle } });
+        // TODO
+        // this.createAndStoreClassItem(study, "StudyObject",
+        // new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
+        // { "dateUpdated", lastUpdated != null ? lastUpdated.toString() : null },
+        // { "accessUrl", REGISTRY_ENTRY_BASE_URL + this.currentTrialID },
+        // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+        // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+        // { "displayTitle", doDisplayTitle } });
     }
 
     /**

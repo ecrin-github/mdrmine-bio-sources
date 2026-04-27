@@ -28,21 +28,25 @@ public abstract class CacheConverter extends BaseConverter {
     protected Map<String, Set<Item>> interventions = new HashMap<String, Set<Item>>();
     protected Map<CompositeKey, Item> allInterventions = new HashMap<CompositeKey, Item>();
     protected Map<String, Set<Item>> studyCountries = new HashMap<String, Set<Item>>();
-    protected Map<String, Set<Item>> countries = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> countries = new HashMap<String, Set<Item>>();  // TODO
     protected Map<String, Set<Item>> studyFeatures = new HashMap<String, Set<Item>>();
     protected Map<String, Set<Item>> studyIdentifiers = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> studySites = new HashMap<String, Set<Item>>();
     protected Map<String, Set<Item>> publications = new HashMap<String, Set<Item>>();
-    protected Map<String, Set<Item>> locations = new HashMap<String, Set<Item>>();
     // SOs
-    protected Map<String, Set<Item>> objects = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> resultsSummaries = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> protocols = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> statisticalAnalysisPlans = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> informedConsentForms = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> ethicsApprovalNotifications = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> individualParticipantData = new HashMap<String, Set<Item>>();
+    protected Map<String, Set<Item>> biosamples = new HashMap<String, Set<Item>>();
     // SO-related maps
     protected Map<String, Set<Item>> datasets = new HashMap<String, Set<Item>>();
-    protected Map<String, Set<Item>> biosamples = new HashMap<String, Set<Item>>();
     // Common to Study and SOs (key can be study id or SO id)
     protected Map<String, Set<Item>> organisations = new HashMap<String, Set<Item>>();
     protected Map<String, Set<Item>> people = new HashMap<String, Set<Item>>();
     protected Map<String, Set<Item>> relationships = new HashMap<String, Set<Item>>();
-    protected Map<String, Set<Item>> titles = new HashMap<String, Set<Item>>();
 
     public CacheConverter(ItemWriter writer, Model model, String dataSourceName,
             String dataSetTitle) {
@@ -198,6 +202,49 @@ public abstract class CacheConverter extends BaseConverter {
 
     /**
      * TODO
+     * 
+     * Method could be optimised with identifier/name studycountry maps
+     */
+    public Item getOrCreateStudyCountry(Item study, String countryName) throws Exception {
+        Item studyCountry = null;
+
+        if (!ConverterUtils.isBlankOrNull(countryName)) {
+            Item country = this.getCountry(countryName);
+
+            if (this.studyCountries.containsKey(study.getIdentifier())) {
+                Set<Item> studyCountries = this.studyCountries.get(study.getIdentifier());
+                
+                if (country != null) {
+                    for (Item sc: studyCountries) {
+                        String countryReference = ConverterUtils.getRefId(sc, "country");
+                        // If country item was not null we only need to check for country item equality (not country name)
+                        if (countryReference != null && countryReference == country.getIdentifier()) {
+                            studyCountry = sc;
+                            break;
+                        }
+                    }
+                } else {
+                    for (Item sc: studyCountries) {
+                        String countryNameToTest = ConverterUtils.getAttrValue(sc, "countryName");
+                        if (!ConverterUtils.isBlankOrNull(countryNameToTest) && countryName.equalsIgnoreCase(countryNameToTest)) {
+                            studyCountry = sc;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Create StudyCountry
+            if (studyCountry == null) {
+                studyCountry = createAndStoreStudyCountry(study, country, countryName, null, null, null, null);
+            }
+        }
+
+        return studyCountry;
+    }
+
+    /**
+     * TODO
      */
     public boolean studyHasItemStored(Item parentItem, Item item) throws Exception {
         boolean hasItemStored = false;
@@ -242,8 +289,10 @@ public abstract class CacheConverter extends BaseConverter {
     public void storeAllItems() throws Exception {
         List<Map<String, Set<Item>>> itemMaps = Arrays.asList(
                 this.studyConditions, this.studyCountries, this.studyFeatures, this.studyIdentifiers, 
-                this.publications, this.locations, this.organisations, this.people, this.relationships, 
-                this.titles, this.interventions, this.objects, this.relationships, this.datasets, this.biosamples);
+                this.publications, this.studySites, this.interventions, this.resultsSummaries,
+                this.protocols, this.statisticalAnalysisPlans, this.informedConsentForms, 
+                this.ethicsApprovalNotifications, this.individualParticipantData, this.biosamples,  
+                this.organisations, this.people, this.relationships, this.datasets);
 
         this.writeLog("Storing all items");
 
@@ -306,17 +355,20 @@ public abstract class CacheConverter extends BaseConverter {
         this.studyFeatures = null;
         this.studyIdentifiers = null;
         this.publications = null;
-        this.locations = null;
-        this.organisations = null;
-        this.people = null;
-        this.relationships = null;
-        this.titles = null;
+        this.studySites = null;
         this.interventions = null;
         this.allInterventions = null;
-        this.objects = null;
-        this.datasets = null;
+        this.resultsSummaries = null;
+        this.protocols = null;
+        this.statisticalAnalysisPlans = null;
+        this.informedConsentForms = null;
+        this.ethicsApprovalNotifications = null;
+        this.individualParticipantData = null;
         this.biosamples = null;
         this.relationships = null;
+        this.datasets = null;
+        this.organisations = null;
+        this.people = null;
     }
 
     /**
@@ -327,8 +379,14 @@ public abstract class CacheConverter extends BaseConverter {
         // Maps where key is or can be study ID (minus objects and study conditions and interventions (different handling))
         List<Map<String, Set<Item>>> studyMaps = Arrays.asList(
                 this.studyCountries, this.studyFeatures, this.studyIdentifiers,
-                this.publications, this.locations, this.organisations, 
-                this.people, this.relationships, this.titles, this.relationships);
+                this.publications, this.studySites, this.organisations, 
+                this.people, this.relationships);
+        
+        // StudyObject maps
+        List<Map<String, Set<Item>>> studyObjectMaps = Arrays.asList(
+                this.resultsSummaries, this.protocols, this.statisticalAnalysisPlans,
+                this.informedConsentForms, this.ethicsApprovalNotifications, 
+                this.individualParticipantData, this.biosamples);
 
         // Maps where item have a collection of studies, and therefore must be handled differently
         List<Map<String, Set<Item>>> specialMaps = Arrays.asList(
@@ -336,8 +394,7 @@ public abstract class CacheConverter extends BaseConverter {
 
         // Maps where key is or can be object ID
         List<Map<String, Set<Item>>> objectMaps = Arrays.asList(
-                this.locations, this.organisations, this.people, 
-                this.relationships, this.titles, this.relationships, this.datasets, this.biosamples);
+                this.organisations, this.people, this.relationships, this.datasets);
 
         Item study = this.studies.get(mainTrialID);
         String studyId = study.getIdentifier();
@@ -358,24 +415,25 @@ public abstract class CacheConverter extends BaseConverter {
             }
         }
 
-        Set<Item> objects = this.objects.get(studyId);
-        if (objects != null) {
-            // Retrieving all object IDs
-            Set<String> objectIds = new HashSet<String>();
-            for (Item object : objects) {
-                objectIds.add(object.getIdentifier());
-            }
-
-            // Removing items linked to objects
-            for (Map<String, Set<Item>> itemMap : objectMaps) {
-                for (String objectId : objectIds) {
-                    itemMap.remove(objectId);
+        // Removing objects linked to study to remove, and constructing a set of object ids
+        // to remove items linked to these objects
+        Set<String> objectIds = new HashSet<String>();
+        for (Map<String, Set<Item>> soMap : studyObjectMaps) {
+            Set<Item> objects = soMap.get(studyId);
+            if (objects != null) {
+                for (Item object : objects) {
+                    objectIds.add(object.getIdentifier());
                 }
+                soMap.remove(studyId);  // Removing objects linked to study
             }
         }
 
-        // Removing objects
-        this.objects.remove(studyId);
+        // Removing items linked to objects
+        for (Map<String, Set<Item>> itemMap : objectMaps) {
+            for (String objectId : objectIds) {
+                itemMap.remove(objectId);
+            }
+        }
 
         // Removing study from studies map
         Item removedStudy = this.studies.remove(mainTrialID);

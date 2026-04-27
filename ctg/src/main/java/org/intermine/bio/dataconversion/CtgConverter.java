@@ -386,9 +386,7 @@ public class CtgConverter extends CacheConverter {
             if (!ConverterUtils.isBlankOrNull(idModule.briefTitle)) {
                 titleSb.append(idModule.briefTitle);
 
-                this.createAndStoreClassItem(study, "Title",
-                        new String[][] { { "text", idModule.briefTitle },
-                                { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
+                study.setAttributeIfNotNull("publicTitle", idModule.briefTitle);
             }
 
             /* Official (scientific) title */
@@ -398,9 +396,7 @@ public class CtgConverter extends CacheConverter {
                     titleSb.append(idModule.officialTitle);
                 }
 
-                this.createAndStoreClassItem(study, "Title",
-                        new String[][] { { "text", idModule.officialTitle },
-                                { "type", ConverterCVT.TITLE_TYPE_SCIENTIFIC } });
+                study.setAttributeIfNotNull("scientificTitle", idModule.officialTitle);
             }
 
             /* Acronym */
@@ -411,14 +407,8 @@ public class CtgConverter extends CacheConverter {
                     titleSb.append(" (" + idModule.acronym + ")");
                 }
 
-                this.createAndStoreClassItem(study, "Title",
-                        new String[][] { { "text", idModule.acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
+                study.setAttributeIfNotNull("acronym", idModule.acronym);
             }
-        }
-
-        // Unknown title if not set before
-        if (ConverterUtils.isBlankOrNull(titleSb.toString())) {
-            titleSb.append(ConverterCVT.TITLE_UNKNOWN);
         }
 
         study.setAttributeIfNotNull("displayTitle", titleSb.toString());
@@ -738,7 +728,7 @@ public class CtgConverter extends CacheConverter {
 
                         if (sponsorModule.leadSponsor != null) {
                             String sponsorType = CtgConverter.getEntityType(sponsorModule.leadSponsor.clazz);
-                            Item sponsorOrg = this.createClassItem(study, "Organisation",
+                            Item sponsorOrg = this.createAndStoreClassItem(study, "Organisation",
                                     new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                                             { "name", sponsorModule.leadSponsor.name },
                                             { "type", sponsorType } });
@@ -746,7 +736,6 @@ public class CtgConverter extends CacheConverter {
 
                             // PI affiliation
                             this.handleReferencesAndCollections(piPerson, sponsorOrg);
-                            store(sponsorOrg);
                         }
                     } else if (sponsorModule.responsibleParty.type.equalsIgnoreCase(SPONSOR_INVESTIGATOR)) {
                         // PI is also sponsor
@@ -1194,10 +1183,10 @@ public class CtgConverter extends CacheConverter {
                 }
             }
 
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
@@ -1210,16 +1199,17 @@ public class CtgConverter extends CacheConverter {
 
             /* Trial registry entry SO */
             // TODO: publication year?
-            this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
-                            { "dateCreated", dateCreated },
-                            { "datePublished", datePublished },
-                            { "dateUpdated", dateUpdated },
-                            { "publicationYear", publicationYear },
-                            { "accessUrl", ConverterCVT.CTG_STUDY_BASE_URL + nctID },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "displayTitle", doDisplayTitle } });
+            // TODO
+            // this.createAndStoreClassItem(study, "StudyObject",
+            // new String[][] { { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY },
+            // { "dateCreated", dateCreated },
+            // { "datePublished", datePublished },
+            // { "dateUpdated", dateUpdated },
+            // { "publicationYear", publicationYear },
+            // { "accessUrl", ConverterCVT.CTG_STUDY_BASE_URL + nctID },
+            // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+            // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+            // { "displayTitle", doDisplayTitle } });
         }
     }
 
@@ -1261,11 +1251,10 @@ public class CtgConverter extends CacheConverter {
             }
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study,
-                    "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " +
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " +
                         ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
@@ -1278,16 +1267,14 @@ public class CtgConverter extends CacheConverter {
             }
 
             /* Results summary SO */
-            this.createAndStoreClassItem(study, "StudyObject",
+            this.createAndStoreClassItem(study, "RegistryResultsSummary",
                     new String[][] { { "displayTitle", doDisplayTitle },
                             { "dateCreated", dateCreated },
                             { "datePublished", datePublished },
                             { "dateUpdated", dateUpdated },
                             { "publicationYear", publicationYear },
                             { "accessUrl", ConverterCVT.CTG_STUDY_BASE_URL + nctID + RESULTS_TAB_URL_SUFFIX },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
         }
     }
 
@@ -1307,17 +1294,27 @@ public class CtgConverter extends CacheConverter {
             if (locations != null && locations.size() > 0) {
                 for (Location loc : locations) {
                     String facility = ConverterUtils.capitaliseAndReplaceCharBySpace(loc.facility, '_');
-                    Item location = this.createClassItem(study, "Location",
+                    Item site = this.createAndStoreClassItem(study, "StudySite",
                             new String[][] { { "countryName", loc.country },
-                                    { "cityName", loc.city },
+                                    { "city", loc.city },
                                     { "facility", facility },
                                     { "status", loc.status } });
 
-                    Item country = this.getCountry(loc.country);
-                    if (country != null) {
-                        this.handleReferencesAndCollections(country, location);
+                    if (!ConverterUtils.isBlankOrNull(loc.country)) {
+                        Item sc = this.getOrCreateStudyCountry(study, loc.country);
+
+                        this.handleReferencesAndCollections(site, sc);
                     }
-                    store(location);
+
+                    if (loc.contacts != null && loc.contacts.size() > 0) {
+                        for (LocationContact c : loc.contacts) {
+                            Item contact = this.createAndStoreClassItem(study, "Person",
+                                    new String[][] { { "fullName", c.name },
+                                            { "email", ConverterUtils.filterNonEmailString(c.email) },
+                                            { "contribType", ConverterCVT.CONTRIB_TYPE_SITE_CONTACT } });
+                            this.handleReferencesAndCollections(site, contact);
+                        }
+                    }
                 }
             }
         }
@@ -1337,13 +1334,25 @@ public class CtgConverter extends CacheConverter {
     public void createAndStoreStudyDocument(Item study, String displayTitle, String objectType, String url,
             String dateCreated, String datePublished)
             throws Exception {
-        this.createAndStoreClassItem(study, "StudyObject",
-                new String[][] { { "type", objectType },
-                        { "accessUrl", url },
-                        { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                        { "dateCreated", dateCreated },
-                        { "datePublished", datePublished },
-                        { "displayTitle", displayTitle } });
+        String objectClassName = null;
+        if (objectType.equals(ConverterCVT.O_TYPE_ICF)) {
+            objectClassName = "InformedConsentForm";
+        } else if (objectType.equals(ConverterCVT.O_TYPE_PROT)) {
+            objectClassName = "Protocol";
+        } else if (objectType.equals(ConverterCVT.O_TYPE_SAP)) {
+            objectClassName = "StatisticalAnalysisPlan";
+        }
+
+        if (objectClassName != null) {
+            this.createAndStoreClassItem(study, objectClassName,
+                    new String[][] { { "accessUrl", url },
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+                            { "dateCreated", dateCreated },
+                            { "datePublished", datePublished },
+                            { "displayTitle", displayTitle } });
+        } else {
+            throw new Exception("Unknown object type: " + objectType);
+        }
     }
 
     /**
@@ -1489,10 +1498,10 @@ public class CtgConverter extends CacheConverter {
                     }
 
                     if (!ConverterUtils.isBlankOrNull(ipdUrl)) {
-                        Item ipdDO = this.createAndStoreClassItem(study, "StudyObject",
+                        Item ipdDO = this.createAndStoreClassItem(study, "IndividualParticipantData",
                                 new String[][] { { "displayTitle", ConverterCVT.O_TYPE_IPD },
-                                        { "objectId", objectId },
-                                        { "type", ConverterCVT.O_TYPE_IPD },
+                                        // TODO
+                                        // { "objectId", objectId },
                                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
                                         { "accessUrl", ipdUrl } });
                     }

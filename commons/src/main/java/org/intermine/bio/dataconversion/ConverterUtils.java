@@ -26,6 +26,7 @@ import org.apache.commons.text.WordUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
+import org.intermine.xml.full.Reference;
 import org.jsoup.Jsoup;
 
 /**
@@ -58,6 +59,7 @@ public class ConverterUtils {
             .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?");
     public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
     public static final Pattern P_WHO_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
+    public static final Pattern P_EMAIL = Pattern.compile("^[^@]+@[^.]+\\..+");
     // public static final Pattern P_ANZCTR_ID = Pattern.compile();
     // public static final Pattern P_CHICTR_ID = Pattern.compile();
     // public static final Pattern P_CRIS_ID = Pattern.compile();
@@ -263,6 +265,24 @@ public class ConverterUtils {
     }
 
     /**
+     * TODO
+     * 
+     * @param item
+     * @param refName
+     * @return
+     */
+    public static String getRefId(Item item, String refName) {
+        String refId = null;
+        if (item != null) {
+            Reference itemRef = item.getReference(refName);
+            if (itemRef != null) {
+                refId = itemRef.getRefId();
+            }
+        }
+        return refId;
+    }
+
+    /**
      * Concatenate text on a new line to study description field value.
      * 
      * @param study the study item to modify the description field of
@@ -403,6 +423,24 @@ public class ConverterUtils {
     }
 
     /**
+     * TODO
+     * Get title from a study item if there is any (publicTitle or scientificTitle or acronym)
+     */
+    public static String getStudyTitle(Item study) {
+        String title = null;
+
+        title = ConverterUtils.getAttrValue(study, "publicTitle");
+        if (ConverterUtils.isBlankOrNull(title)) {
+            title = ConverterUtils.getAttrValue(study, "scientificTitle");
+            if (ConverterUtils.isBlankOrNull(title)) {
+                title = ConverterUtils.getAttrValue(study, "acronym");
+            }
+        }
+
+        return title;
+    }
+
+    /**
      * Unescape HTML4 characters.
      * 
      * @param s the string potentially containing escaped HTML4 characters
@@ -462,5 +500,16 @@ public class ConverterUtils {
         }
         String capitalised = WordUtils.capitalizeFully(str);
         return capitalised.replace(charToReplace, ' ');
+    }
+
+    /**
+     * TODO
+     * check P_EMAIL pattern, "weak" email string validation: [any]@[any].[any]
+     */
+    public static String filterNonEmailString(final String email) {
+        if (!ConverterUtils.isBlankOrNull(email) && P_EMAIL.matcher(email).matches()) {
+            return email;
+        }
+        return null;
     }
 }

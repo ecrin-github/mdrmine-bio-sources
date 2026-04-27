@@ -217,11 +217,8 @@ public class WhoConverter extends CacheConverter {
         // TODO EUCTR: check for additional titles with existing study
         /* Public title */
         String publicTitle = this.getAndCleanValue(lineValues, "public_title");
-        this.parseTitle(study, publicTitle, ConverterCVT.TITLE_TYPE_PUBLIC);
-
-        /* Scientific title */
         String scientificTitle = this.getAndCleanValue(lineValues, "Scientific_title");
-        this.parseTitle(study, scientificTitle, ConverterCVT.TITLE_TYPE_SCIENTIFIC);
+        this.parseTitles(study, publicTitle, scientificTitle);
 
         // TODO EUCTR: check for additional contacts with existing study
         /* Study people (public and scientific contacts) */
@@ -773,18 +770,22 @@ public class WhoConverter extends CacheConverter {
         return study;
     }
 
+    public void parseTitles(Item study, String publicTitle, String scientificTitle) throws Exception {
+        if (!this.existingStudy()) {
+            boolean displayTitleSet = false;
 
-    /**
-     * TODO
-     */
-    public void parseTitle(Item study, String title, String titleType) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(title) && !title.equals("-")
-                && !title.equals("_") && !title.equals(".")) {
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", title }, { "type", titleType } });
-
-            if (!study.hasAttribute("displayTitle")) {
-                study.setAttributeIfNotNull("displayTitle", title);
+            if (!ConverterUtils.isBlankOrNull(publicTitle) && !publicTitle.equals("-")
+                && !publicTitle.equals("_") && !publicTitle.equals(".")) {
+                study.setAttributeIfNotNull("displayTitle", publicTitle);
+                study.setAttributeIfNotNull("publicTitle", publicTitle);
+                displayTitleSet = true;
+            }
+            if (!ConverterUtils.isBlankOrNull(scientificTitle) && !scientificTitle.equals("-")
+                && !scientificTitle.equals("_") && !scientificTitle.equals(".")) {
+                study.setAttributeIfNotNull("scientificTitle", scientificTitle);
+                if (!displayTitleSet) {
+                    study.setAttributeIfNotNull("displayTitle", scientificTitle);
+                }
             }
         }
     }
@@ -802,6 +803,7 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy()) {
             String[] firstNames = {};
             String[] lastNames = {};
+            String[] emails = {};
             String[] affiliations = {};
 
             String fieldPrefix = "";
@@ -823,6 +825,11 @@ public class WhoConverter extends CacheConverter {
                 lastNames = lastNamesString.split(";");
             }
 
+            String emailsString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Email"));
+            if (!ConverterUtils.isBlankOrNull(emailsString)) {
+                emails = emailsString.split(";");
+            }
+
             String affiliationsString = this.getAndCleanValueNoStrip(lineValues, (fieldPrefix + "Contact_Affiliation"));
             if (!ConverterUtils.isBlankOrNull(affiliationsString)) {
                 affiliations = affiliationsString.split(";");
@@ -833,15 +840,16 @@ public class WhoConverter extends CacheConverter {
              * appear in our model
              */
             // Using the field with the most semi-colon-separated elements for iterating
-            int maxLen = Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length);
+            int maxLen = Math.max(Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length), emails.length);
 
-            String firstName, lastName, affiliation;
+            String firstName, lastName, affiliation, email;
 
             if (maxLen > 0) {
                 for (int i = 0; i < maxLen; i++) {
                     firstName = "";
                     lastName = "";
                     affiliation = "";
+                    email = "";
 
                     // TODO: possible that the string ends with both semi-colons?
 
@@ -887,8 +895,22 @@ public class WhoConverter extends CacheConverter {
                         }
                     }
 
+                    // Email
+                    if (!ConverterUtils.isBlankOrNull(emailsString)) {
+                        if (emailsString.endsWith(";") && i < emails.length) {
+                            email = emails[i];
+                        } else if (emails.length + i - maxLen >= 0) {
+                            // If the string starts with a semi-colon or not, the indexing is the same as
+                            // length == maxLen if there is no semi-colon
+                            email = emails[emails.length + i - maxLen].strip();
+                        } else {
+                            this.writeLog(
+                                    "parseContact(): line parsing error, email values list is missing a value");
+                        }
+                    }
+
                     // Setting the values
-                    this.createAndStoreContact(study, firstName, lastName, affiliation, contactType);
+                    this.createAndStoreContact(study, firstName, lastName, affiliation, email, contactType);
 
                     // TODO: handle affiliation differently? (same for multiple people) NCT04163835
                     // TODO: how to avoid duplicates that are not really duplicates? NCT04163835
@@ -908,21 +930,11 @@ public class WhoConverter extends CacheConverter {
      * @param affiliation the affiliation value
      * @param contactType public or scientific contact
      */
-    public void createAndStoreContact(Item study, String firstName, String lastName, String affiliation,
-            String contactType) throws Exception {
-        // TODO: attempt at separating first name/last name if one of firstName/lastName
-        // is empty?
-        // Check MDR code for this:
-        // https://github.com/scanhamman/MDR_Harvester/blob/master/GeneralHelpers/StringFunctions.cs#L714
-
-        String givenName = null;
-        String familyName = null;
+    public void createAndStoreContact(Item study, String firstName, String lastName, String email, String affiliation, String contactType) throws Exception {
         String fullName = null;
         String contribType = null;
 
         if (!ConverterUtils.isBlankOrNull(firstName) && !ConverterUtils.isBlankOrNull(lastName)) {
-            givenName = firstName;
-            familyName = lastName;
             fullName = firstName + " " + lastName;
         } else if (!ConverterUtils.isBlankOrNull(firstName)) {
             fullName = firstName;
@@ -938,12 +950,21 @@ public class WhoConverter extends CacheConverter {
             contribType = ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT;
         }
 
-        // TODO: fix affiliation
-        this.createAndStoreClassItem(study, "Person",
-                new String[][] { { "givenName", givenName }, { "familyName", familyName },
-                        { "fullName", fullName }, { "affiliation", affiliation }, { "contribType", contribType } });
+        Item contactPerson = this.createAndStoreClassItem(study, "Person",
+                new String[][] { { "fullName", fullName },
+                        { "email", ConverterUtils.filterNonEmailString(email) }, 
+                        { "contribType", contribType } });
+        
+        if (!ConverterUtils.isBlankOrNull(affiliation)) {
+            Item affiliationOrg = this.createAndStoreClassItem(study, "Organisation",
+                        new String[][] { { "name", affiliation } });
+            this.handleReferencesAndCollections(contactPerson, affiliationOrg);
+        }
     }
 
+    /**
+     * TODO
+     */
     public void parseInterventions(Item study, String interventions) {
         if (!ConverterUtils.isBlankOrNull(interventions)) {
             study.setAttribute("interventionsDescription", interventions);
@@ -1435,10 +1456,10 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
@@ -1450,15 +1471,13 @@ public class WhoConverter extends CacheConverter {
             }
 
             /* Results summary SO */
-            this.createAndStoreClassItem(study, "StudyObject",
+            this.createAndStoreClassItem(study, "RegistryResultsSummary",
                     new String[][] { { "displayTitle", doDisplayTitle }, 
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
                             { "accessUrl", resultsUrlLink },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_RESULTS_SUMMARY } });
+                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
         }
     }
 
@@ -1486,9 +1505,9 @@ public class WhoConverter extends CacheConverter {
             if (mUrl.find()) {
                 // Display title
                 String doDisplayTitle;
-                String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-                if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                    doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TYPE_PROT;
+                String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+                if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                    doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
                 } else {
                     doDisplayTitle = ConverterCVT.O_TYPE_PROT;
                 }
@@ -1515,12 +1534,10 @@ public class WhoConverter extends CacheConverter {
                 // Access type: in practice it might not be the correct access type
                 // Note: only specifying public, not using the various public types MDR has,
                 // maybe to change
-                this.createAndStoreClassItem(study, "StudyObject",
+                this.createAndStoreClassItem(study, "Protocol",
                         new String[][] { { "displayTitle", doDisplayTitle },
-                                { "type", ConverterCVT.O_TYPE_PROT },
                                 { "publicationYear", publicationYear },
                                 { "accessUrl", protocolURL },
-                                { "urlTargetType", resourceType },
                                 { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
             }
         }
@@ -1533,62 +1550,64 @@ public class WhoConverter extends CacheConverter {
             String publicationYear, LocalDate lastUpdate) throws Exception {
         if (!this.existingStudy()) {
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
             String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
                 doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
 
             /* Registry entry SO */
-            if (!ConverterUtils.isBlankOrNull(entryUrl)) {
-                this.createAndStoreClassItem(study, "StudyObject",
-                        new String[][] { { "displayTitle", doDisplayTitle }, 
-                                // TODO: created or published?
-                                // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
-                                { "dateCreated", registrationDate != null ? registrationDate.toString() : null },
-                                { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
-                                { "publicationYear", publicationYear },
-                                { "accessUrl", entryUrl },
-                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                                { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                                { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
-            }
+            // TODO
+            // if (!ConverterUtils.isBlankOrNull(entryUrl)) {
+            //     this.createAndStoreClassItem(study, "StudyObject",
+            //             new String[][] { { "displayTitle", doDisplayTitle }, 
+            //                     // TODO: created or published?
+            //                     // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
+            //                     { "dateCreated", registrationDate != null ? registrationDate.toString() : null },
+            //                     { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+            //                     { "publicationYear", publicationYear },
+            //                     { "accessUrl", entryUrl },
+            //                     { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+            //                     { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+            //                     { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
+            // }
         } else {
             // Update SO creation date
-            if (registrationDate != null) {
-                Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
-                        ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+            // TODO
+            // if (registrationDate != null) {
+            //     Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
+            //             ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
 
-                if (doRegistryEntry != null) {
-                    // dateCreated
-                    String existingDateCreatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateCreated");
-                    // Updating dateCreated if older than known creation date or there was no previous date
-                    if (ConverterUtils.isBlankOrNull(existingDateCreatedStr) || registrationDate
-                                    .compareTo(ConverterUtils.getDateFromString(existingDateCreatedStr, null)) < 0) {
-                        doRegistryEntry.setAttributeIfNotNull("dateCreated", registrationDate.toString());
+            //     if (doRegistryEntry != null) {
+            //         // dateCreated
+            //         String existingDateCreatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateCreated");
+            //         // Updating dateCreated if older than known creation date or there was no previous date
+            //         if (ConverterUtils.isBlankOrNull(existingDateCreatedStr) || registrationDate
+            //                         .compareTo(ConverterUtils.getDateFromString(existingDateCreatedStr, null)) < 0) {
+            //             doRegistryEntry.setAttributeIfNotNull("dateCreated", registrationDate.toString());
 
-                        this.writeLog("older creation date: " + registrationDate.toString() + ", previous: "
-                                + existingDateCreatedStr + " -country: "
-                                + ConverterUtils.getAttrValue(this.currentCountry, "name"));
-                    }
+            //             this.writeLog("older creation date: " + registrationDate.toString() + ", previous: "
+            //                     + existingDateCreatedStr + " -country: "
+            //                     + ConverterUtils.getAttrValue(this.currentCountry, "name"));
+            //         }
 
-                    // dateUpdated
-                    String existingDateUpdatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateUpdated");
-                    // Updating dateUpdated if older than known creation date or there was no previous date
-                    if (ConverterUtils.isBlankOrNull(existingDateUpdatedStr)
-                            || lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateUpdatedStr, null)) > 0) {
-                        doRegistryEntry.setAttributeIfNotNull("dateUpdated", lastUpdate.toString());
+            //         // dateUpdated
+            //         String existingDateUpdatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateUpdated");
+            //         // Updating dateUpdated if older than known creation date or there was no previous date
+            //         if (ConverterUtils.isBlankOrNull(existingDateUpdatedStr)
+            //                 || lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateUpdatedStr, null)) > 0) {
+            //             doRegistryEntry.setAttributeIfNotNull("dateUpdated", lastUpdate.toString());
 
-                        // TODO: newerLastUpdate logic in separate function?
-                        this.newerLastUpdate = true;
-                        this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: "
-                                + existingDateUpdatedStr + " -country: "
-                                + ConverterUtils.getAttrValue(this.currentCountry, "name"));
-                    }
-                }
-            }
+            //             // TODO: newerLastUpdate logic in separate function?
+            //             this.newerLastUpdate = true;
+            //             this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: "
+            //                     + existingDateUpdatedStr + " -country: "
+            //                     + ConverterUtils.getAttrValue(this.currentCountry, "name"));
+            //         }
+            //     }
+            // }
         }
     }
 
