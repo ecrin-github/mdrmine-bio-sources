@@ -73,15 +73,22 @@ public class ConverterCVT {
     public static final String GENDER_ALL = "All";
     public static final String GENDER_WOMEN = "Female";
     public static final String GENDER_MEN = "Male";
-    public static final String AGE_IN_UTERO = "In utero";
+    public static final String AGE_IN_UTERO = "In utero";   // TODO
     public static final String AGE_UNIT_YEARS = "Years";
-    public static final String TOPIC_TYPE_CHEMICAL_AGENT = "Chemical / Agent";
+    public static final String AGE_MIN_YEARS = "0";
+    public static final String AGE_MAX_YEARS = "150";
+    public static enum AgeGroup {InUtero, Pediatric, Adult, OlderAdult};
+    public static final String AGE_GROUP_IN_UTERO = "In Utero";
+    public static final String AGE_GROUP_PEDIATRIC = "Pediatric";
+    public static final String AGE_GROUP_ADULT = "Adult";
+    public static final String AGE_GROUP_OLDER_ADULT = "Older Adult";
+    public static final String INTERVENTION_T_DRUG = "Drug";
 
     /* Objects */
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
     public static final String O_TYPE_BIOSPECIMEN = "Biospecimen data";
     public static final String O_TYPE_ICF = "Informed consent form";
-    public static final String O_TYPE_IPD = "Individual partipant data";
+    public static final String O_TYPE_IPD = "Individual participant data";
     public static final String O_TYPE_ETHICS_APPROVAL_NOTIFICATION = "Ethics approval notification";
     public static final String O_TYPE_SAP = "Statistical analysis plan";
     public static final String O_TYPE_PROT = "Study protocol";
@@ -103,6 +110,7 @@ public class ConverterCVT {
     public static final String CONTRIB_TYPE_SPONSOR_INVESTIGATOR = "Sponsor Investigator";
     public static final String CONTRIB_TYPE_STUDY_FUNDER = "Study funder";
     public static final String CONTRIB_TYPE_COLLABORATING_ORG = "Collaborating organisation";
+    public static final String CONTRIB_TYPE_SITE_CONTACT = "Clinical site contact";
     // Note: not in current MDR, this is for now used for CTG Collaborators that are not orgs
     public static final String CONTRIB_TYPE_COLLABORATING_PERSON = "Collaborating person";
     public static final String ORG_TYPE_FEDERAL_US = "US Federal agency";
@@ -111,12 +119,14 @@ public class ConverterCVT {
     public static final String ORG_TYPE_NETWORK = "Network";
     public static final String ORG_TYPE_NIH = "US NIH Institute";
     public static final String ORG_TYPE_OTHER = "Other";
-    public static final String TITLE_UNKNOWN = "Unknown title";
-    public static final String TITLE_TYPE_PUBLIC = "Public title";
-    public static final String TITLE_TYPE_SCIENTIFIC = "Scientific title";
-    public static final String TITLE_TYPE_ACRONYM = "Acronym or abbreviation";
     public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
     public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
+
+    /* Model field names */
+    public static final String FIELD_MIN_AGE = "minAge";
+    public static final String FIELD_MIN_AGE_UNIT = "minAgeUnit";
+    public static final String FIELD_MAX_AGE = "maxAge";
+    public static final String FIELD_MAX_AGE_UNIT = "maxAgeUnit";
 
     /* External CVs */
     public static final String CV_MEDDRA = "MedDRA";

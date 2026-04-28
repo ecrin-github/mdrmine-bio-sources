@@ -152,7 +152,7 @@ public class CtgConverterCSV extends BaseConverter {
             String conditions = this.getAndCleanValue(lineValues, "Conditions");
             this.parseConditions(study, conditions);
 
-            /* Study topics */
+            /* Study interventions */
             String interventions = this.getAndCleanValue(lineValues, "Interventions");
             this.parseInterventions(study, interventions);
             // study.setAttributeIfNotNull("testField2", interventions);
@@ -425,31 +425,15 @@ public class CtgConverterCSV extends BaseConverter {
      * @param studyTitle
      */
     public void parseStudyTitle(Item study, String studyTitle, String acronym) throws Exception {
-        boolean displayTitleSet = false;
-
         // TODO: && !title.equals("-") && !title.equals("_") && !title.equals(".") ?
         /* Public title */
         if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            study.setAttributeIfNotNull("displayTitle", studyTitle);
-            displayTitleSet = true;
-
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", studyTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
+            study.setAttributeIfNotNull("publicTitle", studyTitle);
         }
 
         /* Acronym */
         if (!ConverterUtils.isBlankOrNull(acronym)) {
-            if (!displayTitleSet) {
-                study.setAttributeIfNotNull("displayTitle", acronym);
-            }
-
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
-        }
-
-        // Unknown title if not set before
-        if (!displayTitleSet) {
-            study.setAttribute("displayTitle", ConverterCVT.TITLE_UNKNOWN);
+            study.setAttributeIfNotNull("acronym", acronym);
         }
     }
 
@@ -517,10 +501,10 @@ public class CtgConverterCSV extends BaseConverter {
                     tuple = intervention.split(": ");
                     if (tuple.length == 2) {
                         // TODO: link/normalise with CV
-                        this.createAndStoreClassItem(study, "Topic",
+                        this.createAndStoreClassItem(study, "Intervention",
                                 new String[][] {
                                         { "type", ConverterUtils.capitaliseAndReplaceCharBySpace(tuple[0], '_') },
-                                        { "value", WordUtils.capitalizeFully(tuple[1], ' ', '-') } });
+                                        { "name", WordUtils.capitalizeFully(tuple[1], ' ', '-') } });
                     } else {
                         this.writeLog("Failed to properly split intervention tuple: " + intervention + "; full string: "
                                 + interventionsStr);
@@ -708,8 +692,8 @@ public class CtgConverterCSV extends BaseConverter {
                 }
 
                 this.createAndStoreClassItem(study, "StudyFeature",
-                        new String[][] { { "featureType", ConverterCVT.FEATURE_T_PHASE },
-                                { "featureValue", phaseValue } });
+                        new String[][] { { "type", ConverterCVT.FEATURE_T_PHASE },
+                                { "value", phaseValue } });
             } else {
                 this.writeLog("Failed to match phase value: " + phasesStr);
             }
@@ -775,8 +759,8 @@ public class CtgConverterCSV extends BaseConverter {
                                 // TODO: normalise masking values?
                                 this.createAndStoreClassItem(study, "StudyFeature",
                                         new String[][] {
-                                                { "featureType", ConverterUtils.capitaliseFirstLetter(tuple[0]) },
-                                                { "featureValue", ConverterUtils
+                                                { "type", ConverterUtils.capitaliseFirstLetter(tuple[0], false) },
+                                                { "value", ConverterUtils
                                                         .capitaliseAndReplaceCharBySpace(tuple[1], '_') } });
                             } else {
                                 this.writeLog("parseStudyDesign(): key is empty, tuple: " + kv + "; full string: "
@@ -964,7 +948,7 @@ public class CtgConverterCSV extends BaseConverter {
                             new String[][] { { "type", objectType },
                                     { "accessUrl", url },
                                     { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC }, // TODO: check if true
-                                    { "displayTitle", objectType } });
+                                    { "title", objectType } });
                 }
             }
         }
@@ -978,12 +962,12 @@ public class CtgConverterCSV extends BaseConverter {
      */
     public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate firstPosted, LocalDate lastUpdate)
             throws Exception {
-        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-        String doDisplayTitle;
-        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-            doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+        String studyTitle = ConverterUtils.getAttrValue(study, "title");
+        String dotitle;
+        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+            dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
-            doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
         /* Trial registry entry SO */
@@ -996,7 +980,7 @@ public class CtgConverterCSV extends BaseConverter {
                             { "accessUrl", entryUrl },
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "displayTitle", doDisplayTitle } });
+                            { "title", dotitle } });
         }
     }
 
@@ -1023,12 +1007,12 @@ public class CtgConverterCSV extends BaseConverter {
             String resultsURLLink = entryURL + "?tab=results";
 
             // Display title
-            String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
-            if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-                doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
+            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
             // Results completed date
@@ -1048,7 +1032,7 @@ public class CtgConverterCSV extends BaseConverter {
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "displayTitle", doDisplayTitle },
+                    new String[][] { { "title", dotitle },
                             { "dateCreated", resultsCompletedDate != null ? resultsCompletedDate.toString() : null },
                             // Note: was ConverterCVT.DATE_TYPE_AVAILABLE before model change
                             { "datePublished", resultsFirstPosted != null ? resultsFirstPosted.toString() : null },

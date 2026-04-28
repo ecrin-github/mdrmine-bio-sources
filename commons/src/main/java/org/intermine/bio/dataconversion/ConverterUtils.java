@@ -15,13 +15,18 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import java.util.Set;
 
-import org.apache.commons.lang.WordUtils;
+import org.apache.commons.text.WordUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
+import org.intermine.xml.full.Reference;
 import org.jsoup.Jsoup;
 
 /**
@@ -54,6 +59,7 @@ public class ConverterUtils {
             .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?");
     public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
     public static final Pattern P_WHO_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
+    public static final Pattern P_EMAIL = Pattern.compile("^[^@]+@[^.]+\\..+");
     // public static final Pattern P_ANZCTR_ID = Pattern.compile();
     // public static final Pattern P_CHICTR_ID = Pattern.compile();
     // public static final Pattern P_CRIS_ID = Pattern.compile();
@@ -166,36 +172,61 @@ public class ConverterUtils {
      * 
      * @param u the unit to normalise
      * @return the normalised unit
-     * @see #normaliseWord()
+     * @see #capitaliseFirstLetter()
      */
     public static String normaliseUnit(String u) {
-        return ConverterUtils.normaliseWord(u) + "s";
-    }
-
-    /**
-     * Uppercase first letter and lowercase the rest.
-     * 
-     * @param w the word to normalise
-     * @return the normalised word
-     */
-    public static String normaliseWord(String w) {
-        if (w.length() > 0) {
-            w = w.substring(0, 1).toUpperCase() + w.substring(1).toLowerCase();
+        if (u.endsWith("s")) {
+            return ConverterUtils.capitaliseFirstLetter(u, true);
         }
-        return w;
+        return ConverterUtils.capitaliseFirstLetter(u, true) + "s";
     }
 
     /**
      * TODO
-     * 
-     * @param w
-     * @return
      */
-    public static String capitaliseFirstLetter(String w) {
-        if (w.length() > 0) {
-            w = w.substring(0, 1).toUpperCase() + w.substring(1);
+    public static String normaliseStatus(String s) {
+        if (s != null) {
+            s = ConverterUtils.capitaliseFirstLetter(s.replace('_', ' '), true);
         }
-        return w;
+        return s;
+    }
+
+    /**
+     * TODO
+     */
+    public static String normaliseCondition(String c) {
+        if (c != null) {
+            return WordUtils.capitalizeFully(c.strip(), ' ', '-');
+        }
+        return c;
+    }
+
+    /**
+     * TODO
+     */
+    public static String normaliseIntervention(String i) {
+        if (i != null) {
+            return WordUtils.capitalizeFully(i.strip(), ' ', '-');
+        }
+        return i;
+    }
+
+    /**
+     * Uppercase first letter and lowercase the rest or not.
+     * 
+     * @param s the string to normalise
+     * @param restToLowercase whether to convert to lowercase all characters after the first
+     * @return the normalised string
+     */
+    public static String capitaliseFirstLetter(String s, boolean restToLowercase) {
+        if (s.length() > 0) {
+            if (restToLowercase) {
+                s = s.substring(0, 1).toUpperCase() + s.substring(1).toLowerCase();
+            } else {
+                s = s.substring(0, 1).toUpperCase() + s.substring(1);
+            }
+        }
+        return s;
     }
 
     /**
@@ -231,6 +262,24 @@ public class ConverterUtils {
             }
         }
         return attrValue;
+    }
+
+    /**
+     * TODO
+     * 
+     * @param item
+     * @param refName
+     * @return
+     */
+    public static String getRefId(Item item, String refName) {
+        String refId = null;
+        if (item != null) {
+            Reference itemRef = item.getReference(refName);
+            if (itemRef != null) {
+                refId = itemRef.getRefId();
+            }
+        }
+        return refId;
     }
 
     /**
@@ -270,6 +319,125 @@ public class ConverterUtils {
      */
     public static String constructMultiplePhasesString(String p1, String p2) {
         return ConverterUtils.convertPhaseNumber(p1) + "/" + ConverterUtils.convertPhaseNumber(p2);
+    }
+
+    public static String getAgeGroupStr(EnumSet<ConverterCVT.AgeGroup> ageGroups) {
+        ArrayList<String> selectedGroups = new ArrayList<String>();
+
+        if (ageGroups.contains(ConverterCVT.AgeGroup.InUtero)) {
+            selectedGroups.add(ConverterCVT.AGE_GROUP_IN_UTERO);
+        }
+        if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
+            selectedGroups.add(ConverterCVT.AGE_GROUP_PEDIATRIC);
+        }
+        if (ageGroups.contains(ConverterCVT.AgeGroup.Adult)) {
+            selectedGroups.add(ConverterCVT.AGE_GROUP_ADULT);
+        }
+        if (ageGroups.contains(ConverterCVT.AgeGroup.OlderAdult)) {
+            selectedGroups.add(ConverterCVT.AGE_GROUP_OLDER_ADULT);
+        }
+
+        return String.join(", ", selectedGroups);
+    }
+
+    /**
+     * TODO
+     * Note: "In utero" age group edge case is only present and therefore only handled in CTIS
+     */
+    public static String calculateAgeGroup(Item study) {
+        EnumSet<ConverterCVT.AgeGroup> ageGroups = EnumSet.noneOf(ConverterCVT.AgeGroup.class);
+
+        String minAge = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MIN_AGE);
+        String minAgeUnit = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MIN_AGE_UNIT);
+        String maxAge = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MAX_AGE);
+        String maxAgeUnit = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MAX_AGE_UNIT);
+
+        // Checking min age
+        if (!ConverterUtils.isBlankOrNull(minAge) && !ConverterUtils.isBlankOrNull(minAgeUnit)) {
+            if (!minAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {  // If unit is not years, means it's a smaller unit
+                ageGroups.add(ConverterCVT.AgeGroup.Pediatric);
+            } else {
+                if (NumberUtils.isParsable(minAge)) {
+                    Float minAgeF = Float.parseFloat(minAge);
+                    if (minAgeF < 18) {
+                        ageGroups.add(ConverterCVT.AgeGroup.Pediatric);
+                    } else if (minAgeF < 65) {
+                        ageGroups.add(ConverterCVT.AgeGroup.Adult);
+                    } else {
+                        ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
+                    }
+                } else {
+                    // TODO: write log?
+                }
+            }
+
+            // Checking max age
+            if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
+                // If unit is not years it's a smaller unit, and child age group has already been added with min age
+                if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
+                    if (NumberUtils.isParsable(maxAge)) {
+                        Float maxAgeF = Float.parseFloat(maxAge);
+                        if (maxAgeF >= 18 && maxAgeF < 65) {
+                            ageGroups.add(ConverterCVT.AgeGroup.Adult);
+                        } else if (maxAgeF >= 65) {
+                            ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
+
+                            // If minAge is of child age group and max age of older adult age group, need to add adult age group as well
+                            if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
+                                ageGroups.add(ConverterCVT.AgeGroup.Adult);
+                            }
+                        }
+                    } else {
+                        // TODO: write log?
+                    }
+                }
+            } else {    // No max age, adding all groups older than the one added with minAge
+                if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
+                    ageGroups.add(ConverterCVT.AgeGroup.Adult);
+                    ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
+                } else if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
+                    ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
+                }   // Else OLDER_ADULT, nothing to add
+            }
+        } else {    // Checking max age with no min age
+            if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
+                ageGroups.add(ConverterCVT.AgeGroup.Pediatric); // No min age, adding child age group in any case
+                if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
+                    if (NumberUtils.isParsable(maxAge)) {
+                        Float maxAgeF = Float.parseFloat(maxAge);
+                        if (maxAgeF >= 18) {
+                            ageGroups.add(ConverterCVT.AgeGroup.Adult);
+
+                            if (maxAgeF >= 65) {
+                                ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
+                            }
+                        }
+                    } else {
+                        // TODO: write log?
+                    }
+                }
+            }
+        }
+
+        return ConverterUtils.getAgeGroupStr(ageGroups);
+    }
+
+    /**
+     * TODO
+     * Get title from a study item if there is any (publicTitle or scientificTitle or acronym)
+     */
+    public static String getStudyTitle(Item study) {
+        String title = null;
+
+        title = ConverterUtils.getAttrValue(study, "publicTitle");
+        if (ConverterUtils.isBlankOrNull(title)) {
+            title = ConverterUtils.getAttrValue(study, "scientificTitle");
+            if (ConverterUtils.isBlankOrNull(title)) {
+                title = ConverterUtils.getAttrValue(study, "acronym");
+            }
+        }
+
+        return title;
     }
 
     /**
@@ -332,5 +500,16 @@ public class ConverterUtils {
         }
         String capitalised = WordUtils.capitalizeFully(str);
         return capitalised.replace(charToReplace, ' ');
+    }
+
+    /**
+     * TODO
+     * check P_EMAIL pattern, "weak" email string validation: [any]@[any].[any]
+     */
+    public static String filterNonEmailString(final String email) {
+        if (!ConverterUtils.isBlankOrNull(email) && P_EMAIL.matcher(email).matches()) {
+            return email;
+        }
+        return null;
     }
 }

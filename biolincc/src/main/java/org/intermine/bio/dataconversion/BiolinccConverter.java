@@ -281,7 +281,7 @@ public class BiolinccConverter extends CacheConverter {
             this.createAndStoreClassItem(study, "StudyIdentifier",
                     new String[][] { { "identifierValue", biolinccID } });
         } else {
-            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "displayTitle"));
+            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "title"));
         }
     }
 
@@ -293,30 +293,21 @@ public class BiolinccConverter extends CacheConverter {
      * @param studyTitle
      */
     public void parseStudyTitle(Item study, String studyTitle, String acronym) throws Exception {
-        boolean displayTitleSet = false;
+        boolean titleSet = false;
 
         /* Public title */
         if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            study.setAttributeIfNotNull("displayTitle", studyTitle);
-            displayTitleSet = true;
-
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", studyTitle }, { "type", ConverterCVT.TITLE_TYPE_PUBLIC } });
+            study.setAttributeIfNotNull("title", studyTitle);
+            titleSet = true;
         }
 
         /* Acronym */
         if (!ConverterUtils.isBlankOrNull(acronym)) {
-            if (!displayTitleSet) {
-                study.setAttributeIfNotNull("displayTitle", acronym);
+            if (!titleSet) {
+                study.setAttributeIfNotNull("title", acronym);
             }
 
-            this.createAndStoreClassItem(study, "Title",
-                    new String[][] { { "text", acronym }, { "type", ConverterCVT.TITLE_TYPE_ACRONYM } });
-        }
-
-        // Unknown title if not set before
-        if (!displayTitleSet) {
-            study.setAttribute("displayTitle", ConverterCVT.TITLE_UNKNOWN);
+            study.setAttributeIfNotNull("acronym", acronym);
         }
     }
 
@@ -359,31 +350,45 @@ public class BiolinccConverter extends CacheConverter {
      */
     public void parseAge(Item study, String cohortType) {
         if (!ConverterUtils.isBlankOrNull(cohortType)) {
-            String minAge = "";
-            String maxAge = "";
+            String minAge = null;
+            String maxAge = null;
+            String ageGroup = null;
 
             if (cohortType.equalsIgnoreCase(BiolinccConverter.AGE_ADULT)) {
                 minAge = "18";
+                maxAge = ConverterCVT.AGE_MAX_YEARS;
+
+                // Assuming here that adult includes older adults as well
+                ageGroup = ConverterUtils
+                        .getAgeGroupStr(EnumSet.of(ConverterCVT.AgeGroup.Adult, ConverterCVT.AgeGroup.OlderAdult));
             } else if (cohortType.equalsIgnoreCase(BiolinccConverter.AGE_PEDIATRIC)) {
+                minAge = ConverterCVT.AGE_MIN_YEARS;
                 maxAge = "17";
-            } else if (!cohortType.equalsIgnoreCase(BiolinccConverter.AGE_ALL)) {
+                ageGroup = ConverterCVT.AGE_GROUP_PEDIATRIC;
+            } else if (cohortType.equalsIgnoreCase(BiolinccConverter.AGE_ALL)) {
+                minAge = ConverterCVT.AGE_MIN_YEARS;
+                maxAge = ConverterCVT.AGE_MAX_YEARS;
+
+                // Assuming all doesn't include in utero
+                ageGroup = ConverterUtils.getAgeGroupStr(EnumSet.of(ConverterCVT.AgeGroup.Pediatric,
+                        ConverterCVT.AgeGroup.Adult, ConverterCVT.AgeGroup.OlderAdult));
+            } else {
                 this.writeLog("Unknown cohort type value: " + cohortType);
-                // TODO: unknown value
             }
 
-            // TODO: none on no minimum?
-            if (!ConverterUtils.isBlankOrNull(minAge)) {
+            if (minAge != null) {
                 study.setAttributeIfNotNull("minAge", minAge);
                 study.setAttributeIfNotNull("minAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
 
-            if (!ConverterUtils.isBlankOrNull(maxAge)) {
+            if (maxAge != null) {
                 study.setAttributeIfNotNull("maxAge", maxAge);
                 study.setAttributeIfNotNull("maxAgeUnit", ConverterCVT.AGE_UNIT_YEARS);
             }
-        } else {
-            study.setAttributeIfNotNull("minAge", ConverterCVT.UNKNOWN);
-            study.setAttributeIfNotNull("maxAge", ConverterCVT.UNKNOWN);
+
+            if (ageGroup != null) {
+                study.setAttributeIfNotNull("ageGroup", ageGroup);
+            }
         }
     }
 
@@ -433,33 +438,35 @@ public class BiolinccConverter extends CacheConverter {
     public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, List<String> ctgUrls)
             throws Exception {
         // Display title
-        String studyDisplayTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-        String doDisplayTitle;
-        if (!ConverterUtils.isBlankOrNull(studyDisplayTitle)) {
-            doDisplayTitle = studyDisplayTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+        String studyTitle = ConverterUtils.getAttrValue(study, "title");
+        String dotitle;
+        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+            dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
-            doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
         /* BioLINCC Registry entry SO */
-        if (!ConverterUtils.isBlankOrNull(biolinccUrl)) {
-            this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "displayTitle", doDisplayTitle },
-                            { "accessUrl", biolinccUrl },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
-        }
+        // TODO
+        // if (!ConverterUtils.isBlankOrNull(biolinccUrl)) {
+        // this.createAndStoreClassItem(study, "StudyObject",
+        // new String[][] { { "title", dotitle },
+        // { "accessUrl", biolinccUrl },
+        // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+        // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+        // { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
+        // }
 
         /* CTG Registry entry SOs */
-        for (String ctgUrl : ctgUrls) {
-            this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "displayTitle", doDisplayTitle },
-                            { "accessUrl", ctgUrl },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
-        }
+        // TODO
+        // for (String ctgUrl : ctgUrls) {
+        // this.createAndStoreClassItem(study, "StudyObject",
+        // new String[][] { { "title", dotitle },
+        // { "accessUrl", ctgUrl },
+        // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+        // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+        // { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
+        // }
     }
 
     /**
@@ -486,14 +493,8 @@ public class BiolinccConverter extends CacheConverter {
     public void parseConditions(Item study, String conditionsStr) throws Exception {
         // TODO: match values with CT codes/ICD Codes
         if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
-            Set<String> studyConditions = Stream.of(conditionsStr.split(","))
-                    .map(String::strip)
-                    .map(c -> WordUtils.capitalizeFully(c, ' ', '-'))
-                    .collect(Collectors.toSet());
-
-            Iterator<String> conditionsIter = studyConditions.iterator();
-            while (conditionsIter.hasNext()) {
-                this.linkStudyToStudyCondition(study, conditionsIter.next(), null, null);
+            for (String c : conditionsStr.split(",")) {
+                this.linkStudyToStudyCondition(study, c, null, null, null);
             }
         }
     }
@@ -556,19 +557,6 @@ public class BiolinccConverter extends CacheConverter {
             }
         }
 
-        /* IPD StudyObject */
-        // Note: Last updated date is on the BioLINCC website but not the data exported
-        // TODO: access details?
-        // TODO: access URL?
-        // TODO: lang code en by default?
-        // TODO: managingOrg NHLBI?
-        Item ipdDO = this.createAndStoreClassItem(study, "StudyObject",
-                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_IPD },
-                        { "datePublished", publicationDate != null ? publicationDate.toString() : null },
-                        { "type", ConverterCVT.O_TYPE_IPD },
-                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
-                        { "publicationYear", publicationYear } });
-
         // Consent details
         StringBuilder consentDetailsSb = new StringBuilder();
 
@@ -591,10 +579,18 @@ public class BiolinccConverter extends CacheConverter {
         // Consent details: specific restrictions
         consentDetailsSb.append(specificConsentRestrictions);
 
-        /* IPDDataset */
+        /* IPD SO */
+        // Note: Last updated date is on the BioLINCC website but not the data exported
+        // TODO: access URL?
+        // TODO: lang code en by default?
+        // TODO: managingOrg NHLBI?
         // TODO: normalized values for yes / no / n/a?
-        this.createAndStoreClassItem(ipdDO, "IPDDataset",
-                new String[][] { { "restrictCommercial", commercialUseDataRestrictions },
+        this.createAndStoreClassItem(study, "IndividualParticipantData",
+                new String[][] { { "title", ConverterCVT.O_TYPE_IPD },
+                        { "datePublished", publicationDate != null ? publicationDate.toString() : null },
+                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
+                        { "publicationYear", publicationYear },
+                        { "restrictCommercial", commercialUseDataRestrictions },
                         { "restrictGeo", "Yes" }, // See above
                         { "restrictResearchType", dataRestrictionsBasedOnAreaOfResearch },
                         { "consentDetails", consentDetailsSb.toString() } });
@@ -617,21 +613,6 @@ public class BiolinccConverter extends CacheConverter {
             }
         }
 
-        /* Biospecimen StudyObject */
-        // Note: Last updated date is on the BioLINCC website but not the data exported
-        // TODO: access details?
-        // TODO: lang code en by default?
-        // TODO: managingOrg NHLBI?
-        // TODO: materialTypes to dedicated field in Biosample
-        String details = (!ConverterUtils.isBlankOrNull(materialTypes) ? "Material types: " + materialTypes : null);
-        Item biospecimenDO = this.createAndStoreClassItem(study, "StudyObject",
-                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_BIOSPECIMEN },
-                        { "datePublished", publicationDate != null ? publicationDate.toString() : null },
-                        { "details", details },
-                        { "type", ConverterCVT.O_TYPE_BIOSPECIMEN },
-                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
-                        { "publicationYear", publicationYear } });
-
         // Consent details
         StringBuilder consentDetailsSb = new StringBuilder();
 
@@ -645,9 +626,17 @@ public class BiolinccConverter extends CacheConverter {
         consentDetailsSb.append(specificConsentRestrictions);
 
         /* Biosample */
+        // Note: Last updated date is on the BioLINCC website but not the data exported
+        // TODO: lang code en by default?
+        // TODO: managingOrg NHLBI?
         // TODO: normalized values for yes / no / n/a?
-        this.createAndStoreClassItem(biospecimenDO, "Biosample",
-                new String[][] { { "restrictCommercial", commercialUseSpecimenRestrictions },
+        Item biospecimenDO = this.createAndStoreClassItem(study, "Biosample",
+                new String[][] { { "title", ConverterCVT.O_TYPE_BIOSPECIMEN },
+                        { "datePublished", publicationDate != null ? publicationDate.toString() : null },
+                        { "materialTypes", materialTypes },
+                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
+                        { "publicationYear", publicationYear },
+                        { "restrictCommercial", commercialUseSpecimenRestrictions },
                         { "restrictGeo", "Yes" }, // See above
                         { "restrictResearchTypeNonGenetic", nonGeneticUseSpecimenRestrictions },
                         { "restrictResearchTypeGenetic", geneticUseAreaOfResearchRestrictions },
@@ -679,9 +668,9 @@ public class BiolinccConverter extends CacheConverter {
     public void parseStudyContact(Item study, String parentStudyContactEmail, String parentStudyContactName)
             throws Exception {
         if (!ConverterUtils.isBlankOrNull(parentStudyContactName)) {
-            // Note: email is not in the model so parentStudyContactEmail is unused
             this.createAndStoreClassItem(study, "Person",
                     new String[][] { { "fullName", parentStudyContactName },
+                            { "email", ConverterUtils.filterNonEmailString(parentStudyContactEmail) },
                             { "contribType", ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT } });
         }
     }
@@ -730,12 +719,13 @@ public class BiolinccConverter extends CacheConverter {
         // TODO: last updated
         // TODO: managing org?
         if (!ConverterUtils.isBlankOrNull(studyWebsiteStr)) {
-            this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "displayTitle", "Study (or clinical trial network) website" },
-                            { "accessUrl", studyWebsiteStr },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-                            { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "type", ConverterCVT.O_TYPE_WEBSITE } });
+            // TODO
+            // this.createAndStoreClassItem(study, "StudyObject",
+            // new String[][] { { "title", "Study (or clinical trial network)
+            // website" },
+            // { "accessUrl", studyWebsiteStr },
+            // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+            // { "type", ConverterCVT.O_TYPE_WEBSITE } });
         }
     }
 
