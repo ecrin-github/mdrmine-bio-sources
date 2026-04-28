@@ -772,19 +772,18 @@ public class WhoConverter extends CacheConverter {
 
     public void parseTitles(Item study, String publicTitle, String scientificTitle) throws Exception {
         if (!this.existingStudy()) {
-            boolean displayTitleSet = false;
+            boolean titleSet = false;
 
             if (!ConverterUtils.isBlankOrNull(publicTitle) && !publicTitle.equals("-")
                 && !publicTitle.equals("_") && !publicTitle.equals(".")) {
-                study.setAttributeIfNotNull("displayTitle", publicTitle);
-                study.setAttributeIfNotNull("publicTitle", publicTitle);
-                displayTitleSet = true;
+                study.setAttributeIfNotNull("title", publicTitle);
+                titleSet = true;
             }
             if (!ConverterUtils.isBlankOrNull(scientificTitle) && !scientificTitle.equals("-")
                 && !scientificTitle.equals("_") && !scientificTitle.equals(".")) {
                 study.setAttributeIfNotNull("scientificTitle", scientificTitle);
-                if (!displayTitleSet) {
-                    study.setAttributeIfNotNull("displayTitle", scientificTitle);
+                if (!titleSet) {
+                    study.setAttributeIfNotNull("title", scientificTitle);
                 }
             }
         }
@@ -1456,12 +1455,12 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
             // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
             // Publication year
@@ -1472,7 +1471,7 @@ public class WhoConverter extends CacheConverter {
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "displayTitle", doDisplayTitle }, 
+                    new String[][] { { "title", dotitle }, 
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
@@ -1504,12 +1503,12 @@ public class WhoConverter extends CacheConverter {
             Matcher mUrl = P_URL.matcher(resultsUrlProtocol);
             if (mUrl.find()) {
                 // Display title
-                String doDisplayTitle;
-                String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
+                String dotitle;
+                String studyTitle = ConverterUtils.getAttrValue(study, "title");
                 if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                    doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
+                    dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
                 } else {
-                    doDisplayTitle = ConverterCVT.O_TYPE_PROT;
+                    dotitle = ConverterCVT.O_TYPE_PROT;
                 }
 
                 /* Protocol SO */
@@ -1535,7 +1534,7 @@ public class WhoConverter extends CacheConverter {
                 // Note: only specifying public, not using the various public types MDR has,
                 // maybe to change
                 this.createAndStoreClassItem(study, "Protocol",
-                        new String[][] { { "displayTitle", doDisplayTitle },
+                        new String[][] { { "title", dotitle },
                                 { "publicationYear", publicationYear },
                                 { "accessUrl", protocolURL },
                                 { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
@@ -1550,19 +1549,19 @@ public class WhoConverter extends CacheConverter {
             String publicationYear, LocalDate lastUpdate) throws Exception {
         if (!this.existingStudy()) {
             // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+                dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
 
             /* Registry entry SO */
             // TODO
             // if (!ConverterUtils.isBlankOrNull(entryUrl)) {
             //     this.createAndStoreClassItem(study, "StudyObject",
-            //             new String[][] { { "displayTitle", doDisplayTitle }, 
+            //             new String[][] { { "title", dotitle }, 
             //                     // TODO: created or published?
             //                     // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
             //                     { "dateCreated", registrationDate != null ? registrationDate.toString() : null },

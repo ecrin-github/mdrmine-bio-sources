@@ -281,7 +281,7 @@ public class BiolinccConverter extends CacheConverter {
             this.createAndStoreClassItem(study, "StudyIdentifier",
                     new String[][] { { "identifierValue", biolinccID } });
         } else {
-            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "displayTitle"));
+            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "title"));
         }
     }
 
@@ -293,20 +293,18 @@ public class BiolinccConverter extends CacheConverter {
      * @param studyTitle
      */
     public void parseStudyTitle(Item study, String studyTitle, String acronym) throws Exception {
-        boolean displayTitleSet = false;
+        boolean titleSet = false;
 
         /* Public title */
         if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            study.setAttributeIfNotNull("displayTitle", studyTitle);
-            displayTitleSet = true;
-
-            study.setAttributeIfNotNull("publicTitle", studyTitle);
+            study.setAttributeIfNotNull("title", studyTitle);
+            titleSet = true;
         }
 
         /* Acronym */
         if (!ConverterUtils.isBlankOrNull(acronym)) {
-            if (!displayTitleSet) {
-                study.setAttributeIfNotNull("displayTitle", acronym);
+            if (!titleSet) {
+                study.setAttributeIfNotNull("title", acronym);
             }
 
             study.setAttributeIfNotNull("acronym", acronym);
@@ -440,19 +438,19 @@ public class BiolinccConverter extends CacheConverter {
     public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, List<String> ctgUrls)
             throws Exception {
         // Display title
-        String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-        String doDisplayTitle;
+        String studyTitle = ConverterUtils.getAttrValue(study, "title");
+        String dotitle;
         if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
-            doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
         /* BioLINCC Registry entry SO */
         // TODO
         // if (!ConverterUtils.isBlankOrNull(biolinccUrl)) {
         // this.createAndStoreClassItem(study, "StudyObject",
-        // new String[][] { { "displayTitle", doDisplayTitle },
+        // new String[][] { { "title", dotitle },
         // { "accessUrl", biolinccUrl },
         // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
         // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
@@ -463,7 +461,7 @@ public class BiolinccConverter extends CacheConverter {
         // TODO
         // for (String ctgUrl : ctgUrls) {
         // this.createAndStoreClassItem(study, "StudyObject",
-        // new String[][] { { "displayTitle", doDisplayTitle },
+        // new String[][] { { "title", dotitle },
         // { "accessUrl", ctgUrl },
         // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
         // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
@@ -588,7 +586,7 @@ public class BiolinccConverter extends CacheConverter {
         // TODO: managingOrg NHLBI?
         // TODO: normalized values for yes / no / n/a?
         this.createAndStoreClassItem(study, "IndividualParticipantData",
-                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_IPD },
+                new String[][] { { "title", ConverterCVT.O_TYPE_IPD },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },
                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
                         { "publicationYear", publicationYear },
@@ -633,7 +631,7 @@ public class BiolinccConverter extends CacheConverter {
         // TODO: managingOrg NHLBI?
         // TODO: normalized values for yes / no / n/a?
         Item biospecimenDO = this.createAndStoreClassItem(study, "Biosample",
-                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_BIOSPECIMEN },
+                new String[][] { { "title", ConverterCVT.O_TYPE_BIOSPECIMEN },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },
                         { "materialTypes", materialTypes },
                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
@@ -723,7 +721,7 @@ public class BiolinccConverter extends CacheConverter {
         if (!ConverterUtils.isBlankOrNull(studyWebsiteStr)) {
             // TODO
             // this.createAndStoreClassItem(study, "StudyObject",
-            // new String[][] { { "displayTitle", "Study (or clinical trial network)
+            // new String[][] { { "title", "Study (or clinical trial network)
             // website" },
             // { "accessUrl", studyWebsiteStr },
             // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },

@@ -376,24 +376,21 @@ public class CtgConverter extends CacheConverter {
 
         // TODO: check for "-", "_", ".", etc.?
 
-        // Constructing displayTitle the same way as on the CTG website:
-        // "briefTitle (acronym)"
-        StringBuilder titleSb = new StringBuilder();
-
         if (idModule != null) {
+            boolean titleSet = false;
 
             /* Brief (public) title */
             if (!ConverterUtils.isBlankOrNull(idModule.briefTitle)) {
-                titleSb.append(idModule.briefTitle);
-
-                study.setAttributeIfNotNull("publicTitle", idModule.briefTitle);
+                study.setAttributeIfNotNull("title", idModule.briefTitle);
+                titleSet = true;
             }
 
             /* Official (scientific) title */
             if (!ConverterUtils.isBlankOrNull(idModule.officialTitle)) {
-                // Only setting officialTitle to displayTitle if no briefTitle
-                if (ConverterUtils.isBlankOrNull(titleSb.toString())) {
-                    titleSb.append(idModule.officialTitle);
+                // Only setting officialTitle to title if no briefTitle
+                if (!titleSet) {
+                    study.setAttributeIfNotNull("title", idModule.officialTitle);
+                    titleSet = true;
                 }
 
                 study.setAttributeIfNotNull("scientificTitle", idModule.officialTitle);
@@ -401,17 +398,16 @@ public class CtgConverter extends CacheConverter {
 
             /* Acronym */
             if (!ConverterUtils.isBlankOrNull(idModule.acronym)) {
-                if (ConverterUtils.isBlankOrNull(titleSb.toString())) {
-                    titleSb.append(idModule.acronym);
-                } else {
-                    titleSb.append(" (" + idModule.acronym + ")");
+                // Only setting acronym to title if no briefTitle and no officialTitle
+                if (!titleSet) {
+                    study.setAttributeIfNotNull("title", idModule.acronym);
+                    titleSet = true;
                 }
 
                 study.setAttributeIfNotNull("acronym", idModule.acronym);
             }
         }
 
-        study.setAttributeIfNotNull("displayTitle", titleSb.toString());
     }
 
     /**
@@ -1183,12 +1179,12 @@ public class CtgConverter extends CacheConverter {
                 }
             }
 
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+                dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
 
             // Publication year
@@ -1209,7 +1205,7 @@ public class CtgConverter extends CacheConverter {
             // { "accessUrl", ConverterCVT.CTG_STUDY_BASE_URL + nctID },
             // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
             // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-            // { "displayTitle", doDisplayTitle } });
+            // { "title", dotitle } });
         }
     }
 
@@ -1251,13 +1247,13 @@ public class CtgConverter extends CacheConverter {
             }
 
             // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " +
+                dotitle = studyTitle + " - " +
                         ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
             // Publication year
@@ -1268,7 +1264,7 @@ public class CtgConverter extends CacheConverter {
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "displayTitle", doDisplayTitle },
+                    new String[][] { { "title", dotitle },
                             { "dateCreated", dateCreated },
                             { "datePublished", datePublished },
                             { "dateUpdated", dateUpdated },
@@ -1324,14 +1320,14 @@ public class CtgConverter extends CacheConverter {
      * TODO
      * 
      * @param study
-     * @param displayTitle
+     * @param title
      * @param objectType
      * @param url
      * @param dateCreated
      * @param datePublished
      * @throws Exception
      */
-    public void createAndStoreStudyDocument(Item study, String displayTitle, String objectType, String url,
+    public void createAndStoreStudyDocument(Item study, String title, String objectType, String url,
             String dateCreated, String datePublished)
             throws Exception {
         String objectClassName = null;
@@ -1349,7 +1345,7 @@ public class CtgConverter extends CacheConverter {
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "dateCreated", dateCreated },
                             { "datePublished", datePublished },
-                            { "displayTitle", displayTitle } });
+                            { "title", title } });
         } else {
             throw new Exception("Unknown object type: " + objectType);
         }
@@ -1499,7 +1495,7 @@ public class CtgConverter extends CacheConverter {
 
                     if (!ConverterUtils.isBlankOrNull(ipdUrl)) {
                         Item ipdDO = this.createAndStoreClassItem(study, "IndividualParticipantData",
-                                new String[][] { { "displayTitle", ConverterCVT.O_TYPE_IPD },
+                                new String[][] { { "title", ConverterCVT.O_TYPE_IPD },
                                         // TODO
                                         // { "objectId", objectId },
                                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },

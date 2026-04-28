@@ -303,7 +303,7 @@ public class CtisConverter extends CacheConverter {
      */
     public void parseTrialTitle(Item study, String trialTitle) {
         if (!ConverterUtils.isBlankOrNull(trialTitle)) {
-            study.setAttributeIfNotNull("displayTitle", trialTitle);
+            study.setAttributeIfNotNull("title", trialTitle);
             study.setAttributeIfNotNull("scientificTitle", trialTitle);
         }
     }
@@ -321,18 +321,18 @@ public class CtisConverter extends CacheConverter {
             // protocol can be in trial documents tab
 
             // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
             } else {
-                doDisplayTitle = ConverterCVT.O_TYPE_PROT;
+                dotitle = ConverterCVT.O_TYPE_PROT;
             }
 
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "Protocol",
                     new String[][] { { "protocolSponsorId", protocolCode },
-                            { "displayTitle", doDisplayTitle } });
+                            { "title", dotitle } });
         }
     }
 
@@ -739,19 +739,19 @@ public class CtisConverter extends CacheConverter {
                     ConverterUtils.P_DATE_D_M_Y_SLASHES);
             if (decisionDate != null) {
                 // Display title
-                String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-                String doDisplayTitle;
+                String studyTitle = ConverterUtils.getAttrValue(study, "title");
+                String dotitle;
                 if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                    doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
+                    dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
                 } else {
-                    doDisplayTitle = ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
+                    dotitle = ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
                 }
 
                 /* Ethics approval notification SO */
                 // TODO: decision field?
                 Item ethicsApprovalDO = this.createAndStoreClassItem(study, "EthicsApprovalNotification",
                         new String[][] { { "datePublished", decisionDate.toString() },
-                                { "displayTitle", doDisplayTitle } });
+                                { "title", dotitle } });
             }
         }
     }
@@ -803,12 +803,12 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void createAndStoreRegistryEntryDO(Item study, LocalDate lastUpdated) throws Exception {
-        String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-        String doDisplayTitle;
+        String studyTitle = ConverterUtils.getAttrValue(study, "title");
+        String dotitle;
         if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
-            doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
         /* Trial registry entry SO */
@@ -819,7 +819,7 @@ public class CtisConverter extends CacheConverter {
         // { "accessUrl", REGISTRY_ENTRY_BASE_URL + this.currentTrialID },
         // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
         // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-        // { "displayTitle", doDisplayTitle } });
+        // { "title", dotitle } });
     }
 
     /**

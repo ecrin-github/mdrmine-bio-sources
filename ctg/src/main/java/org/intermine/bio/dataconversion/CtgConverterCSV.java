@@ -948,7 +948,7 @@ public class CtgConverterCSV extends BaseConverter {
                             new String[][] { { "type", objectType },
                                     { "accessUrl", url },
                                     { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC }, // TODO: check if true
-                                    { "displayTitle", objectType } });
+                                    { "title", objectType } });
                 }
             }
         }
@@ -962,12 +962,12 @@ public class CtgConverterCSV extends BaseConverter {
      */
     public void createAndStoreRegistryEntryDO(Item study, String entryUrl, LocalDate firstPosted, LocalDate lastUpdate)
             throws Exception {
-        String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-        String doDisplayTitle;
+        String studyTitle = ConverterUtils.getAttrValue(study, "title");
+        String dotitle;
         if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-            doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         } else {
-            doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+            dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
         }
 
         /* Trial registry entry SO */
@@ -980,7 +980,7 @@ public class CtgConverterCSV extends BaseConverter {
                             { "accessUrl", entryUrl },
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
                             { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-                            { "displayTitle", doDisplayTitle } });
+                            { "title", dotitle } });
         }
     }
 
@@ -1007,12 +1007,12 @@ public class CtgConverterCSV extends BaseConverter {
             String resultsURLLink = entryURL + "?tab=results";
 
             // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
             // Results completed date
@@ -1032,7 +1032,7 @@ public class CtgConverterCSV extends BaseConverter {
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "StudyObject",
-                    new String[][] { { "displayTitle", doDisplayTitle },
+                    new String[][] { { "title", dotitle },
                             { "dateCreated", resultsCompletedDate != null ? resultsCompletedDate.toString() : null },
                             // Note: was ConverterCVT.DATE_TYPE_AVAILABLE before model change
                             { "datePublished", resultsFirstPosted != null ? resultsFirstPosted.toString() : null },

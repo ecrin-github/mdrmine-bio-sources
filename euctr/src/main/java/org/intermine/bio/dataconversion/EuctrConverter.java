@@ -128,273 +128,342 @@ public class EuctrConverter extends CacheConverter {
         EuctrMainInfo mainInfo = trial.getMainInfo();
         if (mainInfo == null) {
             this.writeLog("mainInfo is null");
+            return;
+        }
+
+        Item study = null;
+        this.newerLastUpdate = false;
+        this.existingStudy = null;
+        this.currentCountry = null;
+
+        study = this.parseTrialIDsAndGetStudy(trial);
+
+        if (study == null) {
+            this.writeLog("Skipping null study");
+            return;
+        }
+
+        String trialUrl = this.getAndCleanValue(mainInfo, "url");
+
+        // TODO: make title object
+        /* Study title (need to get it before registry entry SO) */
+        String publicTitle = this.getAndCleanValue(mainInfo, "publicTitle");
+        String scientificTitle = this.getAndCleanValue(mainInfo, "scientificTitle");
+        String scientificAcronym = this.getAndCleanValue(mainInfo, "scientificAcronym");
+        this.parseTitles(study, publicTitle, scientificTitle, scientificAcronym);
+
+        /* WHO universal trial number */
+        String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
+        // TODO: identifier type?
+        // TODO: also gives duplicate errors
+        if (!this.existingStudy()) {
+            this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
+        }
+
+        // "Date on which this record was first entered in the EudraCT database" (from
+        // trials-full.txt dat format)
+        // Using this as "newer update" date
+        // TODO: more relevant to use date enrolment?
+        String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
+        LocalDate dateRegistration = this.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+
+        /* Trial registry entry SO */
+        this.createAndStoreRegistryEntryDO(study, dateRegistration, trialUrl);
+
+        /* Study people: primary sponsor */
+        String primarySponsor = this.getAndCleanValue(mainInfo, "primarySponsor");
+        this.parsePrimarySponsor(study, primarySponsor);
+
+        // Unused, always empty
+        String acronym = this.getAndCleanValue(mainInfo, "acronym");
+
+        /*
+         * Date enrolment (start date), also seems to be
+         * "Date of Ethics Committee Opinion"
+         */
+        String dateEnrolmentStr = this.getAndCleanValue(mainInfo, "dateEnrolment");
+        LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        this.setStudyStartDate(study, dateEnrolment);
+
+        // Unused, "Date trial authorised"
+        String typeEnrolment = this.getAndCleanValue(mainInfo, "typeEnrolment");
+
+        /* Study planned enrolment (for the whole trial) */
+        String targetSize = this.getAndCleanValue(mainInfo, "targetSize");
+        this.setPlannedEnrolment(study, targetSize);
+
+        // "Not Recruiting" or "Authorised-recruitment may be ongoing or finished" or NA
+        String recruitmentStatus = this.getAndCleanValue(mainInfo, "recruitmentStatus");
+        this.parseRecruitmentStatus(study, recruitmentStatus);
+
+        /*
+         * Note: from https://www.clinicaltrialsregister.eu/about.html, we can read:
+         * The EU Clinical Trials Register does not:
+         * provide information on non-interventional clinical trials of medicines
+         * (observational studies on authorised medicines);
+         * provide information on clinical trials for surgical procedures, medical
+         * devices or psychotherapeutic procedures;
+         */
+        // This is always "Interventional clinical trial of medicinal product"
+        // String studyType = this.getAndCleanValue(mainInfo, "studyType");
+        if (!this.existingStudy()) {
+            study.setAttributeIfNotNull("type", ConverterCVT.TYPE_INTERVENTIONAL);
+        }
+
+        /* Study features */
+        String studyDesign = this.getAndCleanValue(mainInfo, "studyDesign");
+        this.parseStudyDesign(study, studyDesign);
+
+        /* Study feature: phase */
+        String phase = this.getAndCleanValue(mainInfo, "phase");
+        this.parsePhase(study, phase);
+
+        /* Study condition */
+        String hcFreetext = this.getAndCleanValue(mainInfo, "hcFreetext");
+        List<String> hcCodes = trial.getHealthConditionCodes();
+        List<String> hcKeywords = trial.getHealthConditionKeywords();
+        this.parseHealthConditions(study, hcFreetext, hcCodes, hcKeywords);
+
+        /* Study intervention: products */
+        String iFreetext = this.getAndCleanValue(mainInfo, "iFreetext");
+        // Unused, always empty
+        List<String> iCodes = trial.getInterventionCodes();
+        // Unused, always empty
+        List<String> iKeywords = trial.getInterventionKeywords();
+        this.parseInterventions(study, iFreetext);
+
+        /* Study actual enrolment (for the whole trial) */
+        String resultsActualEnrolment = this.getAndCleanValue(mainInfo, "resultsActualEnrolment");
+        this.setActualEnrolment(study, resultsActualEnrolment);
+
+        /* Study end date ("global completion date") */
+        String resultsDateCompletedStr = this.getAndCleanValue(mainInfo, "resultsDateCompleted");
+        LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr,
+                ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        this.setStudyEndDate(study, resultsDateCompleted);
+
+        // Study results page link
+        String resultsUrlLink = this.getAndCleanValue(mainInfo, "resultsUrlLink");
+
+        // Results summary here is actually more of a general trial summary than a
+        // results summary
+        String resultsSummary = this.getAndCleanValue(mainInfo, "resultsSummary");
+        study.setAttributeIfNotNull("description", resultsSummary);
+
+        String resultsDatePostedStr = this.getAndCleanValue(mainInfo, "resultsDatePosted");
+        LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+
+        /* Results summary SO */
+        this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsDateCompleted, resultsDatePosted);
+
+        // Unused, always empty
+        String resultsDateFirstPublication = this.getAndCleanValue(mainInfo, "resultsDateFirstPublication");
+        // Unused (Link to results page section)
+        String resultsBaselineChar = this.getAndCleanValue(mainInfo, "resultsBaselineChar");
+        // Unused (Link to results page section)
+        String resultsParticipantFlow = this.getAndCleanValue(mainInfo, "resultsParticipantFlow");
+        // Unused (Link to results page section)
+        String resultsAdverseEvents = this.getAndCleanValue(mainInfo, "resultsAdverseEvents");
+        // Unused (Link to results page section)
+        String resultsOutcomeMeasures = this.getAndCleanValue(mainInfo, "resultsOutcomeMeasures");
+        // Unused, always empty
+        String resultsUrlProtocol = this.getAndCleanValue(mainInfo, "resultsUrlProtocol");
+        // Unused, always empty
+        String resultsIPDPlan = this.getAndCleanValue(mainInfo, "resultsIPDPlan");
+        // Unused, always empty
+        String resultsIPDDescription = this.getAndCleanValue(mainInfo, "resultsIPDDescription");
+
+        /* People */
+        List<EuctrContact> contacts = trial.getContacts();
+        this.parseContacts(study, contacts);
+
+        /* Study countries */
+        List<String> countries = trial.getCountries();
+        this.parseCountries(study, countries);
+
+        // Trial IEC
+        EuctrCriteria criteria = trial.getCriteria();
+
+        /* IEC, including min/max age */
+        String ic = criteria.getInclusionCriteria();
+        String ec = criteria.getExclusionCriteria();
+        this.parseIEC(study, ic, ec);
+
+        study.setAttributeIfNotNull("ageGroup", ConverterUtils.calculateAgeGroup(study));
+
+        /* Gender */
+        String gender = criteria.getGender();
+        this.parseGender(study, gender);
+
+        // Unused, always empty
+        String ageMin = criteria.getAgemin();
+        // Unused, always empty
+        String ageMax = criteria.getAgemax();
+
+        /* Primary outcomes */
+        List<String> primaryOutcomes = trial.getPrimaryOutcomes();
+        this.parseOutcomes(study, primaryOutcomes, "primary");
+
+        /* Secondary outcomes */
+        List<String> secondaryOutcomes = trial.getSecondaryOutcomes();
+        this.parseOutcomes(study, secondaryOutcomes, "secondary");
+
+        /* Secondary sponsors */
+        List<String> secondarySponsors = trial.getSecondarySponsors();
+        this.parseSecondarySponsors(study, secondarySponsors);
+
+        List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
+        // TODO: partially unused because of multiple IDs problem
+        this.parseSecondaryIDs(study, secondaryIDs);
+
+        List<String> sourceSupport = trial.getSourceSupport();
+        this.parseSourceSupports(study, sourceSupport);
+
+        List<EuctrEthicsReview> ethicsReviews = trial.getEthicsReviews();
+        this.parseEthicsReviews(study, ethicsReviews);
+
+        // Storing in cache
+        if (!this.existingStudy()) {
+            this.studies.put(this.currentTrialID, study);
+        }
+
+        this.currentTrialID = null;
+    }
+
+    /**
+     * TODO
+     * 
+     * @param trial
+     * @return
+     */
+    public Item parseTrialIDsAndGetStudy(EuctrTrial trial) throws Exception {
+        Item study = null;
+
+        EuctrMainInfo mainInfo = trial.getMainInfo();
+
+        String mainId = this.getAndCleanValue(mainInfo, "trialId");
+        String regName = this.getAndCleanValue(mainInfo, "regName");
+
+        String countryCode = null;
+        String fullEuctrID = null;
+        String cleanedEuctrID = null;
+        String ctisID = null;
+        String nctID = null;
+
+        boolean isCtisTrial = false;
+
+        // Always EUCTR except in 20251208.xml where its CTIS
+        if (!ConverterUtils.isBlankOrNull(regName) && REG_NAME_CTIS.equalsIgnoreCase(regName)) {
+            isCtisTrial = true;
+            ctisID = mainId.substring(0, 14); // Removing resubmission suffix
         } else {
-            Item study = null;
-            this.newerLastUpdate = false;
-            this.existingStudy = null;
-            this.currentCountry = null;
+            fullEuctrID = mainId;
+        }
 
-            String mainId = this.getAndCleanValue(mainInfo, "trialId");
-            String ctisID = null;
+        List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
+        for (EuctrSecondaryId secIdObj : secondaryIDs) {
+            String secId = secIdObj.getSecondaryId();
 
-            // Handling ID
-            // TODO: handle "Outside-EU/EEA" ID suffix
-            if (mainId.length() != 17) {
-                this.writeLog("Unexpected length for study id: " + mainId);
-            } else {
-                // Always EUCTR except in 20251208.xml where its CTIS
-                String regName = this.getAndCleanValue(mainInfo, "regName");
-                if (!ConverterUtils.isBlankOrNull(regName) && REG_NAME_CTIS.equalsIgnoreCase(regName)) {
-                    boolean foundEuctr = false;
-                    ctisID = mainId.substring(0, 14); // Removing resubmission suffix
+            if (!ConverterUtils.isBlankOrNull(secId)) {
+                secId = secId.strip();
+                String issAuth = secIdObj.getIssuingAuthority();
 
-                    // TODO: Temporary, proper handling of IDs to be done later
-                    // If reg_name is CTIS, attempting to find an EUCTR ID, if fails, skip trial
-                    List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
-                    for (EuctrSecondaryId secIdObj : secondaryIDs) {
-                        String secId = secIdObj.getSecondaryId();
+                if (isCtisTrial) { // Attempting to find an EUCTR ID
+                    Matcher mEUCTR = P_EUCTR_ISS_AUTH.matcher(issAuth);
 
-                        if (!ConverterUtils.isBlankOrNull(secId)) {
-                            String issAuth = secIdObj.getIssuingAuthority();
-                            Matcher mEUCTR = P_EUCTR_ISS_AUTH.matcher(issAuth);
-
-                            if (mEUCTR.matches()) {
-                                mainId = secId; // Replacing mainId by found EUCTR ID
-                                foundEuctr = true;
-                                break; // TODO: handle finding multiple EUCTR IDs
-                            }
+                    // TODO: should verify ID format?
+                    if (mEUCTR.matches()) {
+                        if (fullEuctrID != null) {
+                            this.writeLog("Warning: found another EUCTR ID in a CTIS entry: " + secId);
+                        } else {
+                            fullEuctrID = secId;
                         }
                     }
-
-                    if (!foundEuctr) {
-                        return;
-                    }
-                }
-
-                // ID without country code suffix
-                String cleanedID = mainId.substring(0, 14);
-
-                // TODO: temporary
-                String countryCode = null;
-                if (mainId.length() == 17) {
-                    countryCode = mainId.substring(15, 17);
-                }
-
-                if (this.studies.containsKey(cleanedID)) { // Adding country-specific info to existing trial
-                    this.existingStudy = this.studies.get(cleanedID);
-                    study = this.existingStudy;
                 } else {
-                    study = createItem("Study");
+                    // TODO: CTIS
                 }
 
-                // Using ID without country code suffix
-                this.currentTrialID = cleanedID;
-
-                // Getting country from ID country code
-                if (!ConverterUtils.isBlankOrNull(countryCode)) {
-                    this.currentCountry = this.getCountry(countryCode);
-                    if (this.currentCountry == null) {
-                        this.writeLog("Couldn't find country from country code: " + countryCode);
+                // NCT ID
+                Matcher mNCT = ConverterUtils.P_NCT_ID.matcher(secId);
+                if (mNCT.matches()) {
+                    if (nctID != null) {
+                        this.writeLog("Warning: found another NCT ID in secondary IDs: " + secId);
+                    } else {
+                        nctID = secId;
                     }
                 }
-
-                /* EUCTR trial ID */
-                String trialUrl = this.getAndCleanValue(mainInfo, "url");
-                // TODO: also add ID with suffix?
-                if (!this.existingStudy()) {
-                    // study.setAttributeIfNotNull("primaryIdentifier", this.currentTrialID);
-                    study.setAttributeIfNotNull("euctrID", this.currentTrialID);
-                    study.setAttributeIfNotNull("primaryIdentifier", ctisID); // TODO (see above)
-                    // this.createAndStoreStudyIdentifier(study, this.currentTrialID,
-                    // ConverterCVT.ID_TYPE_TRIAL_REGISTRY,
-                    // trialUrl);
-                }
-
-                // TODO: make title object
-                /* Study title (need to get it before registry entry SO) */
-                String publicTitle = this.getAndCleanValue(mainInfo, "publicTitle");
-                String scientificTitle = this.getAndCleanValue(mainInfo, "scientificTitle");
-                String scientificAcronym = this.getAndCleanValue(mainInfo, "scientificAcronym");
-                this.parseTitles(study, publicTitle, scientificTitle, scientificAcronym);
-
-                /* WHO universal trial number */
-                String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
-                // TODO: identifier type?
-                // TODO: also gives duplicate errors
-                if (!this.existingStudy()) {
-                    this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
-                }
-
-                // "Date on which this record was first entered in the EudraCT database" (from
-                // trials-full.txt dat format)
-                // Using this as "newer update" date
-                // TODO: more relevant to use date enrolment?
-                String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
-                LocalDate dateRegistration = this.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-
-                /* Trial registry entry SO */
-                this.createAndStoreRegistryEntryDO(study, dateRegistration, trialUrl);
-
-                /* Study people: primary sponsor */
-                String primarySponsor = this.getAndCleanValue(mainInfo, "primarySponsor");
-                this.parsePrimarySponsor(study, primarySponsor);
-
-                // Unused, always empty
-                String acronym = this.getAndCleanValue(mainInfo, "acronym");
-
-                /*
-                 * Date enrolment (start date), also seems to be
-                 * "Date of Ethics Committee Opinion"
-                 */
-                String dateEnrolmentStr = this.getAndCleanValue(mainInfo, "dateEnrolment");
-                LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-                this.setStudyStartDate(study, dateEnrolment);
-
-                // Unused, "Date trial authorised"
-                String typeEnrolment = this.getAndCleanValue(mainInfo, "typeEnrolment");
-
-                /* Study planned enrolment (for the whole trial) */
-                String targetSize = this.getAndCleanValue(mainInfo, "targetSize");
-                this.setPlannedEnrolment(study, targetSize);
-
-                // "Not Recruiting" or "Authorised-recruitment may be ongoing or finished" or NA
-                String recruitmentStatus = this.getAndCleanValue(mainInfo, "recruitmentStatus");
-                this.parseRecruitmentStatus(study, recruitmentStatus);
-
-                /*
-                 * Note: from https://www.clinicaltrialsregister.eu/about.html, we can read:
-                 * The EU Clinical Trials Register does not:
-                 * provide information on non-interventional clinical trials of medicines
-                 * (observational studies on authorised medicines);
-                 * provide information on clinical trials for surgical procedures, medical
-                 * devices or psychotherapeutic procedures;
-                 */
-                // This is always "Interventional clinical trial of medicinal product"
-                // String studyType = this.getAndCleanValue(mainInfo, "studyType");
-                if (!this.existingStudy()) {
-                    study.setAttributeIfNotNull("type", ConverterCVT.TYPE_INTERVENTIONAL);
-                }
-
-                /* Study features */
-                String studyDesign = this.getAndCleanValue(mainInfo, "studyDesign");
-                this.parseStudyDesign(study, studyDesign);
-
-                /* Study feature: phase */
-                String phase = this.getAndCleanValue(mainInfo, "phase");
-                this.parsePhase(study, phase);
-
-                /* Study condition */
-                String hcFreetext = this.getAndCleanValue(mainInfo, "hcFreetext");
-                List<String> hcCodes = trial.getHealthConditionCodes();
-                List<String> hcKeywords = trial.getHealthConditionKeywords();
-                this.parseHealthConditions(study, hcFreetext, hcCodes, hcKeywords);
-
-                /* Study intervention: products */
-                String iFreetext = this.getAndCleanValue(mainInfo, "iFreetext");
-                // Unused, always empty
-                List<String> iCodes = trial.getInterventionCodes();
-                // Unused, always empty
-                List<String> iKeywords = trial.getInterventionKeywords();
-                this.parseInterventions(study, iFreetext);
-
-                /* Study actual enrolment (for the whole trial) */
-                String resultsActualEnrolment = this.getAndCleanValue(mainInfo, "resultsActualEnrolment");
-                this.setActualEnrolment(study, resultsActualEnrolment);
-
-                /* Study end date ("global completion date") */
-                String resultsDateCompletedStr = this.getAndCleanValue(mainInfo, "resultsDateCompleted");
-                LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr,
-                        ConverterUtils.P_DATE_D_M_Y_SLASHES);
-                this.setStudyEndDate(study, resultsDateCompleted);
-
-                // Study results page link
-                String resultsUrlLink = this.getAndCleanValue(mainInfo, "resultsUrlLink");
-
-                // Results summary here is actually more of a general trial summary than a
-                // results summary
-                String resultsSummary = this.getAndCleanValue(mainInfo, "resultsSummary");
-                study.setAttributeIfNotNull("description", resultsSummary);
-
-                String resultsDatePostedStr = this.getAndCleanValue(mainInfo, "resultsDatePosted");
-                LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-
-                /* Results summary SO */
-                this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsDateCompleted, resultsDatePosted);
-
-                // Unused, always empty
-                String resultsDateFirstPublication = this.getAndCleanValue(mainInfo, "resultsDateFirstPublication");
-                // Unused (Link to results page section)
-                String resultsBaselineChar = this.getAndCleanValue(mainInfo, "resultsBaselineChar");
-                // Unused (Link to results page section)
-                String resultsParticipantFlow = this.getAndCleanValue(mainInfo, "resultsParticipantFlow");
-                // Unused (Link to results page section)
-                String resultsAdverseEvents = this.getAndCleanValue(mainInfo, "resultsAdverseEvents");
-                // Unused (Link to results page section)
-                String resultsOutcomeMeasures = this.getAndCleanValue(mainInfo, "resultsOutcomeMeasures");
-                // Unused, always empty
-                String resultsUrlProtocol = this.getAndCleanValue(mainInfo, "resultsUrlProtocol");
-                // Unused, always empty
-                String resultsIPDPlan = this.getAndCleanValue(mainInfo, "resultsIPDPlan");
-                // Unused, always empty
-                String resultsIPDDescription = this.getAndCleanValue(mainInfo, "resultsIPDDescription");
-
-                /* People */
-                List<EuctrContact> contacts = trial.getContacts();
-                this.parseContacts(study, contacts);
-
-                /* Study countries */
-                List<String> countries = trial.getCountries();
-                this.parseCountries(study, countries);
-
-                // Trial IEC
-                EuctrCriteria criteria = trial.getCriteria();
-
-                /* IEC, including min/max age */
-                String ic = criteria.getInclusionCriteria();
-                String ec = criteria.getExclusionCriteria();
-                this.parseIEC(study, ic, ec);
-
-                study.setAttributeIfNotNull("ageGroup", ConverterUtils.calculateAgeGroup(study));
-
-                /* Gender */
-                String gender = criteria.getGender();
-                this.parseGender(study, gender);
-
-                // Unused, always empty
-                String ageMin = criteria.getAgemin();
-                // Unused, always empty
-                String ageMax = criteria.getAgemax();
-
-                /* Primary outcomes */
-                List<String> primaryOutcomes = trial.getPrimaryOutcomes();
-                this.parseOutcomes(study, primaryOutcomes, "primary");
-
-                /* Secondary outcomes */
-                List<String> secondaryOutcomes = trial.getSecondaryOutcomes();
-                this.parseOutcomes(study, secondaryOutcomes, "secondary");
-
-                /* Secondary sponsors */
-                List<String> secondarySponsors = trial.getSecondarySponsors();
-                this.parseSecondarySponsors(study, secondarySponsors);
-
-                List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
-                // TODO: partially unused because of multiple IDs problem
-                this.parseSecondaryIDs(study, secondaryIDs);
-
-                List<String> sourceSupport = trial.getSourceSupport();
-                this.parseSourceSupports(study, sourceSupport);
-
-                List<EuctrEthicsReview> ethicsReviews = trial.getEthicsReviews();
-                this.parseEthicsReviews(study, ethicsReviews);
-
-                // Storing in cache
-                if (!this.existingStudy()) {
-                    this.studies.put(this.currentTrialID, study);
-                }
-
-                this.currentTrialID = null;
             }
         }
+
+        // Getting clean EUCTR ID (without prefix) and extracting country code prefix
+        if (fullEuctrID != null && fullEuctrID.length() >= 14) {
+            // ID without country code suffix
+            cleanedEuctrID = fullEuctrID.substring(0, 14);
+
+            if (fullEuctrID.length() == 17) { // Else "Outside-EU/EEA"
+                countryCode = fullEuctrID.substring(15, 17);
+            }
+        }
+
+        // Attempting to find an existing study with euctrID
+        if (cleanedEuctrID != null && this.studies.containsKey(cleanedEuctrID)) {
+            // Adding country-specific info to existing trial
+            this.currentTrialID = cleanedEuctrID;
+        }
+
+        // Attempting to find an existing study with ctisID
+        if (ctisID != null && this.studies.containsKey(ctisID)) {
+            if (study != null) {
+                this.writeLog("Warning: parsing a study with both existing CTIS and EUCTR ID: " + fullEuctrID + " + "
+                        + ctisID);
+            } else {
+                this.currentTrialID = ctisID;
+            }
+        }
+
+        // TODO: put all ids in studies map?
+        // Getting existing study or creating one
+        if (this.currentTrialID != null) {
+            this.existingStudy = this.studies.get(this.currentTrialID);
+            study = this.existingStudy;
+        } else {
+            study = createItem("Study");
+
+            // Setting currentTrialID
+            if (cleanedEuctrID != null) {
+                this.currentTrialID = cleanedEuctrID;
+            } else if (ctisID != null) {
+                this.currentTrialID = ctisID;
+            } else {
+                this.writeLog("Found study with no suitable ID (shouldn't happen)");
+            }
+        }
+
+        // Getting country from ID country code
+        if (!ConverterUtils.isBlankOrNull(countryCode)) {
+            this.currentCountry = this.getCountry(countryCode);
+            if (this.currentCountry == null) {
+                this.writeLog("Couldn't find country from country code: " + countryCode);
+            }
+        }
+
+        // TODO: also add ID with suffix as StudyIdentifier?
+        // TODO: check for discrepancies
+        if (cleanedEuctrID != null && ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "euctrID"))) {
+            study.setAttribute("euctrID", cleanedEuctrID);
+        }
+
+        if (ctisID != null && ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "primaryIdentifier"))) {
+            study.setAttribute("primaryIdentifier", ctisID);
+        }
+
+        // TODO: handle duplicates
+        // if (nctID != null &&
+        // ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "nctID"))) {
+        // study.setAttribute("nctID", nctID);
+        // }
+
+        return study;
     }
 
     /**
@@ -409,23 +478,21 @@ public class EuctrConverter extends CacheConverter {
     public void parseTitles(Item study, String publicTitle, String scientificTitle, String scientificAcronym)
             throws Exception {
         if (!this.existingStudy()) {
-            boolean displayTitleSet = false;
+            boolean titleSet = false;
             // TODO: only 1 matcher object?
             /* Public title */
             Matcher mPublicTitleNA = P_TITLE_NA.matcher(publicTitle);
             if (!ConverterUtils.isBlankOrNull(publicTitle) && !mPublicTitleNA.matches()) {
-                study.setAttributeIfNotNull("displayTitle", publicTitle);
-                displayTitleSet = true;
-
-                study.setAttributeIfNotNull("publicTitle", publicTitle);
+                study.setAttributeIfNotNull("title", publicTitle);
+                titleSet = true;
             }
 
             /* Scientific title */
             Matcher mScientificTitleNA = P_TITLE_NA.matcher(scientificTitle);
             if (!ConverterUtils.isBlankOrNull(scientificTitle) && !mScientificTitleNA.matches()) {
-                if (!displayTitleSet) {
-                    study.setAttributeIfNotNull("displayTitle", scientificTitle);
-                    displayTitleSet = true;
+                if (!titleSet) {
+                    study.setAttributeIfNotNull("title", scientificTitle);
+                    titleSet = true;
                 }
 
                 study.setAttributeIfNotNull("scientificTitle", scientificTitle);
@@ -434,9 +501,9 @@ public class EuctrConverter extends CacheConverter {
             /* Acronym */
             Matcher mScientificAcronymNA = P_TITLE_NA.matcher(scientificAcronym);
             if (!ConverterUtils.isBlankOrNull(scientificAcronym) && !mScientificAcronymNA.matches()) {
-                if (!displayTitleSet) {
-                    study.setAttributeIfNotNull("displayTitle", scientificAcronym);
-                    displayTitleSet = true;
+                if (!titleSet) {
+                    study.setAttributeIfNotNull("title", scientificAcronym);
+                    titleSet = true;
                 }
 
                 study.setAttributeIfNotNull("acronym", scientificAcronym);
@@ -469,12 +536,12 @@ public class EuctrConverter extends CacheConverter {
      */
     public void createAndStoreRegistryEntryDO(Item study, LocalDate creationDate, String url) throws Exception {
         if (!this.existingStudy()) {
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
+                dotitle = ConverterCVT.O_TITLE_REGISTRY_ENTRY;
             }
 
             /* Trial registry entry SO */
@@ -486,7 +553,7 @@ public class EuctrConverter extends CacheConverter {
             // { "accessUrl", url },
             // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
             // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-            // { "displayTitle", doDisplayTitle } });
+            // { "title", dotitle } });
             // }
         } else {
             // Update SO creation date
@@ -946,12 +1013,12 @@ public class EuctrConverter extends CacheConverter {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && resultsDatePosted != null) {
             // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             } else {
-                doDisplayTitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
+                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
             }
 
             // Publication year
@@ -962,7 +1029,7 @@ public class EuctrConverter extends CacheConverter {
 
             /* Results summary SO */
             Item resultsSummaryDO = this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "displayTitle", doDisplayTitle },
+                    new String[][] { { "title", dotitle },
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
@@ -1311,18 +1378,18 @@ public class EuctrConverter extends CacheConverter {
     public void createAndStoreProtocolDO(Item study, String protocolCode) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(protocolCode)) {
             // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "displayTitle");
-            String doDisplayTitle;
+            String studyTitle = ConverterUtils.getAttrValue(study, "title");
+            String dotitle;
             if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                doDisplayTitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
+                dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
             } else {
-                doDisplayTitle = ConverterCVT.O_TYPE_PROT;
+                dotitle = ConverterCVT.O_TYPE_PROT;
             }
 
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "Protocol",
                     new String[][] { { "protocolSponsorId", protocolCode },
-                            { "displayTitle", doDisplayTitle } });
+                            { "title", dotitle } });
         }
     }
 
