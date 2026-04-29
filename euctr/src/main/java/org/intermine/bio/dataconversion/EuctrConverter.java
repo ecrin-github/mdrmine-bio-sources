@@ -368,20 +368,21 @@ public class EuctrConverter extends CacheConverter {
                 secId = secId.strip();
                 String issAuth = secIdObj.getIssuingAuthority();
 
-                if (isCtisTrial) { // Attempting to find an EUCTR ID
-                    Matcher mEUCTR = P_EUCTR_ISS_AUTH.matcher(issAuth);
+                // TODO: uncomment when duplicates are handled in CTG
+                // if (isCtisTrial) { // Attempting to find an EUCTR ID
+                // Matcher mEUCTR = P_EUCTR_ISS_AUTH.matcher(issAuth);
 
-                    // TODO: should verify ID format?
-                    if (mEUCTR.matches()) {
-                        if (fullEuctrID != null) {
-                            this.writeLog("Warning: found another EUCTR ID in a CTIS entry: " + secId);
-                        } else {
-                            fullEuctrID = secId;
-                        }
-                    }
-                } else {
-                    // TODO: CTIS
-                }
+                // // TODO: should verify ID format?
+                // if (mEUCTR.matches()) {
+                // if (fullEuctrID != null) {
+                // this.writeLog("Warning: found another EUCTR ID in a CTIS entry: " + secId);
+                // } else {
+                // fullEuctrID = secId;
+                // }
+                // }
+                // } else {
+                // // TODO: CTIS
+                // }
 
                 // NCT ID
                 Matcher mNCT = ConverterUtils.P_NCT_ID.matcher(secId);
