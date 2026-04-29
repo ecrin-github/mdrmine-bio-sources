@@ -356,6 +356,8 @@ public class EuctrConverter extends CacheConverter {
         if (!ConverterUtils.isBlankOrNull(regName) && REG_NAME_CTIS.equalsIgnoreCase(regName)) {
             isCtisTrial = true;
             ctisID = mainId.substring(0, 14); // Removing resubmission suffix
+
+            return study; // TODO: temporarily skipping CTIS studies to avoid duplicates
         } else {
             fullEuctrID = mainId;
         }
