@@ -15,18 +15,26 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import org.apache.commons.text.WordUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.text.WordUtils;
+import org.intermine.metadata.ClassDescriptor;
+import org.intermine.metadata.Model;
+import org.intermine.metadata.ReferenceDescriptor;
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
 import org.intermine.xml.full.Reference;
+import org.intermine.xml.full.ReferenceList;
 import org.jsoup.Jsoup;
 
 /**
@@ -52,14 +60,13 @@ public class ConverterUtils {
     /*
      * Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html
      */
-    public static final Pattern P_PUBMED_ID = Pattern.compile(".*pubmed.*\\/([^?\\/]+).*");
-    public static final Pattern P_ID_AT_END_OF_URL = Pattern.compile(".*\\/([^?\\/]+).*");
+    public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
     // Both EUCTR and CTIS (they might have the same format)
     public static final Pattern P_EU_ID = Pattern
             .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?");
-    public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
-    public static final Pattern P_WHO_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
-    public static final Pattern P_EMAIL = Pattern.compile("^[^@]+@[^.]+\\..+");
+    public static final Pattern P_UTRN_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
+    public static final Pattern P_PUBMED_ID = Pattern.compile(".*pubmed.*\\/([^?\\/]+).*");
+    public static final Pattern P_ID_AT_END_OF_URL = Pattern.compile(".*\\/([^?\\/]+).*");
     // public static final Pattern P_ANZCTR_ID = Pattern.compile();
     // public static final Pattern P_CHICTR_ID = Pattern.compile();
     // public static final Pattern P_CRIS_ID = Pattern.compile();
@@ -76,6 +83,7 @@ public class ConverterUtils {
     // public static final Pattern P_REPEC_ID = Pattern.compile();
     // public static final Pattern P_RPCEC_ID = Pattern.compile();
     // public static final Pattern P_SLCTR_ID = Pattern.compile();
+    public static final Pattern P_EMAIL = Pattern.compile("^[^@]+@[^.]+\\..+");
 
     /**
      * Check if a string is null, empty (after trim), or is equal to
@@ -86,6 +94,37 @@ public class ConverterUtils {
      */
     public static boolean isBlankOrNull(String s) {
         return (s == null || s.trim().isEmpty() || s.equalsIgnoreCase("NULL"));
+    }
+
+    /**
+     * TODO
+     */
+    public static ClassDescriptor getClassDescriptor(Model model, Item item) {
+        if (item == null) {
+            System.err.println("Error: called getClassDescriptor() with a null item");
+            return null;
+        }
+        return model.getClassDescriptorByName(item.getClassName());
+    }
+
+    /**
+     * TODO
+     */
+    public static Set<ClassDescriptor> getAllDescriptors(Model model, Item item) {
+        ClassDescriptor itemCD = ConverterUtils.getClassDescriptor(model, item);
+        if (itemCD == null) {
+            System.err.println("Error: getClassDescriptor() return a null ClassDescriptor");
+            return null;
+        } else {
+            Set<ClassDescriptor> allCDs = itemCD.getAllSuperDescriptors();
+            if (allCDs != null) {
+                allCDs.add(itemCD);
+            } else {
+                System.err.println(
+                        "Error: getAllSuperDescriptors() returned null and not an empty Set (shouldn't happen?)");
+            }
+            return allCDs;
+        }
     }
 
     /**
@@ -114,6 +153,134 @@ public class ConverterUtils {
             }
         }
         return lines;
+    }
+
+    /**
+     * TODO
+     * InterMine does not provide such a method
+     * Note: items (reference ids) in collections are stored in a list instead of a
+     * set for some reason
+     */
+    public static boolean removeItemFromCollection(Model model, Item item, Item itemToRemove) throws Exception {
+        boolean success = false;
+
+        if (item == null) {
+            throw new Exception("Item with collection is null");
+        }
+
+        if (itemToRemove == null) {
+            throw new Exception("Item to remove from collection is null");
+        }
+
+        ReferenceDescriptor rd = ConverterUtils.getReferenceDescriptorInItemAOfItemB(model, item, itemToRemove);
+        if (rd == null) {
+            throw new Exception(
+                    "Couldn't find collection of "
+                            + ConverterUtils.getClassDescriptor(model, itemToRemove).getSimpleName()
+                            + " in " + ConverterUtils.getClassDescriptor(model, item).getSimpleName());
+        }
+        if (!rd.isCollection()) {
+            throw new Exception("Item to remove from collection is null");
+        }
+
+        String collectionName = rd.getName();
+        ReferenceList collection = item.getCollection(collectionName);
+        if (collection == null) { // Shouldn't be null since getCollection() throws error before
+            throw new Exception(
+                    "Attempted to remove an item from an empty (uninitialised) collection (" + collectionName + ")");
+        }
+
+        List<String> refIds = collection.getRefIds();
+        String itemToRemoveId = itemToRemove.getIdentifier();
+
+        if (refIds == null || refIds.size() == 0) {
+            throw new Exception("Attempted to remove an item from an empty collection (" + collectionName + ")");
+        }
+
+        Iterator<String> it = refIds.iterator();
+        while (it.hasNext()) {
+            if (itemToRemoveId.equals(it.next())) {
+                it.remove();
+                success = true;
+                break;
+            }
+        }
+
+        // TODO: exception if not found?
+        if (success) {
+            item.setCollection(collectionName, refIds);
+        }
+
+        return success;
+    }
+
+    /**
+     * TODO
+     * Items order shouldn't matter
+     */
+    public static void handleReferencesAndCollections(Model model, Item itemA, Item itemB) throws Exception {
+        if (itemA != null && itemB != null) {
+            ReferenceDescriptor rdInAOfB = ConverterUtils.getReferenceDescriptorInItemAOfItemB(model, itemA, itemB); // Can
+                                                                                                                     // be
+                                                                                                                     // a
+            // CollectionDescriptor
+
+            // Reference in itemA to itemB
+            if (rdInAOfB != null) {
+                if (rdInAOfB.isCollection()) {
+                    itemA.addToCollection(rdInAOfB.getName(), itemB);
+                } else {
+                    itemA.setReference(rdInAOfB.getName(), itemB);
+                }
+
+                // Reference in itemB to itemA
+                ReferenceDescriptor rdInBOfA = rdInAOfB.getReverseReferenceDescriptor();
+                if (rdInBOfA != null) {
+                    if (rdInBOfA.isCollection()) {
+                        itemB.addToCollection(rdInBOfA.getName(), itemA);
+                    } else {
+                        itemB.setReference(rdInBOfA.getName(), itemA);
+                    }
+                } else {
+                    System.err.println("handleReferencesAndCollections(): shouldn't happen");
+                }
+            } else {
+                System.err.println("handleReferencesAndCollections(): Failed to find reference in "
+                        + ConverterUtils.getClassDescriptor(model, itemA).getSimpleName()
+                        + " class of " + ConverterUtils.getClassDescriptor(model, itemB).getSimpleName() + " class");
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * Note: ReferenceDescriptor here also includes CollectionDescriptor sub-class
+     */
+    public static ReferenceDescriptor getReferenceDescriptorInItemAOfItemB(Model model, Item itemA, Item itemB)
+            throws Exception {
+        ReferenceDescriptor foundRD = null;
+
+        Set<ReferenceDescriptor> rds = Stream
+                .concat(ConverterUtils.getClassDescriptor(model, itemA).getAllReferenceDescriptors().stream(),
+                        ConverterUtils.getClassDescriptor(model, itemA).getAllCollectionDescriptors().stream())
+                .collect(Collectors.toSet());
+        Iterator<ReferenceDescriptor> rdsIter = rds.iterator();
+
+        // B ClassDescriptor + super classes CDs (for now not more useful than just B CD
+        // but who knows)
+        Set<ClassDescriptor> bCDs = ConverterUtils.getAllDescriptors(model, itemB);
+
+        while (rdsIter.hasNext()) {
+            ReferenceDescriptor rd = rdsIter.next();
+            // Note: will not work as intended in case a Class has both a reference and a
+            // collection of the same Class
+            if (bCDs.contains(rd.getReferencedClassDescriptor())) {
+                foundRD = rd;
+                break;
+            }
+        }
+
+        return foundRD;
     }
 
     /**
@@ -214,8 +381,9 @@ public class ConverterUtils {
     /**
      * Uppercase first letter and lowercase the rest or not.
      * 
-     * @param s the string to normalise
-     * @param restToLowercase whether to convert to lowercase all characters after the first
+     * @param s               the string to normalise
+     * @param restToLowercase whether to convert to lowercase all characters after
+     *                        the first
      * @return the normalised string
      */
     public static String capitaliseFirstLetter(String s, boolean restToLowercase) {
@@ -342,7 +510,8 @@ public class ConverterUtils {
 
     /**
      * TODO
-     * Note: "In utero" age group edge case is only present and therefore only handled in CTIS
+     * Note: "In utero" age group edge case is only present and therefore only
+     * handled in CTIS
      */
     public static String calculateAgeGroup(Item study) {
         EnumSet<ConverterCVT.AgeGroup> ageGroups = EnumSet.noneOf(ConverterCVT.AgeGroup.class);
@@ -354,7 +523,7 @@ public class ConverterUtils {
 
         // Checking min age
         if (!ConverterUtils.isBlankOrNull(minAge) && !ConverterUtils.isBlankOrNull(minAgeUnit)) {
-            if (!minAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {  // If unit is not years, means it's a smaller unit
+            if (!minAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) { // If unit is not years, means it's a smaller unit
                 ageGroups.add(ConverterCVT.AgeGroup.Pediatric);
             } else {
                 if (NumberUtils.isParsable(minAge)) {
@@ -373,7 +542,8 @@ public class ConverterUtils {
 
             // Checking max age
             if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
-                // If unit is not years it's a smaller unit, and child age group has already been added with min age
+                // If unit is not years it's a smaller unit, and child age group has already
+                // been added with min age
                 if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
                     if (NumberUtils.isParsable(maxAge)) {
                         Float maxAgeF = Float.parseFloat(maxAge);
@@ -382,7 +552,8 @@ public class ConverterUtils {
                         } else if (maxAgeF >= 65) {
                             ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
 
-                            // If minAge is of child age group and max age of older adult age group, need to add adult age group as well
+                            // If minAge is of child age group and max age of older adult age group, need to
+                            // add adult age group as well
                             if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
                                 ageGroups.add(ConverterCVT.AgeGroup.Adult);
                             }
@@ -391,15 +562,15 @@ public class ConverterUtils {
                         // TODO: write log?
                     }
                 }
-            } else {    // No max age, adding all groups older than the one added with minAge
+            } else { // No max age, adding all groups older than the one added with minAge
                 if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
                     ageGroups.add(ConverterCVT.AgeGroup.Adult);
                     ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
                 } else if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
                     ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
-                }   // Else OLDER_ADULT, nothing to add
+                } // Else OLDER_ADULT, nothing to add
             }
-        } else {    // Checking max age with no min age
+        } else { // Checking max age with no min age
             if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
                 ageGroups.add(ConverterCVT.AgeGroup.Pediatric); // No min age, adding child age group in any case
                 if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
@@ -424,7 +595,8 @@ public class ConverterUtils {
 
     /**
      * TODO
-     * Get title from a study item if there is any (publicTitle or scientificTitle or acronym)
+     * Get title from a study item if there is any (publicTitle or scientificTitle
+     * or acronym)
      */
     public static String getStudyTitle(Item study) {
         String title = null;
@@ -511,5 +683,320 @@ public class ConverterUtils {
             return email;
         }
         return null;
+    }
+
+    /**
+     * TODO
+     */
+    public static LocalDate parseDate(String dateStr, DateTimeFormatter df) {
+        LocalDate date = null;
+        if (!ConverterUtils.isBlankOrNull(dateStr)) {
+            // Test the passed formatter
+            if (df != null) {
+                date = ConverterUtils.getDateFromString(dateStr, df);
+            }
+
+            // Test other various patterns (null is ISO format)
+            if (date == null) {
+                DateTimeFormatter[] patterns = { null, ConverterUtils.P_DATE_D_M_Y_SLASHES,
+                        ConverterUtils.P_DATE_D_MWORD_Y_SPACES,
+                        ConverterUtils.P_DATE_MWORD_D_Y_HOUR, ConverterUtils.P_DATE_M_D_Y_TIME };
+                for (DateTimeFormatter pattern : patterns) {
+                    date = ConverterUtils.getDateFromString(dateStr, pattern);
+                    if (date != null) {
+                        break;
+                    }
+                }
+            }
+
+            if (date == null) {
+                System.err.println("parseDate(): couldn't parse date: " + dateStr);
+            }
+        }
+
+        return date;
+    }
+
+    public static Matcher getMatchingIdMatcher(String id) {
+        Matcher m = null;
+
+        // TODO: add more patterns
+        List<Pattern> patterns = Arrays.asList(
+                P_NCT_ID, P_EU_ID);
+        for (Pattern p : patterns) {
+            m = p.matcher(id);
+
+            if (m.matches()) {
+                return m;
+            }
+        }
+
+        return null;
+    }
+
+    public static boolean isUniqueId(String id) {
+        return (ConverterUtils.getMatchingIdMatcher(id) != null);
+    }
+
+    /**
+     * TODO
+     * Method infers, when possible, ID type, source, and uniqueness
+     */
+    public static ID createStudyID(String id) {
+        ID studyIdentifier = null;
+
+        if (!ConverterUtils.isBlankOrNull(id)) {
+            String idValue = id;
+
+            String type = null;
+            String source = null;
+            Boolean unique = false;
+
+            // Testing different ID patterns to try to get ID type/source
+            Matcher m = ConverterUtils.getMatchingIdMatcher(id);
+
+            if (m != null) { // Found a matching ID pattern
+                unique = true;
+                Pattern p = m.pattern();
+
+                if (p == ConverterUtils.P_NCT_ID) {
+                    type = ConverterCVT.ID_TYPE_TRIAL_REGISTRY;
+                    source = ConverterCVT.ID_SOURCE_CTG;
+                } else if (p == ConverterUtils.P_EU_ID) {
+                    type = ConverterCVT.ID_TYPE_TRIAL_REGISTRY;
+
+                    idValue = m.group(3);
+                    String ctisPrefix = m.group(1);
+                    String euctrPrefix = m.group(2);
+                    String ctisSuffix = m.group(4);
+                    String euctrSuffix = m.group(5);
+
+                    if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
+                        if (euctrPrefix == null && euctrSuffix == null) {
+                            source = ConverterCVT.ID_SOURCE_CTIS; // EUCT Number
+                        } else {
+                            source = ConverterCVT.ID_SOURCE_AMBIG_EU;
+                            // this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " +
+                            // id);
+                        }
+                    } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
+                        source = ConverterCVT.ID_SOURCE_EUCTR; // EudraCT Number
+                    } else { // Undistinguishable ID
+                        source = ConverterCVT.ID_SOURCE_AMBIG_EU;
+                    }
+                }
+
+                // else if (sec_id.Contains("ISRCTN"))
+                // {
+                // interim_id = sec_id.Replace("ISRCTN ", "ISRCTN");
+                // interim_id = interim_id.Replace("(ISRCTN)", "");
+                // interim_id = interim_id.Replace("ISRCTN(International", "");
+                // interim_id = interim_id.Replace("ISRCTN: ", "ISRCTN");
+                // interim_id = interim_id.Replace("ISRCTNISRCTN", "ISRCTN");
+
+                // if (Regex.Match(interim_id, @"ISRCTN[0-9]{8}").Success)
+                // {
+                // processed_id = Regex.Match(interim_id, @"ISRCTN[0-9]{8}").Value;
+                // sec_id_source = 100126;
+                // sec_id_type_id = 11;
+                // }
+                // }
+
+                // else if (Regex.Match(sec_id, @"ACTRN[0-9]{14}").Success)
+                // {
+                // processed_id = Regex.Match(sec_id, @"ACTRN[0-9]{14}").Value;
+                // sec_id_source = 100116;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (Regex.Match(sec_id, @"DRKS[0-9]{8}").Success)
+                // {
+                // processed_id = Regex.Match(sec_id, @"DRKS[0-9]{8}").Value;
+                // sec_id_source = 100124;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (Regex.Match(sec_id, @"CTRI/[0-9]{4}/[0-9]{2,3}/[0-9]{6}").Success)
+                // {
+                // processed_id = Regex.Match(sec_id,
+                // @"CTRI/[0-9]{4}/[0-9]{2,3}/[0-9]{6}").Value;
+                // processed_id = processed_id.Replace('/', '-'); // internal representation for
+                // CTRI
+                // sec_id_source = 100121;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (Regex.Match(sec_id, @"1111-[0-9]{4}-[0-9]{4}").Success)
+                // {
+                // processed_id = "U" + Regex.Match(sec_id, @"1111-[0-9]{4}-[0-9]{4}").Value;
+                // sec_id_source = 100115;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (Regex.Match(sec_id, @"UMIN[0-9]{9}").Success || Regex.Match(sec_id,
+                // @"UMIN-CTR[0-9]{9}").Success)
+                // {
+                // processed_id = "JPRN-UMIN" + Regex.Match(sec_id, @"[0-9]{9}").Value;
+                // sec_id_source = 100127;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (Regex.Match(sec_id, @"jRCTs[0-9]{9}").Success)
+                // {
+                // processed_id = "JPRN-jRCTs" + Regex.Match(sec_id, @"[0-9]{9}").Value;
+                // sec_id_source = 100127;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (Regex.Match(sec_id, @"jRCT[0-9]{10}").Success)
+                // {
+                // processed_id = "JPRN-jRCT" + Regex.Match(sec_id, @"[0-9]{10}").Value;
+                // sec_id_source = 100127;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("JPRN"))
+                // {
+                // if (Regex.Match(sec_id, @"^[0-9]{8}$").Success)
+                // {
+                // processed_id = "JPRN-UMIN" + Regex.Match(sec_id, @"[0-9]{8}").Value;
+                // sec_id_source = 100127;
+                // sec_id_type_id = 11;
+                // }
+                // else
+                // {
+                // processed_id = sec_id;
+                // sec_id_source = 100127;
+                // sec_id_type_id = 11;
+                // }
+                // }
+
+                // else if (sec_id.StartsWith("RBR"))
+                // {
+                // sec_id_source = 100117;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("ChiCTR"))
+                // {
+                // sec_id_source = 100118;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("ChiMCTR"))
+                // {
+                // sec_id_source = 104545;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("KCT"))
+                // {
+                // sec_id_source = 100119;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("RPCEC"))
+                // {
+                // sec_id_source = 100122;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("DRKS"))
+                // {
+                // sec_id_source = 100124;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("IRCT"))
+                // {
+                // sec_id_source = 100125;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("PACTR"))
+                // {
+                // sec_id_source = 100128;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("PER"))
+                // {
+                // sec_id_source = 100129;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("SLCTR"))
+                // {
+                // sec_id_source = 100130;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("TCTR"))
+                // {
+                // sec_id_source = 100131;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // // Avoid Dutch CCMO numbers, which also start with NL, by regex tests
+
+                // else if (sec_id.StartsWith("NL") && Regex.Match(sec_id,
+                // @"^NL\d{1,4}$").Success)
+                // {
+                // sec_id_source = 100132;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // else if (sec_id.StartsWith("NTR") && Regex.Match(sec_id,
+                // @"^NTR\d{1,4}$").Success)
+                // {
+                // sec_id_source = 100132;
+                // processed_id = sec_id;
+                // sec_id_type_id = 45; // obsolete dutch registry id
+                // }
+
+                // else if (sec_id.StartsWith("LBCTR"))
+                // {
+                // sec_id_source = 101989;
+                // processed_id = sec_id;
+                // sec_id_type_id = 11;
+                // }
+
+                // if (sd_sid.StartsWith("RBR"))
+                // {
+                // // Extract Brazilian ethics Ids
+
+                // if (Regex.Match(sec_id, @"[0-9]{8}.[0-9].[0-9]{4}.[0-9]{4}").Success)
+                // {
+                // sec_id_source = 102000; // Brazilian regulatory authority, ANVISA
+                // processed_id = Regex.Match(sec_id,
+                // @"[0-9]{8}.[0-9].[0-9]{4}.[0-9]{4}").Value;
+                // sec_id_type_id = 41;
+                // }
+
+                // if (Regex.Match(sec_id, @"[0-9].[0-9]{3}.[0-9]{3}").Success)
+                // {
+                // sec_id_source = 102001; // Brazilian ethics committee approval number
+                // processed_id = Regex.Match(sec_id, @"[0-9].[0-9]{3}.[0-9]{3}").Value;
+                // sec_id_type_id = 12;
+                // }
+                // }
+            }
+
+            studyIdentifier = new ID(idValue, source, type, unique);
+        }
+
+        return studyIdentifier;
     }
 }

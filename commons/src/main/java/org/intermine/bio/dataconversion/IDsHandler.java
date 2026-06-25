@@ -10,48 +10,11 @@ package org.intermine.bio.dataconversion;
  *
  */
 
-import java.io.BufferedWriter;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.format.DateTimeFormatter;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.NoSuchElementException;
-import java.util.Properties;
 import java.util.Set;
 
-import org.apache.commons.text.WordUtils;
-
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.ClassDescriptor;
-import org.intermine.metadata.CollectionDescriptor;
-import org.intermine.metadata.ConstraintOp;
-import org.intermine.metadata.Model;
-import org.intermine.metadata.ReferenceDescriptor;
-import org.intermine.model.bio.Country;
-import org.intermine.model.bio.Study;
-import org.intermine.objectstore.ObjectStore;
-import org.intermine.objectstore.ObjectStoreFactory;
-import org.intermine.objectstore.query.Query;
-import org.intermine.objectstore.query.QueryClass;
-import org.intermine.objectstore.query.QueryField;
-import org.intermine.objectstore.query.QueryValue;
-import org.intermine.objectstore.query.Results;
-import org.intermine.objectstore.query.ResultsRow;
-import org.intermine.objectstore.query.SimpleConstraint;
-import org.intermine.util.PropertiesUtil;
-import org.intermine.xml.full.Item;
+import org.intermine.model.bio.StudyIdentifier;
 
 /**
  * TODO
@@ -59,36 +22,162 @@ import org.intermine.xml.full.Item;
  * @author
  */
 public class IDsHandler {
-    private Logger logger = null;
     public static int handlersNb = 0;
     private int id;
-    public String ctisID = "";
-    public String nctID = "";
-    public String euctrID = "";
+    public String dataSource = null;
+    public String primaryIdentifier = null;
+    public Set<ID> uids = new HashSet<ID>();
+    public Set<ID> nonUids = new HashSet<ID>();
 
-    public IDsHandler(Logger logger) {
-        this.logger = logger;
+    public IDsHandler(String dataSource) {
+        this.dataSource = dataSource;
+        this.setInternalId();
+    }
 
+    public IDsHandler(String dataSource, ID id) {
+        this.dataSource = dataSource;
+
+        if (id != null) {
+            this.addId(id);
+            if (id.getUnique()) {
+                this.primaryIdentifier = id.getId();
+            }
+        }
+
+        this.setInternalId();
+    }
+
+    public IDsHandler(String dataSource, List<StudyIdentifier> ids) {
+        this(dataSource, null, ids);
+    }
+
+    public IDsHandler(String dataSource, String primaryIdentifier, List<StudyIdentifier> ids) {
+        this.dataSource = dataSource;
+        this.primaryIdentifier = primaryIdentifier;
+
+        if (ids != null && ids.size() > 0) {
+            for (StudyIdentifier id : ids) {
+                this.addId(id);
+            }
+        }
+
+        this.setInternalId();
+    }
+
+    public IDsHandler(String dataSource, Set<String> ids) {
+        this(dataSource, null, ids);
+    }
+
+    public IDsHandler(String dataSource, String primaryIdentifier, Set<String> ids) {
+        this.dataSource = dataSource;
+        this.primaryIdentifier = primaryIdentifier;
+
+        if (ids != null) {
+            for (String id : ids) {
+                this.addId(id);
+            }
+        }
+
+        this.setInternalId();
+    }
+
+    private void setInternalId() {
         IDsHandler.handlersNb++;
         this.id = IDsHandler.handlersNb;
     }
 
-    // No need to pass logger here since
-    public IDsHandler(Logger logger, String ctisID, String nctID, String euctrID) {
-        this.logger = logger;
+    public ID addId(ID id) {
+        if (id != null) {
+            if (id.getUnique()) {
+                this.uids.add(id);
+            } else {
+                this.nonUids.add(id);
+            }
+        }
+        return id;
+    }
 
-        IDsHandler.handlersNb++;
-        this.id = IDsHandler.handlersNb;
+    public ID addId(String id) {
+        if (!ConverterUtils.isBlankOrNull(id)) {
+            ID idObj = ConverterUtils.createStudyID(id);
+            return this.addId(idObj);
+        }
+        return null;
+    }
 
-        if (ctisID != null) {
-            this.ctisID = ctisID;
+    public String addId(StudyIdentifier id) {
+        if (id != null) {
+            ID idObj = new ID(id.getValue(), id.getSource(), id.getType(), id.getUnique());
+            this.addId(idObj);
         }
-        if (nctID != null) {
-            this.nctID = nctID;
+        return null;
+    }
+
+    public Set<ID> addUids(Set<ID> uids) {
+        if (uids != null) {
+            this.uids.addAll(uids);
         }
-        if (euctrID != null) {
-            this.euctrID = euctrID;
+        return this.uids;
+    }
+
+    public Set<ID> addNonUids(Set<ID> nonUids) {
+        if (nonUids != null) {
+            this.nonUids.addAll(nonUids);
         }
+        return this.nonUids;
+    }
+
+    public void addIds(Set<String> ids) {
+        if (ids != null) {
+            for (String id : ids) {
+                this.addId(id);
+            }
+        }
+    }
+
+    public Set<ID> getUids() {
+        return this.uids;
+    }
+
+    public boolean hasUid(ID uid) {
+        return this.uids.contains(uid);
+    }
+
+    public boolean hasNonUid(ID nonuid) {
+        return this.nonUids.contains(nonuid);
+    }
+
+    public String removeId(String id) {
+        if (!ConverterUtils.isBlankOrNull(id)) {
+            ID idObj = ConverterUtils.createStudyID(id);
+            if (idObj.getUnique()) {
+                this.uids.remove(idObj);
+            } else {
+                this.nonUids.remove(idObj);
+            }
+        }
+        return null;
+    }
+
+    // TODO: primaryIdentifier should be ID? if set here, should be added to ids set
+    public String setPrimaryIdentifier(String primaryIdentifier) {
+        this.primaryIdentifier = primaryIdentifier;
+        return this.primaryIdentifier;
+    }
+
+    /**
+     * Get any unique ID from the IDsHandler, or null if no IDs are present
+     * 
+     * @return the unique ID
+     */
+    public ID getAnyUid() {
+        ID uid = null;
+
+        if (this.uids.size() > 0) {
+            uid = this.uids.iterator().next();
+        }
+
+        return uid;
     }
 
     @Override
@@ -116,129 +205,23 @@ public class IDsHandler {
         return hash;
     }
 
-    public String[] getIDsList() {
-        return new String[] { this.ctisID, this.euctrID, this.nctID };
-    }
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
 
-    /**
-     * TODO
-     * not guaranteed to update any IDs, updating only if relevant
-     */
-    public void updateIDs(String ctisID, String nctID, String euctrID) {
-        /*
-         * Handling various cases regarding CTIS and EUCTR IDs, as they can be equal
-         * (both in previous/existing study IDs and parsed IDs)
-         */
-        if (!ConverterUtils.isBlankOrNull(ctisID) && !ConverterUtils.isBlankOrNull(euctrID)) {
-            if (ctisID.equalsIgnoreCase(euctrID)) { // previous/existing study CTIS and EUCTR ID are the same
-                if (this.ctisID.isEmpty() && this.euctrID.isEmpty()) { // Parsed IDs are both empty, setting both of
-                                                                       // them
-                    this.ctisID = ctisID;
-                    this.euctrID = euctrID;
-                } else { // At least one of the parsed IDs is not empty
-                    if (this.ctisID.equalsIgnoreCase(this.euctrID)) { // Parsed CTIS and EUCTR ID are the same
-                        if (!this.ctisID.equalsIgnoreCase(ctisID)) { // Checking if all 4 IDs are not identical (else
-                                                                     // nothing to do)
-                            // Assuming that the more recent ID (year + sequential part after) is the CTIS
-                            // ID, and the other is the EUCTR ID
-                            this.logger.writeLog("Parsed CTIS and EUCTR IDs are identical (" + this.ctisID +
-                                    ") but different to previous/existing study CTIS and EUCTR IDs (" + ctisID
-                                    + ", identical too), setting more recent ID as CTIS");
-                            if (ctisID.compareTo(this.ctisID) > 0) {
-                                this.ctisID = ctisID;
-                            } else {
-                                this.euctrID = euctrID;
-                            }
-                        }
-                    } else { // Previous IDs are identical but parsed IDs are different
-                        if (!this.ctisID.isEmpty() && !this.euctrID.isEmpty()) { // Both parsed IDs are not empty (and
-                                                                                 // different)
-                            if (!ctisID.equalsIgnoreCase(this.ctisID) && !ctisID.equalsIgnoreCase(this.euctrID)) {
-                                // Logging if parsed IDs are not empty and different, and don't match with the
-                                // previous IDs, this probably shouldn't happen
-                                // e.g. previous: CTIS2016 EUCTR2016; parsed: CTIS2014 EUCTR2012
-                                this.logger.writeLog("Warning: both parsed CTIS (" + this.ctisID + ") and EUCTR ("
-                                        + this.euctrID + ") IDs are different" +
-                                        "from previous/existing study IDs: " + ctisID
-                                        + " (CTIS and EUCTR IDs are identical)");
-                            } // Else nothing to do, e.g. previous: CTIS2016 EUCTR2016; parsed: CTIS2016
-                              // EUCTR2014
+        sb.append("IDsHandler [");
+        sb.append("id: ");
+        sb.append(this.id);
+        sb.append(", dataSource: ");
+        sb.append(this.dataSource);
+        sb.append(", primaryIdentifier: ");
+        sb.append(this.primaryIdentifier);
+        sb.append(", uids: ");
+        sb.append(this.uids);
+        sb.append(", nonuids: ");
+        sb.append(this.nonUids);
+        sb.append("]");
 
-                        } else if (this.ctisID.isEmpty()) { // CTIS ID only is empty
-                            // Parsed CTIS ID is empty, previous/existing study CTIS ID is set and different
-                            // from parsed EUCTR ID
-                            // If it's the same, we know parsed EUCTR ID is specifically only an EUCTR ID
-                            // and should not be set to CTIS ID
-                            if (!ctisID.equalsIgnoreCase(this.euctrID)) { // e.g. previous: CTIS2016 EUCTR2016; parsed:
-                                                                          // CTIS() EUCTR2014
-                                this.ctisID = ctisID;
-                            } // Else not setting CTIS ID, e.g. previous: CTIS2016 EUCTR2016; parsed: CTIS()
-                              // EUCTR2016
-
-                        } else { // EUCTR ID only is empty
-                            // Same case as above but for EUCTR ID
-                            if (!euctrID.equalsIgnoreCase(this.ctisID)) { // e.g. previous: CTIS2014 EUCTR2014; parsed:
-                                                                          // CTIS2016 EUCTR()
-                                this.euctrID = euctrID;
-                            } // Else not setting EUCTR ID, e.g. previous: CTIS2016 EUCTR2016; parsed:
-                              // CTIS2016 EUCTR()
-                        }
-                    }
-                }
-            } else { // Previous/existing study CTIS and EUCTR ID are different, setting both of them
-                if (!this.ctisID.isEmpty() && !ctisID.equals(this.ctisID)) { // Logging if we are overwriting an
-                                                                             // existing and different ID
-                    this.logger.writeLog("ctisID about to be set (" + ctisID
-                            + ") is different than parsed ID it is replacing (" + this.ctisID + ")");
-                }
-                if (!this.euctrID.isEmpty() && !euctrID.equals(this.euctrID)) {
-                    this.logger.writeLog("euctrID about to be set (" + euctrID
-                            + ") is different than parsed ID it is replacing (" + this.euctrID + ")");
-                }
-                this.ctisID = ctisID;
-                this.euctrID = euctrID;
-            }
-        } else { // One of the previous IDs is empty
-            // TODO: should really overwrite IDs if different or not? probably yes
-            if (!ConverterUtils.isBlankOrNull(ctisID)) { // Previous/existing study EUCTR ID is empty
-                // Case where all IDs are identical but one of the previous/existing study IDs
-                // is empty, meaning it's carrying the info that the ID set
-                // is specifically only for this field (in this case CTIS), so we set the parsed
-                // ID to match the empty previous/existing study ID
-                // e.g. previous: CTIS2016 EUCTR(); parsed: CTIS2016 EUCTR2016
-                if (ctisID.equalsIgnoreCase(this.ctisID) && this.ctisID.equalsIgnoreCase(this.euctrID)) {
-                    this.euctrID = "";
-                } else {
-                    // TODO: should log case where previous/existing study EUCTR ID and parsed CTIS
-                    // ID are empty, and the other 2 IDs are identical
-                    if (!this.ctisID.isEmpty() && !ctisID.equals(this.ctisID)) { // Logging if we are overwriting an
-                                                                                 // existing and different ID
-                        this.logger.writeLog("ctisID about to be set (" + ctisID
-                                + ") is different than parsed ID it is replacing (" + this.ctisID + ")");
-                    }
-                    this.ctisID = ctisID;
-                }
-            } else if (!ConverterUtils.isBlankOrNull(euctrID)) { // previous/existing study CTIS ID is empty
-                // Same case as above but with empty previous/existing study CTIS ID instead
-                if (euctrID.equalsIgnoreCase(this.euctrID) && this.euctrID.equalsIgnoreCase(this.ctisID)) {
-                    this.ctisID = "";
-                } else {
-                    if (!this.euctrID.isEmpty() && !euctrID.equals(this.euctrID)) {
-                        this.logger.writeLog("euctrID about to be set (" + euctrID
-                                + ") is different than parsed ID it is replacing (" + this.euctrID + ")");
-                    }
-                    this.euctrID = euctrID;
-                }
-            }
-        }
-
-        // Handling NCT ID
-        if (!ConverterUtils.isBlankOrNull(nctID)) {
-            if (!this.nctID.isEmpty() && !nctID.equals(this.nctID)) {
-                this.logger.writeLog("nctID about to be set (" + nctID
-                        + ") is different than parsed ID it is replacing (" + this.nctID + ") (should not happen?)");
-            }
-            this.nctID = nctID;
-        }
+        return sb.toString();
     }
 }

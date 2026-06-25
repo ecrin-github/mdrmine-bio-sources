@@ -29,6 +29,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Class to parse values from a CTIS data file and store them as MDRMine items
@@ -116,6 +118,15 @@ public class CtisConverter extends CacheConverter {
             }
         }
 
+        // Item study = this.createItem("Study");
+        // study.setAttribute("primaryIdentifier", "2023-508884-59");
+        // store(study);
+
+        // ID id = new ID("2023-508884-59", "real", ConverterCVT.ID_TYPE_TRIAL_REGISTRY,
+        // true);
+        // this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(),
+        // id.getType(), id.getUnique());
+
         csvReader.close();
     }
 
@@ -126,16 +137,22 @@ public class CtisConverter extends CacheConverter {
      * @param lineValues the list of raw values of a line in the data file
      */
     public void parseAndStoreValues(String[] lineValues) throws Exception {
-        Item study = createItem("Study");
         // TODO: source id?
         // TODO: SOs publication year
 
         /* Trial ID */
         String trialID = this.getAndCleanValue(lineValues, "Trial number");
 
-        // Not parsing if existing study is found and with a more recent resubmission
-        // number than the current
-        if (this.parseTrialID(study, trialID)) {
+        IDsHandler idsH = this.parseTrialID(trialID);
+
+        if (idsH == null) {
+            this.writeLog("Found study with no ID, skipping it");
+        } else {
+            Item study = this.getOrCreateStudyWithIDs(idsH);
+
+            this.createAndStoreStudyIdentifier(study, "TESTID", "The Source", ConverterCVT.ID_TYPE_TRIAL_REGISTRY,
+                    false);
+
             /* Study title (need to get it before protocol SO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
             this.parseTrialTitle(study, trialTitle);
@@ -227,21 +244,39 @@ public class CtisConverter extends CacheConverter {
 
             /* Trial registry entry SO + instance + last updated date */
             String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
-            LocalDate lastUpdated = this.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+            LocalDate lastUpdated = ConverterUtils.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
             this.createAndStoreRegistryEntryDO(study, lastUpdated);
 
             /* Description (constructed) */
             // TODO: missing Main Objective field from CTIS UI
             ConverterUtils.addToDescription(study, product);
             ConverterUtils.addToDescription(study, primaryEndpoint);
-
-            // Storing in cache
-            if (!this.existingStudy()) {
-                this.studies.put(this.currentTrialID, study);
-            }
-
-            this.currentTrialID = null;
         }
+
+        this.currentTrialID = null;
+    }
+
+    /**
+     * TODO
+     * 
+     * @param trialID
+     * @return
+     */
+    public IDsHandler parseTrialID(String trialID) {
+        IDsHandler idsH = null;
+
+        if (trialID.length() == 17) {
+            // TODO: resubmission
+            this.currentTrialID = trialID.substring(0, 14);
+
+            ID id = new ID(this.currentTrialID, ConverterCVT.ID_SOURCE_CTIS, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true);
+            idsH = new IDsHandler(this.dataSourceName, id);
+            this.writeLog("idsH: " + idsH);
+        } else {
+            this.writeLog("Unexpected length for trial ID: " + trialID);
+        }
+
+        return idsH;
     }
 
     /**
@@ -269,7 +304,7 @@ public class CtisConverter extends CacheConverter {
                         continueParsing = true;
 
                         // Removing previously stored study
-                        this.removeStudyAndLinkedItems(this.currentTrialID);
+                        // this.removeStudyAndLinkedItems(this.currentTrialID);
                     } else if (resubmission < storedResubmission) {
                         this.writeLog("Skipping existing trial with older resubmission number stored, id: "
                                 + trialID + ", stored resubmission number: " + storedResubmission);

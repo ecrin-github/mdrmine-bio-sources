@@ -83,6 +83,14 @@ public class ConverterCVT {
     public static final String AGE_GROUP_ADULT = "Adult";
     public static final String AGE_GROUP_OLDER_ADULT = "Older Adult";
     public static final String INTERVENTION_T_DRUG = "Drug";
+    public static final String ID_SOURCE_AMBIG_EU = "Ambiguous (EUCTR/CTIS)";
+    public static final String ID_SOURCE_CTG = "ClinicalTrials.gov";
+    public static final String ID_SOURCE_CTIS = "Clinical Trial Information System";
+    public static final String ID_SOURCE_EUCTR = "EU Clinical Trials Register";
+    public static final String ID_SOURCE_NHLBI = "National Heart Lung and Blood Institute";
+    public static final String ID_TYPE_BIOLINCC = "NHLBI BioLINCC ID";
+    public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
+    public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
 
     /* Objects */
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
@@ -119,8 +127,6 @@ public class ConverterCVT {
     public static final String ORG_TYPE_NETWORK = "Network";
     public static final String ORG_TYPE_NIH = "US NIH Institute";
     public static final String ORG_TYPE_OTHER = "Other";
-    public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
-    public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
 
     /* Model field names */
     public static final String FIELD_MIN_AGE = "minAge";

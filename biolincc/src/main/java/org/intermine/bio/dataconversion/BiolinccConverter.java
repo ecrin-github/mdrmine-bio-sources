@@ -1,23 +1,27 @@
 package org.intermine.bio.dataconversion;
 
+import java.io.Reader;
+import java.text.ParseException;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 import com.opencsv.CSVParser;
 import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
-import org.apache.commons.text.WordUtils;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-import java.io.Reader;
-import java.text.ParseException;
-import java.time.LocalDate;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /*
  * Copyright (C) 2024-2025 MDRMine
@@ -111,18 +115,15 @@ public class BiolinccConverter extends CacheConverter {
     }
 
     public void parseAndStoreTrial(String[] lineValues) throws Exception {
-        Item study = createItem("Study");
-
-        /*
-         * Parsing ClinicalTrials.gov url list, sets nctID (if any found), hence doing
-         * this at the beginning
-         */
-        String clinicalTrialUrls = this.getAndCleanValue(lineValues, "Clinical trial urls");
-        List<String> ctgUrls = this.parseClinicalTrialUrls(study, clinicalTrialUrls);
-
-        /* StudyIdentifier: BioLINCC ID */
         String biolinccID = this.getAndCleanValue(lineValues, "Accession Number");
-        this.parseID(study, biolinccID);
+        String clinicalTrialUrls = this.getAndCleanValue(lineValues, "Clinical trial urls");
+
+        Set<String> nctIds = this.getNctIdsFromUrls(clinicalTrialUrls);
+        IDsHandler idsH = this.parseTrialIDs(biolinccID, nctIds);
+        Item study = this.getOrCreateStudyWithIDs(idsH);
+
+        // TODO: construct URLs and do something with them
+        List<String> ctgUrls = null;
 
         /* Study title */
         String studyName = this.getAndCleanValue(lineValues, "Study Name");
@@ -256,33 +257,57 @@ public class BiolinccConverter extends CacheConverter {
         String studyType = this.getAndCleanValue(lineValues, "Study type");
         this.parseStudyType(study, studyType);
 
-        // Store study in cache
-        if (this.currentTrialID != null) {
-            this.studies.put(this.currentTrialID, study);
+        this.currentTrialID = null;
+    }
+
+    public IDsHandler parseTrialIDs(String accessionNumber, Set<String> nctIds) {
+        IDsHandler idsH = null;
+
+        // From the current MDR documentation: "BioLINCC Ids (e.g. HLB01461719a,
+        // HLB00510606a) have been found to change over time [...]. They can therefore
+        // not be used as an identifier"
+        ID biolinccID = new ID(accessionNumber, ConverterCVT.ID_SOURCE_NHLBI, ConverterCVT.ID_TYPE_BIOLINCC, false);
+
+        idsH = new IDsHandler(accessionNumber, nctIds);
+
+        if (!ConverterUtils.isBlankOrNull(accessionNumber)) {
+            this.currentTrialID = accessionNumber;
         } else {
-            this.studiesWithNoID.add(study);
+            ID uid = idsH.getAnyUid();
+            if (uid != null) {
+                this.currentTrialID = uid.getId();
+            }
         }
 
-        this.currentTrialID = null;
+        idsH.addId(biolinccID);
+
+        return idsH;
     }
 
     /**
      * TODO
      * 
-     * @param study
-     * @param biolinccID
+     * @param clinicalTrialUrls
+     * @return
      */
-    public void parseID(Item study, String biolinccID) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(biolinccID)) {
-            if (this.currentTrialID == null) { // Before StudyIdentifier for caching in map
-                this.currentTrialID = biolinccID;
-            }
+    public Set<String> getNctIdsFromUrls(String clinicalTrialUrls) {
+        Set<String> parsedIds = new HashSet<String>();
 
-            this.createAndStoreClassItem(study, "StudyIdentifier",
-                    new String[][] { { "identifierValue", biolinccID } });
-        } else {
-            this.writeLog("Encountered study with no ID, title: " + ConverterUtils.getAttrValue(study, "title"));
+        if (!ConverterUtils.isBlankOrNull(clinicalTrialUrls)) {
+            String[] urls = clinicalTrialUrls.split(", ");
+            Matcher mUrl;
+
+            for (String url : urls) {
+                mUrl = ConverterUtils.P_ID_AT_END_OF_URL.matcher(url);
+                if (mUrl.matches()) {
+                    parsedIds.add(mUrl.group(1));
+                } else {
+                    this.writeLog("Failed to match CTG URL: " + url);
+                }
+            }
         }
+
+        return parsedIds;
     }
 
     /**
@@ -390,49 +415,6 @@ public class BiolinccConverter extends CacheConverter {
                 study.setAttributeIfNotNull("ageGroup", ageGroup);
             }
         }
-    }
-
-    /**
-     * TODO
-     * Also sets Study.nctID
-     * 
-     * @param study
-     * @param clinicalTrialUrls
-     * @return
-     */
-    public List<String> parseClinicalTrialUrls(Item study, String clinicalTrialUrls) {
-        Set<String> parsedUrls = new HashSet<String>();
-
-        if (!ConverterUtils.isBlankOrNull(clinicalTrialUrls)) {
-            String[] urls = clinicalTrialUrls.split(", ");
-            Matcher mUrl;
-            String ctgUrl;
-
-            for (String url : urls) {
-                mUrl = ConverterUtils.P_ID_AT_END_OF_URL.matcher(url);
-                if (mUrl.matches()) {
-                    String nctId = mUrl.group(1);
-                    if (!this.seenNctIds.contains(nctId)) {
-                        this.seenNctIds.add(nctId);
-                        if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "nctID"))) {
-                            study.setAttribute("nctID", nctId);
-                        } else {
-                            this.writeLog("NCT ID found (" + nctId + ") for study which already has an NCT ID: "
-                                    + ConverterUtils.getAttrValue(study, "nctID"));
-                        }
-                    } else {
-                        this.writeLog("NCT ID already seen: " + nctId);
-                    }
-
-                    ctgUrl = ConverterCVT.CTG_STUDY_BASE_URL + nctId;
-                    parsedUrls.add(ctgUrl);
-                } else {
-                    this.writeLog("Failed to match CTG URL: " + url);
-                }
-            }
-        }
-
-        return new ArrayList<String>(parsedUrls);
     }
 
     public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, List<String> ctgUrls)
@@ -549,7 +531,7 @@ public class BiolinccConverter extends CacheConverter {
         LocalDate publicationDate = null;
         String publicationYear = null;
         if (!ConverterUtils.isBlankOrNull(studyOpenDateData)) {
-            publicationDate = this.parseDate(studyOpenDateData, ConverterUtils.P_DATE_M_D_Y_TIME);
+            publicationDate = ConverterUtils.parseDate(studyOpenDateData, ConverterUtils.P_DATE_M_D_Y_TIME);
             try {
                 publicationYear = Integer.toString(publicationDate.getYear());
             } catch (Exception e) {
@@ -605,7 +587,7 @@ public class BiolinccConverter extends CacheConverter {
         LocalDate publicationDate = null;
         String publicationYear = null;
         if (!ConverterUtils.isBlankOrNull(studyOpenDateSpecimens)) {
-            publicationDate = this.parseDate(studyOpenDateSpecimens, ConverterUtils.P_DATE_M_D_Y_TIME);
+            publicationDate = ConverterUtils.parseDate(studyOpenDateSpecimens, ConverterUtils.P_DATE_M_D_Y_TIME);
             try {
                 publicationYear = Integer.toString(publicationDate.getYear());
             } catch (Exception e) {
