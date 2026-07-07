@@ -113,6 +113,11 @@ public class IDsHandler {
         return null;
     }
 
+    public ID addUid(ID uid) {
+        this.uids.add(uid);
+        return uid;
+    }
+
     public Set<ID> addUids(Set<ID> uids) {
         if (uids != null) {
             this.uids.addAll(uids);
@@ -139,6 +144,29 @@ public class IDsHandler {
         return this.uids;
     }
 
+    public String getIdFileString() {
+        String primaryId = this.primaryIdentifier;
+        if (primaryId == null) {
+            primaryId = this.getAnyUid().getId();
+        }
+
+        StringBuilder uidsSb = new StringBuilder();
+        uidsSb.append(primaryId);
+        uidsSb.append("\t");
+
+        boolean first = true;
+        for (ID uid : this.uids) {
+            if (first) {
+                first = false;
+            } else {
+                uidsSb.append(",");
+            }
+            uidsSb.append(uid.getId());
+        }
+
+        return uidsSb.toString();
+    }
+
     public boolean hasUid(ID uid) {
         return this.uids.contains(uid);
     }
@@ -163,6 +191,15 @@ public class IDsHandler {
     public String setPrimaryIdentifier(String primaryIdentifier) {
         this.primaryIdentifier = primaryIdentifier;
         return this.primaryIdentifier;
+    }
+
+    public void mergeHandlers(IDsHandler idsHToMerge) {
+        this.addUids(idsHToMerge.uids);
+        this.addNonUids(idsHToMerge.nonUids);
+
+        if (this.primaryIdentifier == null) {
+            this.primaryIdentifier = idsHToMerge.primaryIdentifier;
+        }
     }
 
     /**

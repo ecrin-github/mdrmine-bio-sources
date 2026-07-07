@@ -17,11 +17,9 @@ sourceSets {
     }
 }
 
-processResources {
-    from('.') { include ("*.properties")}
-}
-
 dependencies {
-    compile project(':commons')
-    compile project(':models')
+    compile group: 'com.fasterxml.woodstox', name: 'woodstox-core', version: '7.1.0'
+    compile group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-xml', version: '2.18.2'
+    compileOnly group: 'org.projectlombok', name: 'lombok', version: '1.18.36'
+    annotationProcessor group: 'org.projectlombok', name: 'lombok', version: '1.18.36'
 }

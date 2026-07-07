@@ -356,7 +356,7 @@ public abstract class CacheConverter extends BaseConverter {
 
         // Removing study's IDsHandler from idsMap
         for (ID id : idsH.getUids()) {
-            if (!this.idsMap.remove(id, idsH)) {
+            if (this.idsMap.remove(id) == null) {
                 this.writeLog("Attempted to remove ID from idsMap but failed: " + id);
             }
         }
@@ -588,7 +588,8 @@ public abstract class CacheConverter extends BaseConverter {
         IDsHandler idsH = new IDsHandler(dataSource, primaryId, studyIds);
         for (ID id : idsH.uids) {
             this.writeLog("adding uid: " + id.getId());
-            this.idsMap.add(id, idsH);
+            // TODO
+            // this.idsMap.add(id, idsH);
         }
     }
 
@@ -723,7 +724,8 @@ public abstract class CacheConverter extends BaseConverter {
         if (idsH != null) {
             for (ID id : idsH.uids) {
                 if (this.idsMap.containsId(id)) {
-                    matchingHandlers.addAll(this.idsMap.get(id));
+                    // TODO
+                    // matchingHandlers.addAll(this.idsMap.get(id));
                 }
             }
         }

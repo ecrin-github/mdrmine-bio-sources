@@ -37,6 +37,7 @@ public class ConverterCVT {
     public static final String R_REPEC = "REPEC"; // Peru
     public static final String R_RPCEC = "RPCEC"; // Cuba
     public static final String R_SLCTR = "SLCTR"; // Sri Lanka
+    public static final String EUCTR_REG_NAME_CTIS = "clinical trials information system";
 
     /* Studies */
     public static final String NOT_APPLICABLE = "N/A";
@@ -73,11 +74,15 @@ public class ConverterCVT {
     public static final String GENDER_ALL = "All";
     public static final String GENDER_WOMEN = "Female";
     public static final String GENDER_MEN = "Male";
-    public static final String AGE_IN_UTERO = "In utero";   // TODO
+    public static final String AGE_IN_UTERO = "In utero"; // TODO
     public static final String AGE_UNIT_YEARS = "Years";
     public static final String AGE_MIN_YEARS = "0";
     public static final String AGE_MAX_YEARS = "150";
-    public static enum AgeGroup {InUtero, Pediatric, Adult, OlderAdult};
+
+    public static enum AgeGroup {
+        InUtero, Pediatric, Adult, OlderAdult
+    };
+
     public static final String AGE_GROUP_IN_UTERO = "In Utero";
     public static final String AGE_GROUP_PEDIATRIC = "Pediatric";
     public static final String AGE_GROUP_ADULT = "Adult";
@@ -119,7 +124,8 @@ public class ConverterCVT {
     public static final String CONTRIB_TYPE_STUDY_FUNDER = "Study funder";
     public static final String CONTRIB_TYPE_COLLABORATING_ORG = "Collaborating organisation";
     public static final String CONTRIB_TYPE_SITE_CONTACT = "Clinical site contact";
-    // Note: not in current MDR, this is for now used for CTG Collaborators that are not orgs
+    // Note: not in current MDR, this is for now used for CTG Collaborators that are
+    // not orgs
     public static final String CONTRIB_TYPE_COLLABORATING_PERSON = "Collaborating person";
     public static final String ORG_TYPE_FEDERAL_US = "US Federal agency";
     public static final String ORG_TYPE_GOVERNMENTAL = "Governmental";

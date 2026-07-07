@@ -7,8 +7,8 @@ import java.util.Set;
 
 public class IDsMap {
     private static IDsMap instance = null;
-    // Key: any unique study ID, value: set of studies IDsHandler
-    private Map<String, Set<IDsHandler>> idsMap = new HashMap<String, Set<IDsHandler>>();
+    // Key: any unique study ID
+    private Map<String, IDsHandler> idsMap = new HashMap<String, IDsHandler>();
 
     private IDsMap() {
         IDsMap.instance = this;
@@ -22,30 +22,32 @@ public class IDsMap {
         return IDsMap.instance;
     }
 
-    public Set<IDsHandler> get(ID id) {
+    public IDsHandler get(ID id) {
         if (id != null) {
             return this.get(id.getId());
         }
         return null;
     }
 
-    public Set<IDsHandler> get(String id) {
+    public IDsHandler get(String id) {
         return this.idsMap.getOrDefault(id, null);
     }
 
-    public boolean add(ID id, IDsHandler idsH) {
+    public Set<IDsHandler> getAllIDsHandlers() {
+        return new HashSet<IDsHandler>(this.idsMap.values());
+    }
+
+    public boolean add(ID id, IDsHandler idsH) throws Exception {
         boolean added = false;
 
         if (id != null && idsH != null) {
             String idStr = id.getId();
             if (!ConverterUtils.isBlankOrNull(idStr)) {
                 if (this.idsMap.containsKey(idStr)) {
-                    added = this.idsMap.get(idStr).add(idsH);
+                    throw new Exception("Tried to add an ID in idsMap but there is already an entry");
                 } else {
-                    Set<IDsHandler> idsHSet = new HashSet<IDsHandler>();
-                    this.idsMap.put(idStr, idsHSet);
-                    added = idsHSet.add(idsH);
-
+                    this.idsMap.put(idStr, idsH);
+                    added = true;
                 }
             }
         }
@@ -53,27 +55,26 @@ public class IDsMap {
         return added;
     }
 
-    public boolean remove(ID id, IDsHandler idsH) {
-        boolean removed = false;
+    public boolean put(ID id, IDsHandler idsH) throws Exception {
+        boolean put = false;
 
         if (id != null && idsH != null) {
-            Set<IDsHandler> idsHSet = this.get(id);
-            if (idsHSet != null) {
-                // Removing IDsHandler in Set
-                removed = idsHSet.remove(idsH);
-
-                // Removing map entry completely if it was the last corresponding to this ID
-                if (idsHSet.size() == 0) {
-                    this.idsMap.remove(id.getId());
-                }
+            String idStr = id.getId();
+            if (!ConverterUtils.isBlankOrNull(idStr)) {
+                this.idsMap.put(idStr, idsH);
+                put = true;
             }
         }
 
-        return removed;
+        return put;
     }
 
-    public void remove(String id) {
-        Set<IDsHandler> idsH = this.get(id);
+    public IDsHandler remove(String id) {
+        return this.idsMap.remove(id);
+    }
+
+    public IDsHandler remove(ID id) {
+        return this.idsMap.remove(id.getId());
     }
 
     public boolean containsId(ID id) {

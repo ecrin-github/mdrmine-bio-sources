@@ -44,7 +44,6 @@ public class EuctrConverter extends CacheConverter {
     private static final String DATASET_TITLE = "EUCTR_2026-03-04";
     private static final String DATA_SOURCE_NAME = "EUCTR";
     private static final String DATA_SOURCE_DESC = "EU Clinical Trials Register";
-    private static final String REG_NAME_CTIS = "clinical trials information system";
 
     private static final Pattern P_TITLE_NA = Pattern.compile("^-|_|N\\/?A$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_HC_CODE = Pattern.compile(
@@ -332,7 +331,7 @@ public class EuctrConverter extends CacheConverter {
         ID primaryId = null;
 
         // Always EUCTR except in 20251208.xml where its CTIS
-        if (!ConverterUtils.isBlankOrNull(regName) && REG_NAME_CTIS.equalsIgnoreCase(regName)) {
+        if (!ConverterUtils.isBlankOrNull(regName) && ConverterCVT.EUCTR_REG_NAME_CTIS.equalsIgnoreCase(regName)) {
             primaryId = new ID(cleanID, ConverterCVT.ID_SOURCE_CTIS, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true);
             // TODO: resubmission?
         } else {

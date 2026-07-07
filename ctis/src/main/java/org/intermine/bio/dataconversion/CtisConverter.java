@@ -941,7 +941,7 @@ public class CtisConverter extends CacheConverter {
                 fieldsToInd.put(headersList[ind], ind);
             }
         } else {
-            throw new Exception("WHO Headers file is empty");
+            throw new Exception("CTIS Headers file is empty");
         }
 
         return fieldsToInd;

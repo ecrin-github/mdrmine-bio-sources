@@ -10,7 +10,7 @@ package org.intermine.bio.dataconversion;
  *
  */
 
- import java.util.ArrayList;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;

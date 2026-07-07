@@ -13,6 +13,7 @@ package org.intermine.bio.dataconversion;
 import java.text.ParseException;
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -36,6 +37,8 @@ import org.intermine.xml.full.Item;
 import org.intermine.xml.full.Reference;
 import org.intermine.xml.full.ReferenceList;
 import org.jsoup.Jsoup;
+
+import com.alibaba.fastjson2.JSON;
 
 /**
  * Class with utility functions for converter classes
@@ -736,6 +739,20 @@ public class ConverterUtils {
 
     public static boolean isUniqueId(String id) {
         return (ConverterUtils.getMatchingIdMatcher(id) != null);
+    }
+
+    public static String getCurrentTimestamp() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+    }
+
+    /**
+     * This method is here to avoid errors in Groovy task
+     * 
+     * @param line
+     * @return
+     */
+    public static CtgStudy getCtgStudy(String line) {
+        return JSON.parseObject(line, CtgStudy.class);
     }
 
     /**
