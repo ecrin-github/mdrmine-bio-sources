@@ -89,10 +89,30 @@ public class ConverterCVT {
     public static final String AGE_GROUP_OLDER_ADULT = "Older Adult";
     public static final String INTERVENTION_T_DRUG = "Drug";
     public static final String ID_SOURCE_AMBIG_EU = "Ambiguous (EUCTR/CTIS)";
+    public static final String ID_SOURCE_ANZCTR = "Australian New Zealand Clinical Trials Registry";
+    public static final String ID_SOURCE_CHICTR = "Chinese Clinical Trial Registry";
+    public static final String ID_SOURCE_CHIMCTR = "Chinese Medicine Clinical Trials Registry";
+    public static final String ID_SOURCE_CRIS = "Clinical Research Information Service";
     public static final String ID_SOURCE_CTG = "ClinicalTrials.gov";
     public static final String ID_SOURCE_CTIS = "Clinical Trial Information System";
+    public static final String ID_SOURCE_CTRI = "Clinical Trials Registry - India";
+    public static final String ID_SOURCE_DRKS = "Deutschen Register Klinischer Studien";
     public static final String ID_SOURCE_EUCTR = "EU Clinical Trials Register";
+    public static final String ID_SOURCE_IRCT = "Iranian Registry of Clinical Trials";
+    public static final String ID_SOURCE_ITMCTR = "International Traditional Medicine Clinical Trial Registry";
+    public static final String ID_SOURCE_ISRCTN = "ISRCTN";
+    public static final String ID_SOURCE_LBCTR = "Lebanon Clinical Trial Registry";
     public static final String ID_SOURCE_NHLBI = "National Heart Lung and Blood Institute";
+    public static final String ID_SOURCE_NTR = "Nationaal Trial Register";
+    public static final String ID_SOURCE_OMON = "Overzicht van Medisch-wetenschappelijk Onderzoek in Nederland";
+    public static final String ID_SOURCE_PACTR = "Pan African Clinical Trials Registry";
+    public static final String ID_SOURCE_REBEC = "Registro Brasileiro de Ensaios Clínicos";
+    public static final String ID_SOURCE_REPEC = "Registro Peruano de Ensayos Clínicos";
+    public static final String ID_SOURCE_RPCEC = "Registro Público Cubano de Ensayos Clínicos";
+    public static final String ID_SOURCE_SLCTR = "Sri Lanka Clinical Trials Registry";
+    public static final String ID_SOURCE_SNCTP = "Swiss National Clinical Trials Portal";
+    public static final String ID_SOURCE_TCTR = "Thai Clinical Trials Register";
+    public static final String ID_SOURCE_WHO = "World Health Organization";
     public static final String ID_TYPE_BIOLINCC = "NHLBI BioLINCC ID";
     public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
     public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
@@ -146,11 +166,11 @@ public class ConverterCVT {
     public static final String CV_MESH_TREE = "MeSH Tree";
 
     /* Data source names */
-    public static final String SOURCE_NAME_WHO = "International Clinical Trials Registry Platform (ICTRP)";
+    public static final String SOURCE_NAME_BIOLINCC = "Biologic Specimen and Data Repository Information Coordinating Center (BioLINCC)";
     public static final String SOURCE_NAME_CTG = "ClinicalTrials.gov";
     public static final String SOURCE_NAME_CTIS = "Clinical Trials Information System (CTIS)";
     public static final String SOURCE_NAME_EUCTR = "EU Clinical Trials Register";
-    public static final String SOURCE_NAME_BIOLINCC = "Biologic Specimen and Data Repository Information Coordinating Center (BioLINCC)";
+    public static final String SOURCE_NAME_WHO = "International Clinical Trials Registry Platform (ICTRP)";
 
     public static final String CTG_STUDY_BASE_URL = "https://clinicaltrials.gov/study/";
     public static final String CTG_DOCUMENT_BASE_URL = "https://cdn.clinicaltrials.gov/large-docs/";

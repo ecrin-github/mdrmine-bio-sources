@@ -11,8 +11,8 @@ package org.intermine.bio.dataconversion;
  */
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.intermine.model.bio.StudyIdentifier;
 
@@ -34,43 +34,64 @@ public class IDsHandler {
         this.setInternalId();
     }
 
+    public IDsHandler(String dataSource, String id) {
+        this(dataSource, ConverterUtils.createID(id));
+    }
+
+    /**
+     * TODO
+     * Sets primaryIdentifier if id is unique
+     * 
+     * @param dataSource
+     * @param id
+     */
     public IDsHandler(String dataSource, ID id) {
+        this(dataSource, id, false);
+    }
+
+    /**
+     * TODO
+     * To be used by ID File Task
+     * 
+     * @param dataSource
+     * @param id
+     * @param setIdAsPrimary
+     */
+    public IDsHandler(String dataSource, String id, boolean setIdAsPrimary) {
+        this(dataSource, ConverterUtils.createID(id), setIdAsPrimary);
+    }
+
+    /**
+     * TODO
+     * To be used by ID File Task
+     * 
+     * @param dataSource
+     * @param id
+     * @param setIdAsPrimary
+     */
+    public IDsHandler(String dataSource, ID id, boolean setIdAsPrimary) {
         this.dataSource = dataSource;
 
         if (id != null) {
             this.addId(id);
-            if (id.getUnique()) {
-                this.primaryIdentifier = id.getId();
+            if (id.getUnique() && setIdAsPrimary) {
+                this.setPrimaryIdentifier(id.getId());
             }
         }
 
         this.setInternalId();
     }
 
-    public IDsHandler(String dataSource, List<StudyIdentifier> ids) {
-        this(dataSource, null, ids);
-    }
-
-    public IDsHandler(String dataSource, String primaryIdentifier, List<StudyIdentifier> ids) {
-        this.dataSource = dataSource;
-        this.primaryIdentifier = primaryIdentifier;
-
-        if (ids != null && ids.size() > 0) {
-            for (StudyIdentifier id : ids) {
-                this.addId(id);
-            }
-        }
-
-        this.setInternalId();
-    }
-
+    /**
+     * TODO
+     * Note: don't use this constructor if there is an ID that should be
+     * primaryIdentifier
+     * 
+     * @param dataSource
+     * @param ids
+     */
     public IDsHandler(String dataSource, Set<String> ids) {
-        this(dataSource, null, ids);
-    }
-
-    public IDsHandler(String dataSource, String primaryIdentifier, Set<String> ids) {
         this.dataSource = dataSource;
-        this.primaryIdentifier = primaryIdentifier;
 
         if (ids != null) {
             for (String id : ids) {
@@ -78,7 +99,12 @@ public class IDsHandler {
             }
         }
 
+        this.pickPrimaryIdentifier();
         this.setInternalId();
+    }
+
+    public void setPrimaryIdentifier(String primaryId) {
+        this.primaryIdentifier = primaryId;
     }
 
     private void setInternalId() {
@@ -86,11 +112,36 @@ public class IDsHandler {
         this.id = IDsHandler.handlersNb;
     }
 
+    /**
+     * TODO
+     */
+    private void pickPrimaryIdentifier() {
+        // TODO: error should be thrown before in constructors if dataSource null or
+        // unrecognized
+        if (!ConverterUtils.isBlankOrNull(this.dataSource) && this.uids.size() > 0) {
+            for (ID uid : this.uids) {
+                if (this.dataSource.equals(ConverterCVT.SOURCE_NAME_WHO)
+                        || (this.dataSource.equals(ConverterCVT.SOURCE_NAME_CTG)
+                                && uid.getSource().equals(ConverterCVT.ID_SOURCE_CTG))
+                        || (this.dataSource.equals(ConverterCVT.SOURCE_NAME_CTIS)
+                                && uid.getSource().equals(ConverterCVT.ID_SOURCE_CTIS))
+                        || (this.dataSource.equals(ConverterCVT.SOURCE_NAME_EUCTR)
+                                && uid.getSource().equals(ConverterCVT.ID_SOURCE_EUCTR))) {
+                    this.setPrimaryIdentifier(uid.getId());
+                    break;
+                } else if (this.primaryIdentifier == null) {
+                    this.setPrimaryIdentifier(uid.getId());
+                }
+            }
+        }
+    }
+
     public ID addId(ID id) {
-        if (id != null) {
+        if (id != null && !ConverterUtils.dummyIDs.contains(id.getId())) {
+            // Checking for dummy IDs or garbage IDs
             if (id.getUnique()) {
                 this.uids.add(id);
-            } else {
+            } else if (!ConverterUtils.P_ID_GARBAGE.matcher(id.getId()).matches()) {
                 this.nonUids.add(id);
             }
         }
@@ -99,7 +150,7 @@ public class IDsHandler {
 
     public ID addId(String id) {
         if (!ConverterUtils.isBlankOrNull(id)) {
-            ID idObj = ConverterUtils.createStudyID(id);
+            ID idObj = ConverterUtils.createID(id);
             return this.addId(idObj);
         }
         return null;
@@ -111,11 +162,6 @@ public class IDsHandler {
             this.addId(idObj);
         }
         return null;
-    }
-
-    public ID addUid(ID uid) {
-        this.uids.add(uid);
-        return uid;
     }
 
     public Set<ID> addUids(Set<ID> uids) {
@@ -167,17 +213,27 @@ public class IDsHandler {
         return uidsSb.toString();
     }
 
+    public String getNonUidFileString() {
+        return this.nonUids.stream()
+                .map(ID::getId)
+                .collect(Collectors.joining(","));
+    }
+
+    public boolean hasAnyUid() {
+        return this.uids.size() > 0;
+    }
+
     public boolean hasUid(ID uid) {
         return this.uids.contains(uid);
     }
 
-    public boolean hasNonUid(ID nonuid) {
-        return this.nonUids.contains(nonuid);
+    public boolean hasNonUid(ID nonUid) {
+        return this.nonUids.contains(nonUid);
     }
 
     public String removeId(String id) {
         if (!ConverterUtils.isBlankOrNull(id)) {
-            ID idObj = ConverterUtils.createStudyID(id);
+            ID idObj = ConverterUtils.createID(id);
             if (idObj.getUnique()) {
                 this.uids.remove(idObj);
             } else {
@@ -187,19 +243,11 @@ public class IDsHandler {
         return null;
     }
 
-    // TODO: primaryIdentifier should be ID? if set here, should be added to ids set
-    public String setPrimaryIdentifier(String primaryIdentifier) {
-        this.primaryIdentifier = primaryIdentifier;
-        return this.primaryIdentifier;
-    }
-
     public void mergeHandlers(IDsHandler idsHToMerge) {
         this.addUids(idsHToMerge.uids);
         this.addNonUids(idsHToMerge.nonUids);
 
-        if (this.primaryIdentifier == null) {
-            this.primaryIdentifier = idsHToMerge.primaryIdentifier;
-        }
+        // TODO primaryId if both current source and no hit in idresolver
     }
 
     /**
@@ -252,7 +300,9 @@ public class IDsHandler {
         sb.append(", dataSource: ");
         sb.append(this.dataSource);
         sb.append(", primaryIdentifier: ");
-        sb.append(this.primaryIdentifier);
+        if (this.primaryIdentifier != null) {
+            sb.append(this.primaryIdentifier);
+        }
         sb.append(", uids: ");
         sb.append(this.uids);
         sb.append(", nonuids: ");

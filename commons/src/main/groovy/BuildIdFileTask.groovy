@@ -34,6 +34,7 @@ class BuildIdFileTask {
     private static final String ID_FILE_DIR = '/home/ubuntu/data/idfile'
     File outputDir
     IDsMap idsMap = IDsMap.getIDsMap()
+    Set<IDsHandler> noUidsIdsHandlers = new HashSet<IDsHandler>()
     Logger logger = null
 
     // @TaskAction
@@ -92,10 +93,15 @@ class BuildIdFileTask {
             }
         }
 
+        println 'Writing ID file'
         this.writeIdFile(idFileFP)
+
+        println 'Writing nonUid file'
+        String nonUidFileFP = ID_FILE_DIR + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
+        this.writeNonUidFile(nonUidFileFP)
     }
 
-    public void writeLog(String text) {
+    void writeLog(String text) {
         if (this.logger != null) {
             this.logger.writeLog(text)
         } else {
@@ -103,67 +109,12 @@ class BuildIdFileTask {
         }
     }
 
-    void addToIdsMap(Set<String> ids) {
-        this.addToIdsMap(null, ids)
-    }
-
-    void addToIdsMap(String primaryId, Set<String> ids) {
-        this.addToIdsMap(new IDsHandler(null, primaryId, ids))
-    }
-
     void addToIdsMap(IDsHandler idsH) {
-        // Only proceeding if there is at least one unique id
-        if (idsH.uids.size() > 0) {
-            Set<IDsHandler> matchingHandlers = this.getMatchingIDs(idsH)
+        boolean added = ConverterUtils.addToIdsMap(this.idsMap, idsH)
 
-            if (matchingHandlers.size() == 0) {
-                // No matches, simply adding entries to idsMap
-                for (ID id: idsH.uids) {
-                    this.idsMap.add(id, idsH)
-                }
-            } else if (matchingHandlers.size() == 1) {
-                // One match, adding new IDs to IDsHandler and new entries to idsMap
-                IDsHandler matchedIdsH = matchingHandlers.iterator().next()
-
-                for (ID id: idsH.uids) {
-                    if (!matchedIdsH.hasUid(id)) {
-                        matchedIdsH.addUid(id)
-                        this.idsMap.add(id, matchedIdsH)
-                    }
-                }
-            } else {
-                // Multiple matches, merging IDsHandler
-                IDsHandler mergedHandler = null
-                for (IDsHandler idsHToMerge: matchingHandlers) {
-                    if (mergedHandler == null) {
-                        mergedHandler = idsHToMerge
-                    } else {
-                        mergedHandler.mergeHandlers(idsHToMerge)
-                    }
-                }
-
-                // Replacing/adding entries in idsMap
-                for (ID id: mergedHandler.uids) {
-                    this.idsMap.put(id, mergedHandler)
-                }
-            }
-
-            // TODO: at the end, pick a primaryId?
+        if (!added) {
+            this.noUidsIdsHandlers.add(idsH)
         }
-    }
-
-    Set<IDsHandler> getMatchingIDs(IDsHandler idsH) {
-        Set<IDsHandler> matchingHandlers = new HashSet<IDsHandler>()
-
-        if (idsH != null) {
-            for (ID id : idsH.uids) {
-                if (this.idsMap.containsId(id)) {
-                    matchingHandlers.add(this.idsMap.get(id))
-                }
-            }
-        }
-
-        return matchingHandlers
     }
 
     void parseWho(Path dataFP, Path headersFP) {
@@ -226,9 +177,11 @@ class BuildIdFileTask {
                     }
                 }
                 ids.add(bridgingFlag)
-                ids.add(trialID)
 
-                this.addToIdsMap(ids)
+                IDsHandler idsH = new IDsHandler(ConverterCVT.SOURCE_NAME_WHO, trialID, true)
+                idsH.addIds(ids)
+
+                this.addToIdsMap(idsH)
             } else {
                 skipNext = false
             }
@@ -288,9 +241,11 @@ class BuildIdFileTask {
                                 ids = new HashSet<String>()
                             }
 
-                            ids.add(idModule.nctId)
+                            ID nctId = new ID(idModule.nctId, ConverterCVT.ID_SOURCE_CTG, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true)
+                            IDsHandler idsH = new IDsHandler(ConverterCVT.SOURCE_NAME_CTG, nctId, true)
+                            idsH.addIds(ids)
 
-                            this.addToIdsMap(idModule.nctId, ids)
+                            this.addToIdsMap(idsH)
                         }
                     }
                 } catch (JSONException e) {
@@ -326,7 +281,7 @@ class BuildIdFileTask {
                     String baseID = trialID.substring(0, 14)
 
                     ID id = new ID(baseID, ConverterCVT.ID_SOURCE_CTIS, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true)
-                    IDsHandler idsH = new IDsHandler(null, id)
+                    IDsHandler idsH = new IDsHandler(ConverterCVT.SOURCE_NAME_CTIS, id, true)
 
                     this.addToIdsMap(idsH)
                 } else {
@@ -389,7 +344,7 @@ class BuildIdFileTask {
                                 primaryId = new ID(cleanID, ConverterCVT.ID_SOURCE_EUCTR, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true)
                             }
 
-                            idsH = new IDsHandler(null, primaryId)
+                            idsH = new IDsHandler(ConverterCVT.SOURCE_NAME_EUCTR, primaryId, true)
 
                             Set<String> ids = new HashSet<String>()
 
@@ -459,10 +414,8 @@ class BuildIdFileTask {
                 // HLB00510606a) have been found to change over time [...]. They can therefore
                 // not be used as an identifier"
                 ID biolinccID = new ID(accessionNumber, ConverterCVT.ID_SOURCE_NHLBI, ConverterCVT.ID_TYPE_BIOLINCC, false)
+                idsH = new IDsHandler(ConverterCVT.SOURCE_NAME_BIOLINCC, nctIds)
 
-                idsH = new IDsHandler(null, nctIds)
-
-                // TODO: useless?
                 idsH.addId(biolinccID)
 
                 this.addToIdsMap(idsH)
@@ -617,6 +570,17 @@ class BuildIdFileTask {
         BufferedWriter fos = new BufferedWriter(new FileWriter(idFP, true))
         for (IDsHandler idsH: idsHSet) {
             String idfs = idsH.getIdFileString()
+            if (!idfs.isEmpty()) {
+                fos.write(idfs + '\n')
+            }
+        }
+        fos.close()
+    }
+
+    void writeNonUidFile(String nonUidFP) {
+        BufferedWriter fos = new BufferedWriter(new FileWriter(nonUidFP, true))
+        for (IDsHandler idsH: this.noUidsIdsHandlers) {
+            String idfs = idsH.getNonUidFileString()
             if (!idfs.isEmpty()) {
                 fos.write(idfs + '\n')
             }

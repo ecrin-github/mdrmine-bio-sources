@@ -28,9 +28,9 @@ sourceSets {
 }
 
 dependencies {
+    compile project(':models')
     implementation gradleApi()
     implementation localGroovy()
-    compile project(':models')
     compile group: 'com.opencsv', name: 'opencsv', version: '5.9'
     compile group: "org.intermine", name: "plugin", version: System.getProperty("imVersion")
 }

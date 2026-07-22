@@ -18,6 +18,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -63,29 +64,48 @@ public class ConverterUtils {
     /*
      * Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html
      */
-    public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
+    public static final Set<String> dummyIDs = Set.of("NCT00000000", "NCT12345678", "ISRCTN00000000", "ISRCTN12345678",
+            "U0000-0000-0000", "U1234-1234-1234");
+    public static final Pattern P_ANZCTR_ID = Pattern.compile(".*ACTRN(?:\\s|0)?(\\d{14}).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_CHICTR_ID = Pattern.compile(".*(Chi(M)?CTR[^\\s,;]+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_CRIS_ID = Pattern.compile(".*\\b(KCT\\d+)[\\s]*$", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_CTRI_ID = Pattern.compile(".*(CTRI\\/\\d{4}\\/\\d{2,3}\\/\\d+).*",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_DRKS_ID = Pattern.compile(".*DRKS.*(\\d{8}).*", Pattern.CASE_INSENSITIVE);
     // Both EUCTR and CTIS (they might have the same format)
     public static final Pattern P_EU_ID = Pattern
-            .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?");
-    public static final Pattern P_UTRN_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
+            .compile(".*(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?.*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_IRCT_ID = Pattern.compile(".*(IRCT\\d+N\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_ISRCTN_ID = Pattern.compile(".*ISRCTN.*(\\d{8}).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_ITMCTR_ID = Pattern.compile("ITMCTR\\d+", Pattern.CASE_INSENSITIVE);
+    // Includes UMIN, jRCT and all JPRN IDs
+    public static final Pattern P_JPRN_ID = Pattern.compile(".*((?:UMIN|jRCTs?)\\d+)|(JPRN-(?!JPRN)[^\\s]*).*",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_LBCTR_ID = Pattern.compile("LBCTR\\d+", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_NCT_ID = Pattern.compile(".*(NCT\\d{8}).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_NTR_ID = Pattern.compile(".*\\b(NTR|NL)[\\s:]*?(\\d+)\\b.*",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_OMON_ID = Pattern.compile(".*\\b(OMON\\d{5})\\b.*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_PACTR_ID = Pattern.compile(".*(PACTR\\s*\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_REBEC_ID = Pattern.compile("^(RBR-\\w+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_REPEC_ID = Pattern.compile(".*\\b(PER-\\d+-\\d+(?:-[A-Z])?)",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_RPCEC_ID = Pattern.compile("RPCEC\\d+", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_SLCTR_ID = Pattern.compile(".*(SLCTR\\/\\d{4}\\/\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_SNCTP_ID = Pattern.compile(".*(SNCTP\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_TCTR_ID = Pattern.compile(".*\\b(TCTR\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_UTN_ID = Pattern.compile(".*(U\\d{4}-\\d{4}-\\d{4}).*", Pattern.CASE_INSENSITIVE);
     public static final Pattern P_PUBMED_ID = Pattern.compile(".*pubmed.*\\/([^?\\/]+).*");
     public static final Pattern P_ID_AT_END_OF_URL = Pattern.compile(".*\\/([^?\\/]+).*");
-    // public static final Pattern P_ANZCTR_ID = Pattern.compile();
-    // public static final Pattern P_CHICTR_ID = Pattern.compile();
-    // public static final Pattern P_CRIS_ID = Pattern.compile();
-    // public static final Pattern P_CTRI_ID = Pattern.compile();
-    // public static final Pattern P_DRKS_ID = Pattern.compile();
-    // public static final Pattern P_IRCT_ID = Pattern.compile();
-    // public static final Pattern P_ISRCTN_ID = Pattern.compile();
-    // public static final Pattern P_ITMCTR_ID = Pattern.compile();
-    // public static final Pattern P_JRCT_ID = Pattern.compile();
-    // public static final Pattern P_LBCTR_ID = Pattern.compile();
-    // public static final Pattern P_TCTR_ID = Pattern.compile();
-    // public static final Pattern P_PACTR_ID = Pattern.compile();
-    // public static final Pattern P_REBEC_ID = Pattern.compile();
-    // public static final Pattern P_REPEC_ID = Pattern.compile();
-    // public static final Pattern P_RPCEC_ID = Pattern.compile();
-    // public static final Pattern P_SLCTR_ID = Pattern.compile();
+    public static final Pattern P_ID_GARBAGE = Pattern.compile(
+            "(?:[^\\w\\n]+)?(?:ND|no|[-\\/.]|ooo|N[\\/.]?A\\.?|NIL.*|NONE.*|NOT\\s+.*|.*aangevraagd.*)",
+            Pattern.CASE_INSENSITIVE);
+    // TODO: SNCTP
+    public static final List<Pattern> REGISTRY_ID_PATTERNS = Arrays.asList(
+            P_NCT_ID, P_EU_ID, P_UTN_ID, P_ISRCTN_ID, P_ANZCTR_ID, P_CTRI_ID, P_DRKS_ID, P_JPRN_ID, P_REBEC_ID,
+            P_CHICTR_ID, P_CRIS_ID, P_RPCEC_ID, P_IRCT_ID, P_PACTR_ID, P_REPEC_ID, P_LBCTR_ID, P_SLCTR_ID, P_TCTR_ID,
+            P_ITMCTR_ID, P_SNCTP_ID, P_NTR_ID, P_OMON_ID);
+
     public static final Pattern P_EMAIL = Pattern.compile("^[^@]+@[^.]+\\..+");
 
     /**
@@ -128,6 +148,80 @@ public class ConverterUtils {
             }
             return allCDs;
         }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param idsMap
+     * @param idsH
+     * @return
+     */
+    public static Set<IDsHandler> getMatchingIDs(IDsMap idsMap, IDsHandler idsH) {
+        Set<IDsHandler> matchingHandlers = new HashSet<IDsHandler>();
+
+        if (idsH != null) {
+            for (ID id : idsH.uids) {
+                if (idsMap.containsId(id)) {
+                    matchingHandlers.add(idsMap.get(id));
+                }
+            }
+        }
+
+        return matchingHandlers;
+    }
+
+    /**
+     * TODO
+     * 
+     * @param idsMap
+     * @param idsH
+     * @return
+     * @throws Exception
+     */
+    public static boolean addToIdsMap(IDsMap idsMap, IDsHandler idsH) throws Exception {
+        boolean added = false;
+
+        // Only proceeding if there is at least one unique id
+        if (idsH.uids.size() > 0) {
+            added = true;
+
+            Set<IDsHandler> matchingHandlers = ConverterUtils.getMatchingIDs(idsMap, idsH);
+
+            if (matchingHandlers.size() == 0) {
+                // No matches, simply adding entries to idsMap
+                for (ID id : idsH.uids) {
+                    idsMap.add(id, idsH);
+                }
+            } else if (matchingHandlers.size() == 1) {
+                // One match, adding new IDs to IDsHandler and new entries to idsMap
+                IDsHandler matchedIdsH = matchingHandlers.iterator().next();
+
+                for (ID id : idsH.uids) {
+                    if (!matchedIdsH.hasUid(id)) {
+                        matchedIdsH.addId(id);
+                        idsMap.add(id, matchedIdsH);
+                    }
+                }
+            } else {
+                // Multiple matches, merging IDsHandler
+                IDsHandler mergedHandler = null;
+                for (IDsHandler idsHToMerge : matchingHandlers) {
+                    if (mergedHandler == null) {
+                        mergedHandler = idsHToMerge;
+                    } else {
+                        mergedHandler.mergeHandlers(idsHToMerge);
+                    }
+                }
+
+                // Replacing/adding entries in idsMap
+                for (ID id : mergedHandler.uids) {
+                    idsMap.put(id, mergedHandler);
+                }
+            }
+        }
+
+        return added;
     }
 
     /**
@@ -712,9 +806,9 @@ public class ConverterUtils {
                 }
             }
 
-            if (date == null) {
-                System.err.println("parseDate(): couldn't parse date: " + dateStr);
-            }
+            // if (date == null) {
+            // System.err.println("parseDate(): couldn't parse date: " + dateStr);
+            // }
         }
 
         return date;
@@ -723,10 +817,7 @@ public class ConverterUtils {
     public static Matcher getMatchingIdMatcher(String id) {
         Matcher m = null;
 
-        // TODO: add more patterns
-        List<Pattern> patterns = Arrays.asList(
-                P_NCT_ID, P_EU_ID);
-        for (Pattern p : patterns) {
+        for (Pattern p : REGISTRY_ID_PATTERNS) {
             m = p.matcher(id);
 
             if (m.matches()) {
@@ -759,7 +850,7 @@ public class ConverterUtils {
      * TODO
      * Method infers, when possible, ID type, source, and uniqueness
      */
-    public static ID createStudyID(String id) {
+    public static ID createID(String id) {
         ID studyIdentifier = null;
 
         if (!ConverterUtils.isBlankOrNull(id)) {
@@ -774,14 +865,14 @@ public class ConverterUtils {
 
             if (m != null) { // Found a matching ID pattern
                 unique = true;
+                type = ConverterCVT.ID_TYPE_TRIAL_REGISTRY;
+
                 Pattern p = m.pattern();
 
                 if (p == ConverterUtils.P_NCT_ID) {
-                    type = ConverterCVT.ID_TYPE_TRIAL_REGISTRY;
+                    idValue = m.group(1);
                     source = ConverterCVT.ID_SOURCE_CTG;
                 } else if (p == ConverterUtils.P_EU_ID) {
-                    type = ConverterCVT.ID_TYPE_TRIAL_REGISTRY;
-
                     idValue = m.group(3);
                     String ctisPrefix = m.group(1);
                     String euctrPrefix = m.group(2);
@@ -801,214 +892,86 @@ public class ConverterUtils {
                     } else { // Undistinguishable ID
                         source = ConverterCVT.ID_SOURCE_AMBIG_EU;
                     }
+                } else if (p == ConverterUtils.P_ISRCTN_ID) {
+                    idValue = "ISRCTN" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_ISRCTN;
+                } else if (p == ConverterUtils.P_UTN_ID) {
+                    // TODO: missing a few cases with space after U and spaces around hyphens
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_WHO;
+                } else if (p == ConverterUtils.P_ANZCTR_ID) {
+                    // TODO: missing a few cases where prefix is ANZCTR instead of ACTRN
+                    idValue = "ACTRN" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_ANZCTR;
+                } else if (p == ConverterUtils.P_DRKS_ID) {
+                    idValue = "DRKS" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_DRKS;
+                } else if (p == ConverterUtils.P_CTRI_ID) {
+                    // TODO: missing very few cases where slashes are missing or the 1st slash is a
+                    // whitespace instead
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_CTRI;
+                } else if (p == ConverterUtils.P_JPRN_ID) {
+                    // TODO: missing very few cases such as "UMIN_ID:C000000091"
+                    String noPrefixId = m.group(1);
+                    String idWithPrefix = m.group(2);
+
+                    // Prefixing all IDs (UMIN, jRCT(s), JapicCTI, etc.) with JPRN-
+                    if (noPrefixId != null) {
+                        idValue = "JPRN-" + noPrefixId;
+                    } else {
+                        idValue = idWithPrefix;
+                    }
+                } else if (p == ConverterUtils.P_REBEC_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_REBEC;
+                } else if (p == ConverterUtils.P_CHICTR_ID) {
+                    // Note: unsure how CHIMCTR and CHICTR differ, possibly a EUCTR/CTIS situation?
+                    idValue = m.group(1);
+                    if (m.group(2) == null) { // ChiCTR ID
+                        source = ConverterCVT.ID_SOURCE_CHICTR;
+                    } else { // ChiMCTR ID
+                        source = ConverterCVT.ID_SOURCE_CHIMCTR;
+                    }
+                } else if (p == ConverterUtils.P_CRIS_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_CRIS;
+                } else if (p == ConverterUtils.P_RPCEC_ID) {
+                    source = ConverterCVT.ID_SOURCE_RPCEC;
+                } else if (p == ConverterUtils.P_IRCT_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_IRCT;
+                } else if (p == ConverterUtils.P_PACTR_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_PACTR;
+                } else if (p == ConverterUtils.P_REPEC_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_REPEC;
+                } else if (p == ConverterUtils.P_LBCTR_ID) {
+                    source = ConverterCVT.ID_SOURCE_LBCTR;
+                } else if (p == ConverterUtils.P_SLCTR_ID) {
+                    // TODO: missing very few cases with whitespace before first slash
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_SLCTR;
+                } else if (p == ConverterUtils.P_TCTR_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_TCTR;
+                } else if (p == ConverterUtils.P_ITMCTR_ID) {
+                    source = ConverterCVT.ID_SOURCE_ITMCTR;
+                } else if (p == ConverterUtils.P_SNCTP_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_SNCTP;
+                } else if (p == ConverterUtils.P_NTR_ID) {
+                    // Note: missing some IDs registered in various free-text formats
+                    // Note 2: NTR prefix seems to be for older IDs and NL prefix for newer ones
+                    // (even though it is also obsolete and is OMON now)
+                    // See page 10: https://onderzoekmetmensen.nl/nl/node/24969/pdf
+                    idValue = m.group(1) + m.group(2);
+                    source = ConverterCVT.ID_SOURCE_NTR;
+                } else if (p == ConverterUtils.P_OMON_ID) {
+                    idValue = "NL-" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_OMON;
                 }
-
-                // else if (sec_id.Contains("ISRCTN"))
-                // {
-                // interim_id = sec_id.Replace("ISRCTN ", "ISRCTN");
-                // interim_id = interim_id.Replace("(ISRCTN)", "");
-                // interim_id = interim_id.Replace("ISRCTN(International", "");
-                // interim_id = interim_id.Replace("ISRCTN: ", "ISRCTN");
-                // interim_id = interim_id.Replace("ISRCTNISRCTN", "ISRCTN");
-
-                // if (Regex.Match(interim_id, @"ISRCTN[0-9]{8}").Success)
-                // {
-                // processed_id = Regex.Match(interim_id, @"ISRCTN[0-9]{8}").Value;
-                // sec_id_source = 100126;
-                // sec_id_type_id = 11;
-                // }
-                // }
-
-                // else if (Regex.Match(sec_id, @"ACTRN[0-9]{14}").Success)
-                // {
-                // processed_id = Regex.Match(sec_id, @"ACTRN[0-9]{14}").Value;
-                // sec_id_source = 100116;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (Regex.Match(sec_id, @"DRKS[0-9]{8}").Success)
-                // {
-                // processed_id = Regex.Match(sec_id, @"DRKS[0-9]{8}").Value;
-                // sec_id_source = 100124;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (Regex.Match(sec_id, @"CTRI/[0-9]{4}/[0-9]{2,3}/[0-9]{6}").Success)
-                // {
-                // processed_id = Regex.Match(sec_id,
-                // @"CTRI/[0-9]{4}/[0-9]{2,3}/[0-9]{6}").Value;
-                // processed_id = processed_id.Replace('/', '-'); // internal representation for
-                // CTRI
-                // sec_id_source = 100121;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (Regex.Match(sec_id, @"1111-[0-9]{4}-[0-9]{4}").Success)
-                // {
-                // processed_id = "U" + Regex.Match(sec_id, @"1111-[0-9]{4}-[0-9]{4}").Value;
-                // sec_id_source = 100115;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (Regex.Match(sec_id, @"UMIN[0-9]{9}").Success || Regex.Match(sec_id,
-                // @"UMIN-CTR[0-9]{9}").Success)
-                // {
-                // processed_id = "JPRN-UMIN" + Regex.Match(sec_id, @"[0-9]{9}").Value;
-                // sec_id_source = 100127;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (Regex.Match(sec_id, @"jRCTs[0-9]{9}").Success)
-                // {
-                // processed_id = "JPRN-jRCTs" + Regex.Match(sec_id, @"[0-9]{9}").Value;
-                // sec_id_source = 100127;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (Regex.Match(sec_id, @"jRCT[0-9]{10}").Success)
-                // {
-                // processed_id = "JPRN-jRCT" + Regex.Match(sec_id, @"[0-9]{10}").Value;
-                // sec_id_source = 100127;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("JPRN"))
-                // {
-                // if (Regex.Match(sec_id, @"^[0-9]{8}$").Success)
-                // {
-                // processed_id = "JPRN-UMIN" + Regex.Match(sec_id, @"[0-9]{8}").Value;
-                // sec_id_source = 100127;
-                // sec_id_type_id = 11;
-                // }
-                // else
-                // {
-                // processed_id = sec_id;
-                // sec_id_source = 100127;
-                // sec_id_type_id = 11;
-                // }
-                // }
-
-                // else if (sec_id.StartsWith("RBR"))
-                // {
-                // sec_id_source = 100117;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("ChiCTR"))
-                // {
-                // sec_id_source = 100118;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("ChiMCTR"))
-                // {
-                // sec_id_source = 104545;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("KCT"))
-                // {
-                // sec_id_source = 100119;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("RPCEC"))
-                // {
-                // sec_id_source = 100122;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("DRKS"))
-                // {
-                // sec_id_source = 100124;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("IRCT"))
-                // {
-                // sec_id_source = 100125;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("PACTR"))
-                // {
-                // sec_id_source = 100128;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("PER"))
-                // {
-                // sec_id_source = 100129;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("SLCTR"))
-                // {
-                // sec_id_source = 100130;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("TCTR"))
-                // {
-                // sec_id_source = 100131;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // // Avoid Dutch CCMO numbers, which also start with NL, by regex tests
-
-                // else if (sec_id.StartsWith("NL") && Regex.Match(sec_id,
-                // @"^NL\d{1,4}$").Success)
-                // {
-                // sec_id_source = 100132;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // else if (sec_id.StartsWith("NTR") && Regex.Match(sec_id,
-                // @"^NTR\d{1,4}$").Success)
-                // {
-                // sec_id_source = 100132;
-                // processed_id = sec_id;
-                // sec_id_type_id = 45; // obsolete dutch registry id
-                // }
-
-                // else if (sec_id.StartsWith("LBCTR"))
-                // {
-                // sec_id_source = 101989;
-                // processed_id = sec_id;
-                // sec_id_type_id = 11;
-                // }
-
-                // if (sd_sid.StartsWith("RBR"))
-                // {
-                // // Extract Brazilian ethics Ids
-
-                // if (Regex.Match(sec_id, @"[0-9]{8}.[0-9].[0-9]{4}.[0-9]{4}").Success)
-                // {
-                // sec_id_source = 102000; // Brazilian regulatory authority, ANVISA
-                // processed_id = Regex.Match(sec_id,
-                // @"[0-9]{8}.[0-9].[0-9]{4}.[0-9]{4}").Value;
-                // sec_id_type_id = 41;
-                // }
-
-                // if (Regex.Match(sec_id, @"[0-9].[0-9]{3}.[0-9]{3}").Success)
-                // {
-                // sec_id_source = 102001; // Brazilian ethics committee approval number
-                // processed_id = Regex.Match(sec_id, @"[0-9].[0-9]{3}.[0-9]{3}").Value;
-                // sec_id_type_id = 12;
-                // }
-                // }
             }
 
             studyIdentifier = new ID(idValue, source, type, unique);
