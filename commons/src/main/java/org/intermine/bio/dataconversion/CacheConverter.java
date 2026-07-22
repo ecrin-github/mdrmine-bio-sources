@@ -801,7 +801,6 @@ public abstract class CacheConverter extends BaseConverter {
 
         /* Creating or using existing study */
         if (storedHandler == null) { // New study
-            this.writeLog("Creating study");
             study = this.createItem("Study");
 
             // Setting primaryIdentifier
@@ -832,7 +831,6 @@ public abstract class CacheConverter extends BaseConverter {
             // Cache study
             this.studies.put(idsH, study);
         } else { // Existing study
-            this.writeLog("Reusing study");
             this.existingStudy = this.studies.get(storedHandler);
             study = this.existingStudy;
 
