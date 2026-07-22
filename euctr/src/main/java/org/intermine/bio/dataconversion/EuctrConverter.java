@@ -66,8 +66,6 @@ public class EuctrConverter extends CacheConverter {
     // Does not match "EU ET No.", matches "EUROPA TRIAL" and "Master Protocol
     // EU-SolidAct v2.0" (both should only appear once in the data)
     public static final Pattern P_EUCTR_ISS_AUTH = Pattern.compile(".*EU\\s*.*(?:CT|Clinical|trial).*");
-    private static final Set<String> dummyIDs = Set.of("ISRCTN00000000", "NCT00000000", "ISRCTN12345678",
-            "NCT12345678");
 
     private static final String FEATURE_YES = "yes";
     private static final String FEATURE_NO = "no";
@@ -138,6 +136,7 @@ public class EuctrConverter extends CacheConverter {
 
         IDsHandler idsH = this.parseTrialIDs(trial);
         Item study = this.getOrCreateStudyWithIDs(idsH);
+        this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
         String trialUrl = this.getAndCleanValue(mainInfo, "url");
 
@@ -1246,8 +1245,10 @@ public class EuctrConverter extends CacheConverter {
                 secId = secIdObj.getSecondaryId();
 
                 mNA = P_ID_NA.matcher(secId); // Filtering out N/A and similar values from IDs
-                if (!mNA.matches() && !seenIds.contains(secId) && !dummyIDs.contains(secId)) { // Also filtering out
-                                                                                               // seen and "dummy" IDs
+                if (!mNA.matches() && !seenIds.contains(secId) && !ConverterUtils.dummyIDs.contains(secId)) { // Also
+                                                                                                              // filtering
+                                                                                                              // out
+                    // seen and "dummy" IDs
                     issAuth = secIdObj.getIssuingAuthority();
 
                     // Creating protocol SO if ID is of type "Sponsor Protocol Code"

@@ -37,14 +37,16 @@ public abstract class CacheConverter extends BaseConverter {
                                        // current one
     protected Item currentCountry; // When parsing existing EUCTR study, country associated with country code
 
+    protected String TAXON_ID = "1312";
+    protected String RESOLVER_CLASS_NAME = "Study";
+    protected IdResolver trialIdResolver = IdResolverService.getClinicalTrialIdResolver(RESOLVER_CLASS_NAME);
+
     /* Saving all items for later modification and storing at the end */
     // Warning: map variable names need to match collection names in model (TODO: be
     // more precise)
 
     // Study and IDs
     protected Map<IDsHandler, Item> studies = new HashMap<IDsHandler, Item>(); // Cache of studies, key is IDsHandler
-    // (not Item or DB id)
-    protected Set<Item> studiesWithNoID = new HashSet<Item>();
     protected IDsMap idsMap = IDsMap.getIDsMap();
 
     // Study-related classes
@@ -94,10 +96,6 @@ public abstract class CacheConverter extends BaseConverter {
          */
         this.startLogging(this.dataSourceName);
         this.loadCountries();
-
-        this.writeLog("Loading IDs from previous sources");
-        this.loadPreviousSourcesStudyIds();
-        this.writeLog("Loaded " + this.idsMap.size() + " IDs from previous sources");
 
         // Parsing in subclass
         this.parseData(reader);
@@ -254,7 +252,7 @@ public abstract class CacheConverter extends BaseConverter {
             for (Set<Item> items : itemMap.values()) {
                 for (Item item : items) {
                     if (!seenIds.contains(item.getIdentifier())) {
-                        this.writeLog("Storing item: " + item.toString());
+                        // this.writeLog("Storing item: " + item.toString());
                         store(item);
                         seenIds.add(item.getIdentifier());
                     }
@@ -267,13 +265,6 @@ public abstract class CacheConverter extends BaseConverter {
         // TODO: check for duplicates? (as in, with the various studies IDs) and don't
         // store them
         for (Item study : this.studies.values()) {
-            if (!seenIds.contains(study.getIdentifier())) {
-                store(study);
-                seenIds.add(study.getIdentifier());
-            }
-        }
-        // Adding studies with no ID
-        for (Item study : this.studiesWithNoID) {
             if (!seenIds.contains(study.getIdentifier())) {
                 store(study);
                 seenIds.add(study.getIdentifier());
@@ -300,16 +291,20 @@ public abstract class CacheConverter extends BaseConverter {
 
     public void clearMaps() {
         this.studies = null;
-        this.studiesWithNoID = null;
+        this.idsMap = null;
+
         this.studyConditions = null;
         this.allConditions = null;
-        this.studyCountries = null;
-        this.studyFeatures = null;
-        this.studyIdentifiers = null;
-        this.publications = null;
-        this.studySites = null;
         this.interventions = null;
         this.allInterventions = null;
+        this.studyCountries = null;
+        this.countriesMap = null;
+        this.countries = null;
+        this.studyFeatures = null;
+        this.studyIdentifiers = null;
+        this.studySites = null;
+        this.publications = null;
+
         this.resultsSummaries = null;
         this.protocols = null;
         this.statisticalAnalysisPlans = null;
@@ -317,10 +312,11 @@ public abstract class CacheConverter extends BaseConverter {
         this.ethicsApprovalNotifications = null;
         this.individualParticipantData = null;
         this.biosamples = null;
-        this.relationships = null;
         this.datasets = null;
+
         this.organisations = null;
         this.people = null;
+        this.relationships = null;
     }
 
     /**
@@ -578,23 +574,7 @@ public abstract class CacheConverter extends BaseConverter {
 
     /**
      * TODO
-     * 
-     * @param studyIds
-     * @param primaryId
-     * @param dataSource
-     */
-    public void addCachedStudyToIdsMap(List<StudyIdentifier> studyIds, String primaryId, String dataSource) {
-        this.writeLog("add cached study to ids map");
-        IDsHandler idsH = new IDsHandler(dataSource, primaryId, studyIds);
-        for (ID id : idsH.uids) {
-            this.writeLog("adding uid: " + id.getId());
-            // TODO
-            // this.idsMap.add(id, idsH);
-        }
-    }
-
-    /**
-     * TODO
+     * Note: unused but keeping it in case
      * 
      * @throws Exception
      */
@@ -644,7 +624,8 @@ public abstract class CacheConverter extends BaseConverter {
                         // Constructing an IDsHandler from the previous study IDs before moving on to
                         // current study
                         // TODO
-                        this.addCachedStudyToIdsMap(studyIds, currentStudy.getPrimaryIdentifier(), "test");
+                        // this.addCachedStudyToIdsMap(studyIds, currentStudy.getPrimaryIdentifier(),
+                        // "test");
                         this.writeLog("Constructed idshandler 1");
                     } else {
                         this.writeLog(
@@ -670,7 +651,8 @@ public abstract class CacheConverter extends BaseConverter {
 
         // Constructing an IDsHandler with the last study IDs
         if (currentStudy != null && studyIds.size() > 0) {
-            this.addCachedStudyToIdsMap(studyIds, currentStudy.getPrimaryIdentifier(), "test");
+            // this.addCachedStudyToIdsMap(studyIds, currentStudy.getPrimaryIdentifier(),
+            // "test");
             this.writeLog("Constructed idshandler 2");
         }
     }
@@ -703,7 +685,7 @@ public abstract class CacheConverter extends BaseConverter {
                     }
                 }
 
-                idsH = new IDsHandler(this.dataSourceName, primaryId, ids);
+                idsH = new IDsHandler(this.dataSourceName, ids);
             } else {
                 this.writeLog("Warning: tried to add a study with no primaryIdentifier to idsMap: " + study.toString());
             }
@@ -718,19 +700,21 @@ public abstract class CacheConverter extends BaseConverter {
      * @param idsH
      * @return
      */
-    public Set<IDsHandler> getMatchingIDs(IDsHandler idsH) {
-        Set<IDsHandler> matchingHandlers = new HashSet<IDsHandler>();
+    public String getStudyPrimaryId(IDsHandler idsH) {
+        String primaryId = null;
 
-        if (idsH != null) {
-            for (ID id : idsH.uids) {
-                if (this.idsMap.containsId(id)) {
-                    // TODO
-                    // matchingHandlers.addAll(this.idsMap.get(id));
+        for (ID id : idsH.getUids()) {
+            Set<String> ids = this.trialIdResolver.resolveId(TAXON_ID, RESOLVER_CLASS_NAME, id.getId());
+            if (ids.size() > 0) {
+                if (ids.size() > 1) {
+                    this.writeLog("Error: found multiple ID resolver entries for id: " + id.getId());
                 }
+                primaryId = ids.iterator().next();
+                break;
             }
         }
 
-        return matchingHandlers;
+        return primaryId;
     }
 
     /**
@@ -774,120 +758,72 @@ public abstract class CacheConverter extends BaseConverter {
 
         Item study = null;
 
-        IDsHandler currSourceH = null;
-        IDsHandler prevSourcesH = null;
+        IDsHandler storedHandler = null;
 
-        Set<IDsHandler> matchingHandlers = this.getMatchingIDs(idsH);
+        if (idsH != null & idsH.hasAnyUid()) {
+            String primaryId = this.getStudyPrimaryId(idsH);
 
-        if (matchingHandlers.size() > 0) {
-            this.writeLog("Found at least one matching handler");
-            Set<IDsHandler> currentSource = new HashSet<IDsHandler>();
-            Set<IDsHandler> previousSources = new HashSet<IDsHandler>();
-
-            for (IDsHandler mH : matchingHandlers) {
-                this.writeLog("going through matchinghandlers: " + mH);
-                if (this.dataSourceName.equals(mH.dataSource)) {
-                    currentSource.add(mH);
-                } else {
-                    previousSources.add(mH);
-                }
+            /* Attempting to resolve with IdResolver */
+            if (!ConverterUtils.isBlankOrNull(primaryId)) {
+                idsH.setPrimaryIdentifier(primaryId);
+                Set<String> otherUids = this.trialIdResolver.getSynonyms(TAXON_ID, RESOLVER_CLASS_NAME, primaryId);
+                // TODO: might be costly
+                idsH.addIds(otherUids);
             }
 
-            // Same source merging
-            if (!currentSource.isEmpty()) {
-                Set<ID> collectedUids = new HashSet<ID>();
+            /* Checking for existing studies */
+            Set<IDsHandler> storedHandlers = ConverterUtils.getMatchingIDs(this.idsMap, idsH);
 
-                this.writeLog("Found at least one matching handler from same source");
-                if (currentSource.size() > 1) {
-                    this.writeLog("Found multiple matching studies from this source, picking one of them");
+            if (storedHandlers.size() > 0) {
+                if (storedHandlers.size() > 1) {
+                    this.writeLog("Found multiple matching handlers from this source, picking one of them");
 
-                    for (IDsHandler handler : currentSource) {
-                        if (currSourceH == null) {
-                            currSourceH = handler;
+                    for (IDsHandler handler : storedHandlers) {
+                        if (storedHandler == null) {
+                            storedHandler = handler;
                         } else {
                             // TODO: ideally local merge with previous study
                             this.removeStudyAndLinkedItems(handler);
-                        }
 
-                        // Adding all IDs to current IDsHandler
-                        if (handler.uids != null) {
-                            collectedUids.addAll(handler.uids);
-                        }
-                    }
-                } else { // One study
-                    currSourceH = currentSource.iterator().next();
-
-                    if (currSourceH.uids != null) {
-                        collectedUids.addAll(currSourceH.uids);
-                    }
-                }
-
-                // Using existing study
-                this.writeLog("Number of studies in studies: " + this.studies.size());
-                this.writeLog("Getting study with currSourceH: " + currSourceH.toString());
-                study = this.studies.get(currSourceH);
-                this.writeLog("study: " + study);
-
-                // Merging the current IDsHandler with the (picked) IDsHandler
-                this.writeLog("(same) setting idsH primaryId to " + currSourceH.primaryIdentifier);
-                idsH.addUids(collectedUids);
-                idsH.setPrimaryIdentifier(currSourceH.primaryIdentifier);
-                this.writeLog("idsH.primaryIdentifier: " + idsH.primaryIdentifier);
-            }
-
-            // Different source merging
-            if (!previousSources.isEmpty()) {
-                Set<ID> collectedUids = new HashSet<ID>();
-
-                this.writeLog("Found at least one matching handler from a different source");
-                if (previousSources.size() > 1) {
-                    for (IDsHandler handler : previousSources) {
-                        if (prevSourcesH == null) {
-                            prevSourcesH = handler;
-                        } else {
-                            // Align other studies' primary IDs with the picked one
-                            if (!handler.primaryIdentifier.equals(prevSourcesH.primaryIdentifier)) {
-                                this.modifyStoredStudyId(handler.primaryIdentifier,
-                                        prevSourcesH.primaryIdentifier);
+                            // Adding all other IDs to current IDsHandler
+                            if (handler.uids != null) {
+                                idsH.addUids(handler.uids);
+                                idsH.addNonUids(handler.nonUids);
                             }
                         }
-
-                        // Adding all IDs to current IDsHandler
-                        if (handler.uids != null) {
-                            collectedUids.addAll(handler.uids);
-                        }
                     }
                 } else { // One study
-                    prevSourcesH = previousSources.iterator().next();
-
-                    if (prevSourcesH.uids != null) {
-                        collectedUids.addAll(prevSourcesH.uids);
-                    }
+                    this.writeLog("Found one matching handler from same source");
+                    storedHandler = storedHandlers.iterator().next();
                 }
-
-                // Merging the current IDsHandler with the (picked) IDsHandler
-                idsH.addUids(collectedUids);
-                idsH.setPrimaryIdentifier(prevSourcesH.primaryIdentifier);
             }
         }
 
-        // Creating study if found no match or one or more matches from previous sources
-        if (study == null) {
-            this.writeLog("creating study");
+        /* Creating or using existing study */
+        if (storedHandler == null) { // New study
+            this.writeLog("Creating study");
             study = this.createItem("Study");
+
+            // Setting primaryIdentifier
+            if (!ConverterUtils.isBlankOrNull(idsH.primaryIdentifier)) { // ID from IdResolver
+                study.setAttributeIfNotNull("primaryIdentifier", idsH.primaryIdentifier);
+            } else { // Otherwise, pick a UID if there is any
+                if (idsH.hasAnyUid()) {
+                    study.setAttributeIfNotNull("primaryIdentifier", idsH.getAnyUid().getId());
+                }
+            }
 
             // Creating StudyIdentifiers from IDs and adding entries to idsMap
             if (idsH.uids != null) {
                 for (ID id : idsH.uids) {
-                    this.writeLog("(different) add id to study: " + id.getId());
-                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(), id.getUnique());
+                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
+                            id.getUnique());
                     this.idsMap.add(id, idsH);
                 }
             }
 
             if (idsH.nonUids != null) {
                 for (ID id : idsH.nonUids) {
-                    this.writeLog("(different) add nonuid to study: " + id.getId());
                     this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
                             id.getUnique());
                 }
@@ -895,14 +831,22 @@ public abstract class CacheConverter extends BaseConverter {
 
             // Cache study
             this.studies.put(idsH, study);
-        } else { // Using existing study
-            this.writeLog("reusing study");
+        } else { // Existing study
+            this.writeLog("Reusing study");
+            this.existingStudy = this.studies.get(storedHandler);
+            study = this.existingStudy;
+
+            // Attempting to set a UID as primaryIdentifier is there is none
+            if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "primaryIdentifier"))
+                    && idsH.hasAnyUid()) {
+                study.setAttributeIfNotNull("primaryIdentifier", idsH.getAnyUid().getId());
+            }
+
             // Creating StudyIdentifiers from IDs that do not exist already in the existing
             // study and adding entries to idsMap
             if (idsH.uids != null) {
                 for (ID id : idsH.uids) {
-                    if (!currSourceH.hasUid(id)) {
-                        this.writeLog("(same) add id to study: " + id.getId());
+                    if (!storedHandler.hasUid(id)) {
                         this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
                                 id.getUnique());
                         this.idsMap.add(id, idsH);
@@ -912,19 +856,16 @@ public abstract class CacheConverter extends BaseConverter {
 
             if (idsH.nonUids != null) {
                 for (ID id : idsH.nonUids) {
-                    if (!currSourceH.hasNonUid(id)) {
-                        this.writeLog("(same) add nonuid to study: " + id.getId());
+                    if (!storedHandler.hasNonUid(id)) {
                         this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
                                 id.getUnique());
                     }
                 }
             }
+
+            // Adding added IDs to storedHandler (merging)
+            storedHandler.mergeHandlers(idsH);
         }
-
-        this.writeLog("setting primaryId to " + idsH.primaryIdentifier);
-
-        // Setting primary identifier (can not change)
-        study.setAttributeIfNotNull("primaryIdentifier", idsH.primaryIdentifier);
 
         return study;
     }

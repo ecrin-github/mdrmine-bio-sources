@@ -203,7 +203,7 @@ public class CtgConverter extends CacheConverter {
                 ids.add(idModule.nctId);
                 this.currentTrialID = idModule.nctId;
 
-                idsH = new IDsHandler(this.dataSourceName, this.currentTrialID, ids);
+                idsH = new IDsHandler(this.dataSourceName, ids);
             }
         }
 
@@ -996,7 +996,7 @@ public class CtgConverter extends CacheConverter {
      */
     public void createAndStoreRegistryEntrySO(Item study, CtgStudy ctgStudy)
             throws Exception {
-        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        String nctID = this.currentTrialID;
         if (!ConverterUtils.isBlankOrNull(nctID)) {
             String dateCreated = null;
             String datePublished = null;
@@ -1063,7 +1063,7 @@ public class CtgConverter extends CacheConverter {
      */
     public void createAndStoreResultsSummarySO(Item study, CtgStudy ctgStudy)
             throws Exception {
-        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        String nctID = this.currentTrialID;
         if (ctgStudy.hasResults && !ConverterUtils.isBlankOrNull(nctID)) {
             String dateCreated = null;
             String datePublished = null;
@@ -1204,7 +1204,7 @@ public class CtgConverter extends CacheConverter {
      * @throws Exception
      */
     public void parseStudyDocuments(Item study, CtgStudy ctgStudy) throws Exception {
-        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        String nctID = this.currentTrialID;
 
         if (!ConverterUtils.isBlankOrNull(nctID) && nctID.length() >= 2) {
             if (Optional.ofNullable(ctgStudy.documentSection)

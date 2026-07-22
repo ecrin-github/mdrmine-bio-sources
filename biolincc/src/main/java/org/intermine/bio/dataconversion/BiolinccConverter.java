@@ -121,6 +121,7 @@ public class BiolinccConverter extends CacheConverter {
         Set<String> nctIds = this.getNctIdsFromUrls(clinicalTrialUrls);
         IDsHandler idsH = this.parseTrialIDs(biolinccID, nctIds);
         Item study = this.getOrCreateStudyWithIDs(idsH);
+        this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
         // TODO: construct URLs and do something with them
         List<String> ctgUrls = null;

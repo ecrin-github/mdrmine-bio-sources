@@ -26,11 +26,8 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Class to parse values from a CTIS data file and store them as MDRMine items
@@ -118,15 +115,6 @@ public class CtisConverter extends CacheConverter {
             }
         }
 
-        // Item study = this.createItem("Study");
-        // study.setAttribute("primaryIdentifier", "2023-508884-59");
-        // store(study);
-
-        // ID id = new ID("2023-508884-59", "real", ConverterCVT.ID_TYPE_TRIAL_REGISTRY,
-        // true);
-        // this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(),
-        // id.getType(), id.getUnique());
-
         csvReader.close();
     }
 
@@ -149,9 +137,7 @@ public class CtisConverter extends CacheConverter {
             this.writeLog("Found study with no ID, skipping it");
         } else {
             Item study = this.getOrCreateStudyWithIDs(idsH);
-
-            this.createAndStoreStudyIdentifier(study, "TESTID", "The Source", ConverterCVT.ID_TYPE_TRIAL_REGISTRY,
-                    false);
+            this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
             /* Study title (need to get it before protocol SO) */
             String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
