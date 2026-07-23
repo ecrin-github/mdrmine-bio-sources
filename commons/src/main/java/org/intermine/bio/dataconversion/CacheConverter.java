@@ -724,35 +724,6 @@ public abstract class CacheConverter extends BaseConverter {
      * @return
      */
     public Item getOrCreateStudyWithIDs(IDsHandler idsH) throws Exception {
-        /*
-         * Case 1: No unique ID -> create study
-         * 
-         * Case 2: Nothing matching -> create study + set/create identifiers
-         * 
-         * Case 3: 1 match from previous source -> set current primaryIdentifier to
-         * match
-         * 
-         * Case 4: multiples matches from various sources -> align all primaryIdentifier
-         * (incl. current) to same ID (which one to pick?)
-         * 
-         * Case 5: 1 match from same source -> reuse existing + add any missing
-         * studyIdentifiers?
-         * 
-         * Case 6: 1 match from same source + one/multiples matches from previous
-         * sources
-         * -> Case 5 + Case 4
-         * 
-         * Case 7: multiple matches from same source -> pick one and remove the other
-         * ones, local merge if possible? + log
-         * 
-         * Case 8: multiples matches from same source + multiple matches from previous
-         * sources -> Case 7 + Case 4
-         * 
-         * CAVEAT: multiple trials in one source can refer to the same trial in another
-         * source, with the current solution they are merged but they shouldn't
-         * → this is a problem how which data source fields to consider IDs, not
-         * merging?
-         */
         // TODO: tests? to test merging
         this.existingStudy = null;
 
