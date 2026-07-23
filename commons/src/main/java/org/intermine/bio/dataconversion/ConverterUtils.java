@@ -922,6 +922,7 @@ public class ConverterUtils {
                     } else {
                         idValue = idWithPrefix;
                     }
+                    source = ConverterCVT.ID_SOURCE_JPRN;
                 } else if (p == ConverterUtils.P_REBEC_ID) {
                     idValue = m.group(1);
                     source = ConverterCVT.ID_SOURCE_REBEC;
