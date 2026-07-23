@@ -841,14 +841,15 @@ public abstract class CacheConverter extends BaseConverter {
             }
 
             // Creating StudyIdentifiers from IDs that do not exist already in the existing
-            // study and adding entries to idsMap
+            // study and adding or replacing entries to idsMap
             if (idsH.uids != null) {
                 for (ID id : idsH.uids) {
                     if (!storedHandler.hasUid(id)) {
                         this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
                                 id.getUnique());
-                        this.idsMap.add(id, idsH);
                     }
+                    // In any case, entries in the idsMap need to be added or replaced
+                    this.idsMap.put(id, storedHandler);
                 }
             }
 
