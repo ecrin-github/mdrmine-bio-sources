@@ -1,7 +1,6 @@
 package org.intermine.bio.dataconversion;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
-import com.google.common.base.Converter;
 
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
