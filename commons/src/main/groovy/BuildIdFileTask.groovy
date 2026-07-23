@@ -30,15 +30,18 @@ import org.intermine.plugin.project.Source
 
 class BuildIdFileTask {
 
-    private static final Pattern P_HEADER_BIOLINCC = Pattern.compile('\\w+.*')
-    private static final String ID_FILE_DIR = '/home/ubuntu/data/idfile'
-    File outputDir
+    String DEFAULT_LOG_DIR = '/home/ubuntu/mdrmine/logs'
+    String DEFAULT_OUTPUT_DIR = '/home/ubuntu/data/idfile'
+    Pattern P_HEADER_BIOLINCC = Pattern.compile('\\w+.*')
     IDsMap idsMap = IDsMap.getIDsMap()
     Set<IDsHandler> noUidsIdsHandlers = new HashSet<IDsHandler>()
     Logger logger = null
 
     // @TaskAction
     void run(project) {
+        String logDir = project.findProperty('logDir') ?: DEFAULT_LOG_DIR
+        String outputDir = project.findProperty('outputDir') ?: DEFAULT_OUTPUT_DIR
+
         String mineName = project.getProjectDir().getParentFile().getName().split('-')[0]
         String projectXml = project.getProjectDir().getParentFile().getParent() + File.separator + mineName + File.separator + 'project.xml'
 
@@ -46,8 +49,8 @@ class BuildIdFileTask {
         println "Fetching source data using ${projectXml}"
 
         // Creating ID file directory if not exists
-        Files.createDirectories(Paths.get(ID_FILE_DIR))
-        String idFileFP = ID_FILE_DIR + File.separator + ConverterUtils.getCurrentTimestamp() + '_id_file.tsv'
+        Files.createDirectories(Paths.get(outputDir))
+        String idFileFP = outputDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_id_file.tsv'
 
         imProject.sources.keySet().each { sourceNameV ->
             Source source = imProject.sources.get(sourceNameV)
@@ -56,12 +59,10 @@ class BuildIdFileTask {
             if (source != null && sourceName != null) {
                 String srcDataDir = BioSourceProperties.getUserProperty(source, 'src.data.dir')
                 String srcDataDirIncludes = BioSourceProperties.getUserProperty(source, 'src.data.dir.includes')
-                String logDir = BioSourceProperties.getUserProperty(source, 'logDir')
 
                 if (srcDataDir != null && !srcDataDir.isEmpty() && srcDataDirIncludes != null && !srcDataDirIncludes.isEmpty()) {
                     // Initialising logger
                     if (logger == null) {
-                        logDir = BioSourceProperties.getUserProperty(source, 'logDir')
                         logger = new Logger(logDir, 'id_file_builder')
                     }
 
@@ -70,7 +71,6 @@ class BuildIdFileTask {
                     println "Source: ${sourceName}"
                     println "src.data.dir: ${srcDataDir}"
                     println "src.data.dir.includes: ${srcDataDirIncludes}"
-                    println "logDir: ${logDir}"
                     println "Path: ${dataFP.toString()}"
 
                     if (sourceName.equals('who')) {
@@ -97,7 +97,7 @@ class BuildIdFileTask {
         this.writeIdFile(idFileFP)
 
         println 'Writing nonUid file'
-        String nonUidFileFP = ID_FILE_DIR + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
+        String nonUidFileFP = outputDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
         this.writeNonUidFile(nonUidFileFP)
     }
 
