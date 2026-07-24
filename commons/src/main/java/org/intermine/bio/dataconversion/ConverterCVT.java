@@ -67,7 +67,7 @@ public class ConverterCVT {
     public static final String AGE_GROUP_ADULT = "Adult";
     public static final String AGE_GROUP_OLDER_ADULT = "Older Adult";
     public static final String INTERVENTION_T_DRUG = "Drug";
-    public static final String ID_SOURCE_AMBIG_EU = "Ambiguous (EUCTR/CTIS)";
+    public static final String ID_SOURCE_AMBIG_EU = "EUCTR/CTIS";
     public static final String ID_SOURCE_ANZCTR = "Australian New Zealand Clinical Trials Registry";
     public static final String ID_SOURCE_CHICTR = "Chinese Clinical Trial Registry";
     public static final String ID_SOURCE_CHIMCTR = "Chinese Medicine Clinical Trials Registry";
