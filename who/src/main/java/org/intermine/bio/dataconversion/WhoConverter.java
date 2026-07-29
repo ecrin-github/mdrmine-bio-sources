@@ -197,6 +197,12 @@ public class WhoConverter extends CacheConverter {
         // TODO EUCTR: check for additional IDs with existing study
         IDsHandler idsH = this.parseTrialIDs(trialID, secondaryIDs, bridgingFlag, childs);
         study = this.getOrCreateStudyWithIDs(idsH);
+
+        if (study == null) {
+            this.writeLog("Skipping study with no unique ID");
+            return;
+        }
+
         this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
         // TODO: study end date? -> results posted date?

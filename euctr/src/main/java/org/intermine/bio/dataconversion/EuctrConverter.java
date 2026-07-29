@@ -128,6 +128,7 @@ public class EuctrConverter extends CacheConverter {
         this.currentCountry = null;
 
         EuctrMainInfo mainInfo = trial.getMainInfo();
+
         if (mainInfo == null) {
             this.writeLog("mainInfo is null");
             return;
@@ -135,6 +136,12 @@ public class EuctrConverter extends CacheConverter {
 
         IDsHandler idsH = this.parseTrialIDs(trial);
         Item study = this.getOrCreateStudyWithIDs(idsH);
+
+        if (study == null) {
+            this.writeLog("Skipping study with no unique ID");
+            return;
+        }
+
         this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
         String trialUrl = this.getAndCleanValue(mainInfo, "url");

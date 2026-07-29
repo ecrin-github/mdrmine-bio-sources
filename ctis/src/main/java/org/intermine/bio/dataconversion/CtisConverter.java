@@ -135,109 +135,116 @@ public class CtisConverter extends CacheConverter {
 
         if (idsH == null) {
             this.writeLog("Found study with no ID, skipping it");
-        } else {
-            Item study = this.getOrCreateStudyWithIDs(idsH);
-            this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
-
-            /* Study title (need to get it before protocol SO) */
-            String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
-            this.parseTrialTitle(study, trialTitle);
-
-            // Sponsor protocol code
-            String protocolCode = this.getAndCleanValue(lineValues, "Protocol code");
-            /* Protocol SO */
-            this.parseProtocolCode(study, protocolCode);
-
-            /* Trial status */
-            String overallTrialStatus = this.getAndCleanValue(lineValues, "Overall trial status");
-            this.parseStudyStatus(study, overallTrialStatus);
-
-            /* Study countries (and their status) */
-            String locationAndRecruitmentStatus = this.getAndCleanValue(lineValues,
-                    "Location(s) and recruitment status");
-            this.parseStudyCountries(study, locationAndRecruitmentStatus);
-
-            /* Min/max age */
-            String ageGroup = this.getAndCleanValue(lineValues, "Age group");
-            String ageRangeSecondaryIdentifier = this.getAndCleanValue(lineValues, "Age range secondary identifier");
-            this.parseAgeRanges(study, ageGroup, ageRangeSecondaryIdentifier);
-
-            /* Gender */
-            String gender = this.getAndCleanValue(lineValues, "Gender");
-            this.parseGender(study, gender);
-
-            /* Planned enrolment */
-            String enrolment = this.getAndCleanValue(lineValues, "Number of participants enrolled");
-            this.setPlannedEnrolment(study, enrolment);
-
-            /* Trial region */
-            // Unused, this value only says if the region of the trial is in the EEA only,
-            // or both in EEA and non-EEA countries (or N/A)
-            String trialRegion = this.getAndCleanValue(lineValues, "Trial region");
-
-            /* Study conditions */
-            // TODO: match with MedDRA terminology
-            String medicalConditions = this.getAndCleanValue(lineValues, "Medical conditions");
-            this.parseStudyConditions(study, medicalConditions);
-
-            /* Unused: not in our model */
-            String therapeuticArea = this.getAndCleanValue(lineValues, "Therapeutic area");
-            // this.parseTherapeuticArea(study, therapeuticArea);
-
-            /* Study phase */
-            String trialPhase = this.getAndCleanValue(lineValues, "Trial phase");
-            this.parseTrialPhase(study, trialPhase);
-
-            /* Study intervention: product */
-            String product = this.getAndCleanValue(lineValues, "Product");
-            this.parseProduct(study, product);
-
-            /* Primary outcome */
-            String primaryEndpoint = this.getAndCleanValue(lineValues, "Primary endpoint");
-            this.parsePrimaryEndpoint(study, primaryEndpoint);
-
-            /* Secondary outcome */
-            String secondaryEndpoints = this.getAndCleanValue(lineValues, "Secondary endpoints");
-            this.parseSecondaryEndpoints(study, secondaryEndpoints);
-
-            // All dates are dd/mm/yyyy
-
-            /* Ethics approval notification SO + decision date */
-            String decisionDate = this.getAndCleanValue(lineValues, "Decision date");
-            this.parseDecisionDate(study, decisionDate);
-
-            /* Study start date */
-            String startDate = this.getAndCleanValue(lineValues, "Start date");
-            this.parseStudyStartDate(study, startDate);
-
-            /* Study end date */
-            // End date seems like it is the last end date for countries involved in the
-            // trial, other is "official" global end
-            // Example:
-            // https://euclinicaltrials.eu/ctis-public/view/2022-503108-26-00?lang=en
-            String endDate = this.getAndCleanValue(lineValues, "End date");
-            String globalEndOfTrial = this.getAndCleanValue(lineValues, "Global end of the trial");
-            this.parseTrialEndDate(study, endDate, globalEndOfTrial);
-
-            /* Study hasResults */
-            String trialResults = this.getAndCleanValue(lineValues, "Trial results");
-            this.parseTrialResults(study, trialResults);
-
-            /* Study organisation: sponsors */
-            String sponsors = this.getAndCleanValue(lineValues, "Sponsor/Co-Sponsors");
-            String sponsorType = this.getAndCleanValue(lineValues, "Sponsor type");
-            this.parseSponsors(study, sponsors, sponsorType);
-
-            /* Trial registry entry SO + instance + last updated date */
-            String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
-            LocalDate lastUpdated = ConverterUtils.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-            this.createAndStoreRegistryEntryDO(study, lastUpdated);
-
-            /* Description (constructed) */
-            // TODO: missing Main Objective field from CTIS UI
-            ConverterUtils.addToDescription(study, product);
-            ConverterUtils.addToDescription(study, primaryEndpoint);
+            return;
         }
+
+        Item study = this.getOrCreateStudyWithIDs(idsH);
+
+        if (study == null) {
+            this.writeLog("Skipping study with no unique ID");
+            return;
+        }
+
+        this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
+
+        /* Study title (need to get it before protocol SO) */
+        String trialTitle = this.getAndCleanValue(lineValues, "Title of the trial");
+        this.parseTrialTitle(study, trialTitle);
+
+        // Sponsor protocol code
+        String protocolCode = this.getAndCleanValue(lineValues, "Protocol code");
+        /* Protocol SO */
+        this.parseProtocolCode(study, protocolCode);
+
+        /* Trial status */
+        String overallTrialStatus = this.getAndCleanValue(lineValues, "Overall trial status");
+        this.parseStudyStatus(study, overallTrialStatus);
+
+        /* Study countries (and their status) */
+        String locationAndRecruitmentStatus = this.getAndCleanValue(lineValues,
+                "Location(s) and recruitment status");
+        this.parseStudyCountries(study, locationAndRecruitmentStatus);
+
+        /* Min/max age */
+        String ageGroup = this.getAndCleanValue(lineValues, "Age group");
+        String ageRangeSecondaryIdentifier = this.getAndCleanValue(lineValues, "Age range secondary identifier");
+        this.parseAgeRanges(study, ageGroup, ageRangeSecondaryIdentifier);
+
+        /* Gender */
+        String gender = this.getAndCleanValue(lineValues, "Gender");
+        this.parseGender(study, gender);
+
+        /* Planned enrolment */
+        String enrolment = this.getAndCleanValue(lineValues, "Number of participants enrolled");
+        this.setPlannedEnrolment(study, enrolment);
+
+        /* Trial region */
+        // Unused, this value only says if the region of the trial is in the EEA only,
+        // or both in EEA and non-EEA countries (or N/A)
+        String trialRegion = this.getAndCleanValue(lineValues, "Trial region");
+
+        /* Study conditions */
+        // TODO: match with MedDRA terminology
+        String medicalConditions = this.getAndCleanValue(lineValues, "Medical conditions");
+        this.parseStudyConditions(study, medicalConditions);
+
+        /* Unused: not in our model */
+        String therapeuticArea = this.getAndCleanValue(lineValues, "Therapeutic area");
+        // this.parseTherapeuticArea(study, therapeuticArea);
+
+        /* Study phase */
+        String trialPhase = this.getAndCleanValue(lineValues, "Trial phase");
+        this.parseTrialPhase(study, trialPhase);
+
+        /* Study intervention: product */
+        String product = this.getAndCleanValue(lineValues, "Product");
+        this.parseProduct(study, product);
+
+        /* Primary outcome */
+        String primaryEndpoint = this.getAndCleanValue(lineValues, "Primary endpoint");
+        this.parsePrimaryEndpoint(study, primaryEndpoint);
+
+        /* Secondary outcome */
+        String secondaryEndpoints = this.getAndCleanValue(lineValues, "Secondary endpoints");
+        this.parseSecondaryEndpoints(study, secondaryEndpoints);
+
+        // All dates are dd/mm/yyyy
+
+        /* Ethics approval notification SO + decision date */
+        String decisionDate = this.getAndCleanValue(lineValues, "Decision date");
+        this.parseDecisionDate(study, decisionDate);
+
+        /* Study start date */
+        String startDate = this.getAndCleanValue(lineValues, "Start date");
+        this.parseStudyStartDate(study, startDate);
+
+        /* Study end date */
+        // End date seems like it is the last end date for countries involved in the
+        // trial, other is "official" global end
+        // Example:
+        // https://euclinicaltrials.eu/ctis-public/view/2022-503108-26-00?lang=en
+        String endDate = this.getAndCleanValue(lineValues, "End date");
+        String globalEndOfTrial = this.getAndCleanValue(lineValues, "Global end of the trial");
+        this.parseTrialEndDate(study, endDate, globalEndOfTrial);
+
+        /* Study hasResults */
+        String trialResults = this.getAndCleanValue(lineValues, "Trial results");
+        this.parseTrialResults(study, trialResults);
+
+        /* Study organisation: sponsors */
+        String sponsors = this.getAndCleanValue(lineValues, "Sponsor/Co-Sponsors");
+        String sponsorType = this.getAndCleanValue(lineValues, "Sponsor type");
+        this.parseSponsors(study, sponsors, sponsorType);
+
+        /* Trial registry entry SO + instance + last updated date */
+        String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
+        LocalDate lastUpdated = ConverterUtils.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        this.createAndStoreRegistryEntryDO(study, lastUpdated);
+
+        /* Description (constructed) */
+        // TODO: missing Main Objective field from CTIS UI
+        ConverterUtils.addToDescription(study, product);
+        ConverterUtils.addToDescription(study, primaryEndpoint);
 
         this.currentTrialID = null;
     }

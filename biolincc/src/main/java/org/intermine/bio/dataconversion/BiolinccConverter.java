@@ -121,13 +121,20 @@ public class BiolinccConverter extends CacheConverter {
         Set<String> nctIds = this.getNctIdsFromUrls(clinicalTrialUrls);
         IDsHandler idsH = this.parseTrialIDs(biolinccID, nctIds);
         Item study = this.getOrCreateStudyWithIDs(idsH);
+
+        /* Study title */
+        String studyName = this.getAndCleanValue(lineValues, "Study Name");
+
+        if (study == null) {
+            this.writeLog("Skipping study with no unique ID, title: " + studyName);
+            return;
+        }
+
         this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
         // TODO: construct URLs and do something with them
         List<String> ctgUrls = null;
 
-        /* Study title */
-        String studyName = this.getAndCleanValue(lineValues, "Study Name");
         // Study acronym
         String acronym = this.getAndCleanValue(lineValues, "Acronym");
         this.parseStudyTitle(study, studyName, acronym);

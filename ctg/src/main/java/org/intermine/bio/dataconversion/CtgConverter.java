@@ -92,85 +92,91 @@ public class CtgConverter extends CacheConverter {
         // TODO: allow study with no IDs (if any exist)
         if (idsH == null) {
             this.writeLog("Skipping study with no IDs");
-        } else {
-            Item study = this.getOrCreateStudyWithIDs(idsH);
-
-            /* Study titles */
-            this.parseStudyTitle(study, ctgStudy);
-
-            /* Study status */
-            this.parseStatus(study, ctgStudy);
-
-            /* Study description */
-            this.parseBriefSummary(study, ctgStudy);
-
-            /* Study conditions */
-            this.parseConditions(study, ctgStudy);
-
-            /* Study interventions */
-            this.parseInterventions(study, ctgStudy);
-
-            /* Primary outcomes */
-            this.parsePrimaryOutcomes(study, ctgStudy);
-
-            /* Secondary outcomes */
-            this.parseSecondaryOutcomes(study, ctgStudy);
-
-            /* Study sponsor (Organisations, Persons) */
-            this.parseSponsor(study, ctgStudy);
-
-            /* Study collaborators (Organisations, Persons) */
-            this.parseCollaborators(study, ctgStudy);
-
-            /* Gender */
-            this.parseGender(study, ctgStudy);
-
-            /* Min/max age */
-            this.parseAge(study, ctgStudy);
-
-            /* StudyFeature: phase */
-            this.parsePhases(study, ctgStudy);
-
-            /* Study planned/actual enrolment */
-            this.parseEnrolment(study, ctgStudy);
-
-            /* Study type */
-            this.parseStudyType(study, ctgStudy);
-
-            /* Study features */
-            this.parseStudyDesign(study, ctgStudy);
-
-            /* Study start date */
-            this.parseStartDate(study, ctgStudy);
-
-            /* Study end date */
-            this.parseCompletionDates(study, ctgStudy);
-
-            /* Study hasResults */
-            this.parseHasResults(study, ctgStudy);
-
-            /* Trial registry entry SO */
-            this.createAndStoreRegistryEntrySO(study, ctgStudy);
-
-            /* Trial results summary SO */
-            this.createAndStoreResultsSummarySO(study, ctgStudy);
-
-            /* Study locations */
-            this.parseLocations(study, ctgStudy);
-
-            /* Various StudyObjects */
-            this.parseStudyDocuments(study, ctgStudy);
-
-            /* Plan to share IPD, DSS, IPD SO */
-            this.parseIPD(study, ctgStudy);
-
-            /* PubMed publications */
-            this.parseReferences(study, ctgStudy);
-
-            // TODO: seeAlsoLinks?
-
-            // TODO: comparator
+            return;
         }
+
+        Item study = this.getOrCreateStudyWithIDs(idsH);
+
+        if (study == null) {
+            this.writeLog("Skipping study with no unique ID");
+            return;
+        }
+
+        /* Study titles */
+        this.parseStudyTitle(study, ctgStudy);
+
+        /* Study status */
+        this.parseStatus(study, ctgStudy);
+
+        /* Study description */
+        this.parseBriefSummary(study, ctgStudy);
+
+        /* Study conditions */
+        this.parseConditions(study, ctgStudy);
+
+        /* Study interventions */
+        this.parseInterventions(study, ctgStudy);
+
+        /* Primary outcomes */
+        this.parsePrimaryOutcomes(study, ctgStudy);
+
+        /* Secondary outcomes */
+        this.parseSecondaryOutcomes(study, ctgStudy);
+
+        /* Study sponsor (Organisations, Persons) */
+        this.parseSponsor(study, ctgStudy);
+
+        /* Study collaborators (Organisations, Persons) */
+        this.parseCollaborators(study, ctgStudy);
+
+        /* Gender */
+        this.parseGender(study, ctgStudy);
+
+        /* Min/max age */
+        this.parseAge(study, ctgStudy);
+
+        /* StudyFeature: phase */
+        this.parsePhases(study, ctgStudy);
+
+        /* Study planned/actual enrolment */
+        this.parseEnrolment(study, ctgStudy);
+
+        /* Study type */
+        this.parseStudyType(study, ctgStudy);
+
+        /* Study features */
+        this.parseStudyDesign(study, ctgStudy);
+
+        /* Study start date */
+        this.parseStartDate(study, ctgStudy);
+
+        /* Study end date */
+        this.parseCompletionDates(study, ctgStudy);
+
+        /* Study hasResults */
+        this.parseHasResults(study, ctgStudy);
+
+        /* Trial registry entry SO */
+        this.createAndStoreRegistryEntrySO(study, ctgStudy);
+
+        /* Trial results summary SO */
+        this.createAndStoreResultsSummarySO(study, ctgStudy);
+
+        /* Study locations */
+        this.parseLocations(study, ctgStudy);
+
+        /* Various StudyObjects */
+        this.parseStudyDocuments(study, ctgStudy);
+
+        /* Plan to share IPD, DSS, IPD SO */
+        this.parseIPD(study, ctgStudy);
+
+        /* PubMed publications */
+        this.parseReferences(study, ctgStudy);
+
+        // TODO: seeAlsoLinks?
+
+        // TODO: comparator
 
         this.currentTrialID = null;
     }

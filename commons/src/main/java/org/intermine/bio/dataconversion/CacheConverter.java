@@ -768,69 +768,69 @@ public abstract class CacheConverter extends BaseConverter {
                     storedHandler = storedHandlers.iterator().next();
                 }
             }
-        }
 
-        /* Creating or using existing study */
-        if (storedHandler == null) { // New study
-            study = this.createItem("Study");
+            /* Creating or using existing study */
+            if (storedHandler == null) { // New study
+                study = this.createItem("Study");
 
-            // Setting primaryIdentifier
-            if (!ConverterUtils.isBlankOrNull(idsH.primaryIdentifier)) { // ID from IdResolver
-                study.setAttributeIfNotNull("primaryIdentifier", idsH.primaryIdentifier);
-            } else { // Otherwise, pick a UID if there is any
-                if (idsH.hasAnyUid()) {
+                // Setting primaryIdentifier
+                if (!ConverterUtils.isBlankOrNull(idsH.primaryIdentifier)) { // ID from IdResolver
+                    study.setAttributeIfNotNull("primaryIdentifier", idsH.primaryIdentifier);
+                } else { // Otherwise, pick a UID if there is any
+                    if (idsH.hasAnyUid()) {
+                        study.setAttributeIfNotNull("primaryIdentifier", idsH.getAnyUid().getId());
+                    }
+                }
+
+                // Creating StudyIdentifiers from IDs and adding entries to idsMap
+                if (idsH.uids != null) {
+                    for (ID id : idsH.uids) {
+                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
+                        this.idsMap.add(id, idsH);
+                    }
+                }
+
+                if (idsH.nonUids != null) {
+                    for (ID id : idsH.nonUids) {
+                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
+                    }
+                }
+
+                // Cache study
+                this.studies.put(idsH, study);
+            } else { // Existing study
+                this.existingStudy = this.studies.get(storedHandler);
+                study = this.existingStudy;
+
+                // Attempting to set a UID as primaryIdentifier is there is none
+                if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "primaryIdentifier"))
+                        && idsH.hasAnyUid()) {
                     study.setAttributeIfNotNull("primaryIdentifier", idsH.getAnyUid().getId());
                 }
-            }
 
-            // Creating StudyIdentifiers from IDs and adding entries to idsMap
-            if (idsH.uids != null) {
-                for (ID id : idsH.uids) {
-                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
-                    this.idsMap.add(id, idsH);
-                }
-            }
-
-            if (idsH.nonUids != null) {
-                for (ID id : idsH.nonUids) {
-                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
-                }
-            }
-
-            // Cache study
-            this.studies.put(idsH, study);
-        } else { // Existing study
-            this.existingStudy = this.studies.get(storedHandler);
-            study = this.existingStudy;
-
-            // Attempting to set a UID as primaryIdentifier is there is none
-            if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "primaryIdentifier"))
-                    && idsH.hasAnyUid()) {
-                study.setAttributeIfNotNull("primaryIdentifier", idsH.getAnyUid().getId());
-            }
-
-            // Creating StudyIdentifiers from IDs that do not exist already in the existing
-            // study and adding or replacing entries to idsMap
-            if (idsH.uids != null) {
-                for (ID id : idsH.uids) {
-                    if (!storedHandler.hasUid(id)) {
-                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
-                    }
-                    // In any case, entries in the idsMap need to be added or replaced
-                    this.idsMap.put(id, storedHandler);
-                }
-            }
-
-            if (idsH.nonUids != null) {
-                for (ID id : idsH.nonUids) {
-                    if (!storedHandler.hasNonUid(id)) {
-                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
+                // Creating StudyIdentifiers from IDs that do not exist already in the existing
+                // study and adding or replacing entries to idsMap
+                if (idsH.uids != null) {
+                    for (ID id : idsH.uids) {
+                        if (!storedHandler.hasUid(id)) {
+                            this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
+                        }
+                        // In any case, entries in the idsMap need to be added or replaced
+                        this.idsMap.put(id, storedHandler);
                     }
                 }
-            }
 
-            // Adding added IDs to storedHandler (merging)
-            storedHandler.mergeHandlers(idsH);
+                if (idsH.nonUids != null) {
+                    for (ID id : idsH.nonUids) {
+                        if (!storedHandler.hasNonUid(id)) {
+                            this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
+                        }
+                    }
+                }
+
+                // Adding added IDs to storedHandler (merging)
+                storedHandler.mergeHandlers(idsH);
+            }
         }
 
         return study;
