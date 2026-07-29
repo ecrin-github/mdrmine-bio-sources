@@ -281,40 +281,13 @@ public abstract class BaseConverter extends BioFileConverter {
      * @return
      * @throws Exception
      */
-    public Item createStudyIdentifier(String id, Boolean unique, String type, String source)
-            throws Exception {
-        Item studyIdentifier = null;
-
-        if (!ConverterUtils.isBlankOrNull(id)) {
-            this.createClassItem("StudyIdentifier",
-                    new String[][] { { "value", id },
-                            { "unique", String.valueOf(unique) },
-                            { "type", type },
-                            { "source", source } });
-        }
-
-        return studyIdentifier;
-    }
-
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param id
-     * @param unique
-     * @param type
-     * @param source
-     * @return
-     * @throws Exception
-     */
-    public Item createAndStoreStudyIdentifier(Item study, String id, String source, String type, Boolean unique)
+    public Item createAndStoreStudyIdentifier(Item study, String id, String source, String type)
             throws Exception {
         Item studyIdentifier = null;
 
         if (!ConverterUtils.isBlankOrNull(id)) {
             this.createAndStoreClassItem(study, "StudyIdentifier",
                     new String[][] { { "value", id },
-                            { "unique", String.valueOf(unique) },
                             { "type", type },
                             { "source", source } });
         }
@@ -343,16 +316,4 @@ public abstract class BaseConverter extends BioFileConverter {
 
         return studyCountry;
     }
-
-    // public Item createAndStoreStudyIdentifier(Item study, String id) throws
-    // Exception {
-    // Item studyIdentifier = this.createStudyIdentifier(id);
-
-    // if (studyIdentifier != null) {
-    // this.handleReferencesAndCollections(study, studyIdentifier);
-    // this.storeClassItem(study, studyIdentifier);
-    // }
-
-    // return studyIdentifier;
-    // }
 }

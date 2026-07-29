@@ -786,16 +786,14 @@ public abstract class CacheConverter extends BaseConverter {
             // Creating StudyIdentifiers from IDs and adding entries to idsMap
             if (idsH.uids != null) {
                 for (ID id : idsH.uids) {
-                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
-                            id.getUnique());
+                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
                     this.idsMap.add(id, idsH);
                 }
             }
 
             if (idsH.nonUids != null) {
                 for (ID id : idsH.nonUids) {
-                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
-                            id.getUnique());
+                    this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
                 }
             }
 
@@ -816,8 +814,7 @@ public abstract class CacheConverter extends BaseConverter {
             if (idsH.uids != null) {
                 for (ID id : idsH.uids) {
                     if (!storedHandler.hasUid(id)) {
-                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
-                                id.getUnique());
+                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
                     }
                     // In any case, entries in the idsMap need to be added or replaced
                     this.idsMap.put(id, storedHandler);
@@ -827,8 +824,7 @@ public abstract class CacheConverter extends BaseConverter {
             if (idsH.nonUids != null) {
                 for (ID id : idsH.nonUids) {
                     if (!storedHandler.hasNonUid(id)) {
-                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType(),
-                                id.getUnique());
+                        this.createAndStoreStudyIdentifier(study, id.getId(), id.getSource(), id.getType());
                     }
                 }
             }
