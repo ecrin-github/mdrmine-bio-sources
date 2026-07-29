@@ -14,8 +14,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.intermine.model.bio.StudyIdentifier;
-
 /**
  * TODO
  * 
@@ -29,11 +27,22 @@ public class IDsHandler {
     public Set<ID> uids = new HashSet<ID>();
     public Set<ID> nonUids = new HashSet<ID>();
 
+    /**
+     * TODO
+     * 
+     * @param dataSource
+     */
     public IDsHandler(String dataSource) {
         this.dataSource = dataSource;
         this.setInternalId();
     }
 
+    /**
+     * TODO
+     * 
+     * @param dataSource
+     * @param id
+     */
     public IDsHandler(String dataSource, String id) {
         this(dataSource, ConverterUtils.createID(id));
     }
@@ -103,6 +112,11 @@ public class IDsHandler {
         this.setInternalId();
     }
 
+    /**
+     * TODO
+     * 
+     * @param primaryId
+     */
     public void setPrimaryIdentifier(String primaryId) {
         this.primaryIdentifier = primaryId;
     }
@@ -136,6 +150,12 @@ public class IDsHandler {
         }
     }
 
+    /**
+     * TODO
+     * 
+     * @param id
+     * @return
+     */
     public ID addId(ID id) {
         if (id != null && !ConverterUtils.dummyIDs.contains(id.getId())) {
             // Checking for dummy IDs or garbage IDs
@@ -148,6 +168,12 @@ public class IDsHandler {
         return id;
     }
 
+    /**
+     * TODO
+     * 
+     * @param id
+     * @return
+     */
     public ID addId(String id) {
         if (!ConverterUtils.isBlankOrNull(id)) {
             ID idObj = ConverterUtils.createID(id);
@@ -156,14 +182,12 @@ public class IDsHandler {
         return null;
     }
 
-    public String addId(StudyIdentifier id) {
-        if (id != null) {
-            ID idObj = new ID(id.getValue(), id.getSource(), id.getType(), id.getUnique());
-            this.addId(idObj);
-        }
-        return null;
-    }
-
+    /**
+     * TODO
+     * 
+     * @param uids
+     * @return
+     */
     public Set<ID> addUids(Set<ID> uids) {
         if (uids != null) {
             this.uids.addAll(uids);
@@ -171,6 +195,12 @@ public class IDsHandler {
         return this.uids;
     }
 
+    /**
+     * TODO
+     * 
+     * @param nonUids
+     * @return
+     */
     public Set<ID> addNonUids(Set<ID> nonUids) {
         if (nonUids != null) {
             this.nonUids.addAll(nonUids);
@@ -178,6 +208,11 @@ public class IDsHandler {
         return this.nonUids;
     }
 
+    /**
+     * TODO
+     * 
+     * @param ids
+     */
     public void addIds(Set<String> ids) {
         if (ids != null) {
             for (String id : ids) {
@@ -186,10 +221,20 @@ public class IDsHandler {
         }
     }
 
+    /**
+     * TODO
+     * 
+     * @return
+     */
     public Set<ID> getUids() {
         return this.uids;
     }
 
+    /**
+     * TODO
+     * 
+     * @return
+     */
     public String getIdFileString() {
         String primaryId = this.primaryIdentifier;
         if (primaryId == null) {
@@ -213,24 +258,52 @@ public class IDsHandler {
         return uidsSb.toString();
     }
 
+    /**
+     * TODO
+     * 
+     * @return
+     */
     public String getNonUidFileString() {
         return this.nonUids.stream()
                 .map(ID::getId)
                 .collect(Collectors.joining(","));
     }
 
+    /**
+     * TODO
+     * 
+     * @return
+     */
     public boolean hasAnyUid() {
         return this.uids.size() > 0;
     }
 
+    /**
+     * TODO
+     * 
+     * @param uid
+     * @return
+     */
     public boolean hasUid(ID uid) {
         return this.uids.contains(uid);
     }
 
+    /**
+     * TODO
+     * 
+     * @param nonUid
+     * @return
+     */
     public boolean hasNonUid(ID nonUid) {
         return this.nonUids.contains(nonUid);
     }
 
+    /**
+     * TODO
+     * 
+     * @param id
+     * @return
+     */
     public String removeId(String id) {
         if (!ConverterUtils.isBlankOrNull(id)) {
             ID idObj = ConverterUtils.createID(id);

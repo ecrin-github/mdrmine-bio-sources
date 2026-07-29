@@ -640,10 +640,10 @@ public abstract class CacheConverter extends BaseConverter {
 
                 // In all cases, add studyId to current studyIds list
                 StudyIdentifier studyId = (StudyIdentifier) rr.get(1);
-                if (studyId.getUnique()) {
-                    this.writeLog("Previous study ID: " + studyId.getValue());
-                    studyIds.add(studyId);
-                }
+                // if (studyId.getUnique()) {
+                // this.writeLog("Previous study ID: " + studyId.getValue());
+                // studyIds.add(studyId);
+                // }
             } else {
                 this.writeLog("Study with no IDs: " + study.toString());
             }
