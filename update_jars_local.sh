@@ -1,5 +1,5 @@
 ./gradlew clean
-./gradlew install --stacktrace
+./gradlew install --stacktrace --refresh-dependencies
 rm -rf ~/code/mdrmine/sources_jars/*
 mkdir -p ~/code/mdrmine/sources_jars/ && cp -r ~/.m2/repository/org/intermine/* ~/code/mdrmine/sources_jars/
 # Commons

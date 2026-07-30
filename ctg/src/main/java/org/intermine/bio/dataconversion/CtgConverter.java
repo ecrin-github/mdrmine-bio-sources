@@ -2,13 +2,11 @@ package org.intermine.bio.dataconversion;
 
 import java.io.BufferedReader;
 import java.io.Reader;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -23,7 +21,6 @@ import org.intermine.xml.full.Item;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONException;
 import com.alibaba.fastjson2.JSONFactory;
-import com.alibaba.fastjson2.JSONReader;
 import com.alibaba.fastjson2.reader.ObjectReader;
 
 /**
@@ -50,10 +47,6 @@ public class CtgConverter extends CacheConverter {
     private static final Pattern P_PHASE = Pattern.compile("(NA)|(early_)?phase(\\d)(?:\\|phase(\\d))?",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_DOC = Pattern.compile("(.*?),\\h*(http\\S+)\\h*", Pattern.CASE_INSENSITIVE);
-
-    private Map<String, Integer> fieldsToInd;
-    private HashSet<String> storedPKs = new HashSet<String>(); // Storing all NCT, EUCTR, and CTIS id to avoid duplicate
-                                                               // errors
 
     /**
      * Constructor
@@ -94,275 +87,133 @@ public class CtgConverter extends CacheConverter {
     }
 
     public void parseAndStoreTrial(CtgStudy ctgStudy) throws Exception {
-        Item study = createItem("Study");
+        IDsHandler idsH = this.parseTrialIDs(ctgStudy);
 
-        if (this.parseTrialIDs(study, ctgStudy)) {
-            /* Study titles */
-            this.parseStudyTitle(study, ctgStudy);
-
-            /* Study status */
-            this.parseStatus(study, ctgStudy);
-
-            /* Study description */
-            this.parseBriefSummary(study, ctgStudy);
-
-            /* Study conditions */
-            this.parseConditions(study, ctgStudy);
-
-            /* Study interventions */
-            this.parseInterventions(study, ctgStudy);
-
-            /* Primary outcomes */
-            this.parsePrimaryOutcomes(study, ctgStudy);
-
-            /* Secondary outcomes */
-            this.parseSecondaryOutcomes(study, ctgStudy);
-
-            /* Study sponsor (Organisations, Persons) */
-            this.parseSponsor(study, ctgStudy);
-
-            /* Study collaborators (Organisations, Persons) */
-            this.parseCollaborators(study, ctgStudy);
-
-            /* Gender */
-            this.parseGender(study, ctgStudy);
-
-            /* Min/max age */
-            this.parseAge(study, ctgStudy);
-
-            /* StudyFeature: phase */
-            this.parsePhases(study, ctgStudy);
-
-            /* Study planned/actual enrolment */
-            this.parseEnrolment(study, ctgStudy);
-
-            /* Study type */
-            this.parseStudyType(study, ctgStudy);
-
-            /* Study features */
-            this.parseStudyDesign(study, ctgStudy);
-
-            /* Study start date */
-            this.parseStartDate(study, ctgStudy);
-
-            /* Study end date */
-            this.parseCompletionDates(study, ctgStudy);
-
-            /* Study hasResults */
-            this.parseHasResults(study, ctgStudy);
-
-            /* Trial registry entry SO */
-            this.createAndStoreRegistryEntrySO(study, ctgStudy);
-
-            /* Trial results summary SO */
-            this.createAndStoreResultsSummarySO(study, ctgStudy);
-
-            /* Study locations */
-            this.parseLocations(study, ctgStudy);
-
-            /* Various StudyObjects */
-            this.parseStudyDocuments(study, ctgStudy);
-
-            /* Plan to share IPD, DSS, IPD SO */
-            this.parseIPD(study, ctgStudy);
-
-            /* PubMed publications */
-            this.parseReferences(study, ctgStudy);
-
-            // TODO: seeAlsoLinks?
-
-            // Store study in cache
-            if (!this.existingStudy()) {
-                this.studies.put(this.currentTrialID, study);
-            }
-
+        // TODO: allow study with no IDs (if any exist)
+        if (idsH == null) {
+            this.writeLog("Skipping study with no IDs");
+            return;
         }
 
-        this.currentTrialID = null;
+        Item study = this.getOrCreateStudyWithIDs(idsH);
 
+        if (study == null) {
+            this.writeLog("Skipping study with no unique ID");
+            return;
+        }
+
+        /* Study titles */
+        this.parseStudyTitle(study, ctgStudy);
+
+        /* Study status */
+        this.parseStatus(study, ctgStudy);
+
+        /* Study description */
+        this.parseBriefSummary(study, ctgStudy);
+
+        /* Study conditions */
+        this.parseConditions(study, ctgStudy);
+
+        /* Study interventions */
+        this.parseInterventions(study, ctgStudy);
+
+        /* Primary outcomes */
+        this.parsePrimaryOutcomes(study, ctgStudy);
+
+        /* Secondary outcomes */
+        this.parseSecondaryOutcomes(study, ctgStudy);
+
+        /* Study sponsor (Organisations, Persons) */
+        this.parseSponsor(study, ctgStudy);
+
+        /* Study collaborators (Organisations, Persons) */
+        this.parseCollaborators(study, ctgStudy);
+
+        /* Gender */
+        this.parseGender(study, ctgStudy);
+
+        /* Min/max age */
+        this.parseAge(study, ctgStudy);
+
+        /* StudyFeature: phase */
+        this.parsePhases(study, ctgStudy);
+
+        /* Study planned/actual enrolment */
+        this.parseEnrolment(study, ctgStudy);
+
+        /* Study type */
+        this.parseStudyType(study, ctgStudy);
+
+        /* Study features */
+        this.parseStudyDesign(study, ctgStudy);
+
+        /* Study start date */
+        this.parseStartDate(study, ctgStudy);
+
+        /* Study end date */
+        this.parseCompletionDates(study, ctgStudy);
+
+        /* Study hasResults */
+        this.parseHasResults(study, ctgStudy);
+
+        /* Trial registry entry SO */
+        this.createAndStoreRegistryEntrySO(study, ctgStudy);
+
+        /* Trial results summary SO */
+        this.createAndStoreResultsSummarySO(study, ctgStudy);
+
+        /* Study locations */
+        this.parseLocations(study, ctgStudy);
+
+        /* Various StudyObjects */
+        this.parseStudyDocuments(study, ctgStudy);
+
+        /* Plan to share IPD, DSS, IPD SO */
+        this.parseIPD(study, ctgStudy);
+
+        /* PubMed publications */
+        this.parseReferences(study, ctgStudy);
+
+        // TODO: seeAlsoLinks?
+
+        // TODO: comparator
+
+        this.currentTrialID = null;
     }
 
-    /**
-     * TODO
-     * 
-     * @param study
-     * @param ctgStudy
-     * @return
-     * @throws Exception
-     */
-    public boolean parseTrialIDs(Item study, CtgStudy ctgStudy) throws Exception {
-        boolean continueParsing = true;
+    public IDsHandler parseTrialIDs(CtgStudy ctgStudy) {
+        IDsHandler idsH = null;
+
+        // TODO: trials have nctIdAliases...
+        // TODO: there is additional info regarding IDs, inferring id source/type should
+        // be attempted here first and then by the usual method
 
         if (ctgStudy.protocolSection == null) {
-            continueParsing = false;
             this.writeLog("Warning: found study with no protocol section");
         } else {
-
             IdentificationModule idModule = ctgStudy.protocolSection.identificationModule;
 
             if (idModule != null) {
-                String nctID = idModule.nctId;/* Trial ID */
-                // TODO: trials have nctIdAliases...
+                Set<String> ids = null;
 
-                // Not parsing study if trialID is blank
-                // TODO: if studies with blank trial IDs exist, check otherIDs then?
-                if (ConverterUtils.isBlankOrNull(nctID)) {
-                    continueParsing = false;
+                // Adding other IDs if any
+                if (idModule.secondaryIdInfos != null) {
+                    ids = idModule.secondaryIdInfos.stream()
+                            .map(secId -> secId.id)
+                            .map(String::strip)
+                            .collect(Collectors.toSet());
                 } else {
-                    // NCT ID
-                    if (storedPKs.contains(nctID)) { // Trial with an ID that is already linked to another study
-                        continueParsing = false;
-                        this.writeLog("NCT ID already exists: " + nctID);
-                    } else {
-                        this.currentTrialID = nctID;
-                        study.setAttributeIfNotNull("nctID", nctID);
-                    }
-
-                    /* Secondary IDs (EUCTR, CTIS, Protocol code, etc.) */
-                    if (continueParsing && idModule.secondaryIdInfos != null && idModule.secondaryIdInfos.size() > 0) {
-                        boolean ctisIdSet = false;
-                        boolean euctrIdSet = false;
-                        List<String> euIds = new ArrayList<String>();
-                        List<String> otherIds = new ArrayList<String>(); // IDs to be added as "StudyIdentifier" items
-                                                                         // later
-
-                        // TODO: now we have adidtional info for secondary IDs, inferring id type can be
-                        // improved now
-
-                        // Adding secondaryIDs and trialID into one set
-                        Set<String> ids = idModule.secondaryIdInfos.stream()
-                                .map(secId -> secId.id)
-                                .map(String::strip)
-                                .collect(Collectors.toSet());
-
-                        Iterator<String> idsIter = ids.iterator();
-                        while (idsIter.hasNext() && continueParsing) {
-                            String otherID = idsIter.next();
-
-                            Matcher mEu = ConverterUtils.P_EU_ID.matcher(otherID);
-                            if (mEu.matches()) {
-                                String ctisPrefix = mEu.group(1);
-                                String euctrPrefix = mEu.group(2);
-                                String euId = mEu.group(3);
-                                String ctisSuffix = mEu.group(4);
-                                String euctrSuffix = mEu.group(5);
-
-                                if (storedPKs.contains(euId)) {
-                                    continueParsing = false;
-                                    this.writeLog("EU ID already exists: " + euId + "; raw id: " + otherID);
-                                } else {
-                                    if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
-                                        if (euctrPrefix == null && euctrSuffix == null) {
-                                            // Setting CTIS ID without prefix and suffix
-                                            study.setAttributeIfNotNull("primaryIdentifier", euId);
-                                            ctisIdSet = true;
-                                        } else {
-                                            this.writeLog(
-                                                    "CTIS ID matched but also has EUCTR ID characteristics: "
-                                                            + otherID);
-                                        }
-                                    } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
-                                        // Setting EUCTR ID without prefix and suffix
-                                        study.setAttributeIfNotNull("euctrID", euId);
-                                        euctrIdSet = true;
-
-                                        if (euctrSuffix != null) {
-                                            this.writeLog("EUCTR ID matched and suffix is not null: " + euctrSuffix);
-                                        }
-                                    } else { // Undistinguishable ID
-                                        if (ctisIdSet) {
-                                            if (!euctrIdSet) {
-                                                study.setAttributeIfNotNull("euctrID", euId);
-                                                euctrIdSet = true;
-                                            } else {
-                                                this.writeLog(
-                                                        "Found an EU id but both CTIS and EUCTR ID are already set, id: "
-                                                                + euId + "; list of all IDs: " + ids);
-                                            }
-                                        } else if (ctisIdSet) {
-                                            study.setAttributeIfNotNull("primaryIdentifier", euId);
-                                            ctisIdSet = true;
-                                        } else {
-                                            euIds.add(euId);
-                                        }
-                                    }
-                                }
-                            } else {
-                                otherIds.add(otherID);
-                            }
-                        }
-
-                        if (continueParsing) {
-                            // Adding other IDs as StudyIdentifier items
-                            for (String otherID : otherIds) {
-                                // TODO: infer ID type
-                                this.createAndStoreClassItem(study, "StudyIdentifier",
-                                        new String[][] { { "identifierValue", otherID } });
-                            }
-
-                            // Handling undistinguishable EU IDs
-                            if (euIds.size() > 0) {
-                                if (euIds.size() > 2) {
-                                    this.writeLog(
-                                            "More than 2 EU IDs found: " + euIds + "; list of all IDs: " + ids);
-                                } else if (euIds.size() == 2) {
-                                    if (ctisIdSet || euctrIdSet) {
-                                        this.writeLog(
-                                                "2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds
-                                                        + "; list of all IDs: " + ids);
-                                    } else {
-                                        String id1 = euIds.get(0);
-                                        String id2 = euIds.get(1);
-
-                                        // Assuming that the more recent ID (year + sequential part after) is the CTIS
-                                        // ID, and the other is the EUCTR ID
-                                        if (id1.compareTo(id2) > 0) {
-                                            study.setAttributeIfNotNull("primaryIdentifier", id1);
-                                            study.setAttributeIfNotNull("euctrID", id2);
-                                        } else {
-                                            study.setAttributeIfNotNull("primaryIdentifier", id2);
-                                            study.setAttributeIfNotNull("euctrID", id1);
-                                        }
-                                    }
-                                } else { // 1 ID
-                                    if (ctisIdSet && euctrIdSet) {
-                                        this.writeLog(
-                                                "1 EU ID found but both CTIS and EUCTR IDs have already been set: "
-                                                        + euIds
-                                                        + "; list of all IDs: " + ids);
-                                    } else {
-                                        String id1 = euIds.get(0);
-
-                                        // Note: if both ctisID and euctrID have not been set before, we populate both
-                                        // fields hoping for a merge to correct the fields later
-                                        if (!ctisIdSet) {
-                                            study.setAttributeIfNotNull("primaryIdentifier", id1);
-                                        }
-                                        if (!euctrIdSet) {
-                                            study.setAttributeIfNotNull("euctrID", id1);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    if (continueParsing) {
-                        nctID = ConverterUtils.getAttrValue(study, "nctID");
-                        String euctrID = ConverterUtils.getAttrValue(study, "euctrID");
-                        String ctisID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
-
-                        for (String id : new String[] { nctID, ctisID, euctrID }) {
-                            if (!ConverterUtils.isBlankOrNull(id)) {
-                                this.storedPKs.add(id);
-                            }
-                        }
-                    }
+                    ids = new HashSet<String>();
                 }
+
+                ids.add(idModule.nctId);
+                this.currentTrialID = idModule.nctId;
+
+                idsH = new IDsHandler(this.dataSourceName, ids);
             }
         }
 
-        return continueParsing;
+        return idsH;
     }
 
     /**
@@ -1151,7 +1002,7 @@ public class CtgConverter extends CacheConverter {
      */
     public void createAndStoreRegistryEntrySO(Item study, CtgStudy ctgStudy)
             throws Exception {
-        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        String nctID = this.currentTrialID;
         if (!ConverterUtils.isBlankOrNull(nctID)) {
             String dateCreated = null;
             String datePublished = null;
@@ -1218,7 +1069,7 @@ public class CtgConverter extends CacheConverter {
      */
     public void createAndStoreResultsSummarySO(Item study, CtgStudy ctgStudy)
             throws Exception {
-        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        String nctID = this.currentTrialID;
         if (ctgStudy.hasResults && !ConverterUtils.isBlankOrNull(nctID)) {
             String dateCreated = null;
             String datePublished = null;
@@ -1359,7 +1210,7 @@ public class CtgConverter extends CacheConverter {
      * @throws Exception
      */
     public void parseStudyDocuments(Item study, CtgStudy ctgStudy) throws Exception {
-        String nctID = ConverterUtils.getAttrValue(study, "nctID");
+        String nctID = this.currentTrialID;
 
         if (!ConverterUtils.isBlankOrNull(nctID) && nctID.length() >= 2) {
             if (Optional.ofNullable(ctgStudy.documentSection)

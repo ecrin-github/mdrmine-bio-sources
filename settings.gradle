@@ -11,5 +11,7 @@ include ':bio-source-ctis'
 project(':bio-source-ctis').projectDir = new File(settingsDir, './ctis')
 include ':bio-source-euctr'
 project(':bio-source-euctr').projectDir = new File(settingsDir, './euctr')
+include ':models'
+project(':models').projectDir = new File(settingsDir, './models')
 include ':commons'
 project(':commons').projectDir = new File(settingsDir, './commons')

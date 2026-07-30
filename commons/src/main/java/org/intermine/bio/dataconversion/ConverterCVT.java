@@ -16,27 +16,7 @@ package org.intermine.bio.dataconversion;
  * @author
  */
 public class ConverterCVT {
-    /* Registries */
-    public static final String R_ANZCTR = "ANZCTR"; // Australia + New Zealand
-    public static final String R_CHICTR = "ChiCTR"; // China
-    public static final String R_CRIS = "CRis"; // South Korea
-    public static final String R_CTIS = "CTIS"; // EU (new)
-    public static final String R_CTG = "CTG"; // US
-    public static final String R_CTRI = "CTRI"; // India
-    public static final String R_DRKS = "DRKS"; // German
-    public static final String R_EUCTR = "EUCTR"; // EU (old)
-    public static final String R_ICTRP = "ICTRP"; // WHO (not a registry, used for ID)
-    public static final String R_IRCT = "IRCT"; // Iran
-    public static final String R_ISRCTN = "ISRCTN"; // UK
-    public static final String R_ITMCTR = "ITMCTR"; // Traditional medicine
-    public static final String R_JRCT = "jRCT"; // Japan
-    public static final String R_LBCTR = "LBCTR"; // Lebanon
-    public static final String R_TCTR = "TCTR"; // Thailand
-    public static final String R_PACTR = "PACTR"; // Pan African
-    public static final String R_REBEC = "ReBec"; // Brazil
-    public static final String R_REPEC = "REPEC"; // Peru
-    public static final String R_RPCEC = "RPCEC"; // Cuba
-    public static final String R_SLCTR = "SLCTR"; // Sri Lanka
+    public static final String EUCTR_REG_NAME_CTIS = "clinical trials information system";
 
     /* Studies */
     public static final String NOT_APPLICABLE = "N/A";
@@ -73,16 +53,49 @@ public class ConverterCVT {
     public static final String GENDER_ALL = "All";
     public static final String GENDER_WOMEN = "Female";
     public static final String GENDER_MEN = "Male";
-    public static final String AGE_IN_UTERO = "In utero";   // TODO
+    public static final String AGE_IN_UTERO = "In utero"; // TODO
     public static final String AGE_UNIT_YEARS = "Years";
     public static final String AGE_MIN_YEARS = "0";
     public static final String AGE_MAX_YEARS = "150";
-    public static enum AgeGroup {InUtero, Pediatric, Adult, OlderAdult};
+
+    public static enum AgeGroup {
+        InUtero, Pediatric, Adult, OlderAdult
+    };
+
     public static final String AGE_GROUP_IN_UTERO = "In Utero";
     public static final String AGE_GROUP_PEDIATRIC = "Pediatric";
     public static final String AGE_GROUP_ADULT = "Adult";
     public static final String AGE_GROUP_OLDER_ADULT = "Older Adult";
     public static final String INTERVENTION_T_DRUG = "Drug";
+    public static final String ID_SOURCE_AMBIG_EU = "Clinical Trial Information System/EU Clinical Trials Register";
+    public static final String ID_SOURCE_ANZCTR = "Australian New Zealand Clinical Trials Registry";
+    public static final String ID_SOURCE_CHICTR = "Chinese Clinical Trial Registry";
+    public static final String ID_SOURCE_CHIMCTR = "Chinese Medicine Clinical Trials Registry";
+    public static final String ID_SOURCE_CRIS = "Clinical Research Information Service";
+    public static final String ID_SOURCE_CTG = "ClinicalTrials.gov";
+    public static final String ID_SOURCE_CTIS = "Clinical Trial Information System";
+    public static final String ID_SOURCE_CTRI = "Clinical Trials Registry - India";
+    public static final String ID_SOURCE_DRKS = "Deutschen Register Klinischer Studien";
+    public static final String ID_SOURCE_EUCTR = "EU Clinical Trials Register";
+    public static final String ID_SOURCE_IRCT = "Iranian Registry of Clinical Trials";
+    public static final String ID_SOURCE_ITMCTR = "International Traditional Medicine Clinical Trial Registry";
+    public static final String ID_SOURCE_ISRCTN = "ISRCTN";
+    public static final String ID_SOURCE_JPRN = "Japan Primary Registry Network";
+    public static final String ID_SOURCE_LBCTR = "Lebanon Clinical Trial Registry";
+    public static final String ID_SOURCE_NHLBI = "National Heart Lung and Blood Institute";
+    public static final String ID_SOURCE_NTR = "Nationaal Trial Register";
+    public static final String ID_SOURCE_OMON = "Overzicht van Medisch-wetenschappelijk Onderzoek in Nederland";
+    public static final String ID_SOURCE_PACTR = "Pan African Clinical Trials Registry";
+    public static final String ID_SOURCE_REBEC = "Registro Brasileiro de Ensaios Clínicos";
+    public static final String ID_SOURCE_REPEC = "Registro Peruano de Ensayos Clínicos";
+    public static final String ID_SOURCE_RPCEC = "Registro Público Cubano de Ensayos Clínicos";
+    public static final String ID_SOURCE_SLCTR = "Sri Lanka Clinical Trials Registry";
+    public static final String ID_SOURCE_SNCTP = "Swiss National Clinical Trials Portal";
+    public static final String ID_SOURCE_TCTR = "Thai Clinical Trials Register";
+    public static final String ID_SOURCE_WHO = "World Health Organization";
+    public static final String ID_TYPE_BIOLINCC = "NHLBI BioLINCC ID";
+    public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
+    public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
 
     /* Objects */
     public static final String O_ACCESS_TYPE_PUBLIC = "Public";
@@ -111,7 +124,8 @@ public class ConverterCVT {
     public static final String CONTRIB_TYPE_STUDY_FUNDER = "Study funder";
     public static final String CONTRIB_TYPE_COLLABORATING_ORG = "Collaborating organisation";
     public static final String CONTRIB_TYPE_SITE_CONTACT = "Clinical site contact";
-    // Note: not in current MDR, this is for now used for CTG Collaborators that are not orgs
+    // Note: not in current MDR, this is for now used for CTG Collaborators that are
+    // not orgs
     public static final String CONTRIB_TYPE_COLLABORATING_PERSON = "Collaborating person";
     public static final String ORG_TYPE_FEDERAL_US = "US Federal agency";
     public static final String ORG_TYPE_GOVERNMENTAL = "Governmental";
@@ -119,8 +133,6 @@ public class ConverterCVT {
     public static final String ORG_TYPE_NETWORK = "Network";
     public static final String ORG_TYPE_NIH = "US NIH Institute";
     public static final String ORG_TYPE_OTHER = "Other";
-    public static final String ID_TYPE_TRIAL_REGISTRY = "Trial registry ID";
-    public static final String ID_TYPE_SPONSOR = "Sponsor's ID";
 
     /* Model field names */
     public static final String FIELD_MIN_AGE = "minAge";
@@ -134,11 +146,11 @@ public class ConverterCVT {
     public static final String CV_MESH_TREE = "MeSH Tree";
 
     /* Data source names */
-    public static final String SOURCE_NAME_WHO = "International Clinical Trials Registry Platform (ICTRP)";
+    public static final String SOURCE_NAME_BIOLINCC = "Biologic Specimen and Data Repository Information Coordinating Center (BioLINCC)";
     public static final String SOURCE_NAME_CTG = "ClinicalTrials.gov";
     public static final String SOURCE_NAME_CTIS = "Clinical Trials Information System (CTIS)";
     public static final String SOURCE_NAME_EUCTR = "EU Clinical Trials Register";
-    public static final String SOURCE_NAME_BIOLINCC = "Biologic Specimen and Data Repository Information Coordinating Center (BioLINCC)";
+    public static final String SOURCE_NAME_WHO = "International Clinical Trials Registry Platform (ICTRP)";
 
     public static final String CTG_STUDY_BASE_URL = "https://clinicaltrials.gov/study/";
     public static final String CTG_DOCUMENT_BASE_URL = "https://cdn.clinicaltrials.gov/large-docs/";

@@ -36,7 +36,7 @@ public class Logger {
             System.out.println("Warning: log dir is empty, log file will be created in current directory");
         }
 
-        String current_timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String current_timestamp = ConverterUtils.getCurrentTimestamp();
 
         // Create log dir (if not exists)
         Path logDirP = Paths.get(logDir);

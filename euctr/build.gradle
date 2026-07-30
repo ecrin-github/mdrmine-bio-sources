@@ -23,4 +23,5 @@ processResources {
 
 dependencies {
     compile project(':commons')
+    compile project(':models')
 }
