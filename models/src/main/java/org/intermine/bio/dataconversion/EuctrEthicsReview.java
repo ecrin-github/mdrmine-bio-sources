@@ -1,5 +1,4 @@
 package org.intermine.bio.dataconversion;
-
 /*
  * Copyright (C) 2024-2025 MDRMine
  *
@@ -11,24 +10,25 @@ package org.intermine.bio.dataconversion;
  */
 
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlProperty;
-import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlRootElement;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-
-
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class EuctrCriteria {
-    @JacksonXmlProperty(localName = "inclusion_criteria")
-    private String inclusionCriteria;
-    private String agemin;
-    private String agemax;
-    private String gender;
-    @JacksonXmlProperty(localName = "exclusion_criteria")
-    private String exclusionCriteria;
+public class EuctrEthicsReview {
+    private String status;
+    @JacksonXmlProperty(localName = "approval_date")
+    private String approvalDate;
+    @JacksonXmlProperty(localName = "contact_name")
+    private String contactName;
+    @JacksonXmlProperty(localName = "contact_address")
+    private String contactAddress;
+    @JacksonXmlProperty(localName = "contact_phone")
+    private String contactPhone;
+    @JacksonXmlProperty(localName = "contact_email")
+    private String contactEmail;
 }

@@ -1,12 +1,12 @@
 package org.intermine.bio.dataconversion;
 
 import com.fasterxml.jackson.dataformat.xml.XmlMapper;
+
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.Model;
 import org.intermine.xml.full.Item;
 
-import javax.xml.XMLConstants;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamReader;
 import javax.xml.stream.events.XMLEvent;
@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /*
  * Copyright (C) 2024-2025 MDRMine
@@ -42,7 +43,6 @@ public class EuctrConverter extends CacheConverter {
     private static final String DATASET_TITLE = "EUCTR_2026-03-04";
     private static final String DATA_SOURCE_NAME = "EUCTR";
     private static final String DATA_SOURCE_DESC = "EU Clinical Trials Register";
-    private static final String REG_NAME_CTIS = "clinical trials information system";
 
     private static final Pattern P_TITLE_NA = Pattern.compile("^-|_|N\\/?A$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_HC_CODE = Pattern.compile(
@@ -65,8 +65,6 @@ public class EuctrConverter extends CacheConverter {
     // Does not match "EU ET No.", matches "EUROPA TRIAL" and "Master Protocol
     // EU-SolidAct v2.0" (both should only appear once in the data)
     public static final Pattern P_EUCTR_ISS_AUTH = Pattern.compile(".*EU\\s*.*(?:CT|Clinical|trial).*");
-    private static final Set<String> dummyIDs = Set.of("ISRCTN00000000", "NCT00000000", "ISRCTN12345678",
-            "NCT12345678");
 
     private static final String FEATURE_YES = "yes";
     private static final String FEATURE_NO = "no";
@@ -125,23 +123,26 @@ public class EuctrConverter extends CacheConverter {
      * TODO
      */
     public void parseAndStoreTrial(EuctrTrial trial) throws Exception {
+        this.newerLastUpdate = false;
+        this.existingStudy = null;
+        this.currentCountry = null;
+
         EuctrMainInfo mainInfo = trial.getMainInfo();
+
         if (mainInfo == null) {
             this.writeLog("mainInfo is null");
             return;
         }
 
-        Item study = null;
-        this.newerLastUpdate = false;
-        this.existingStudy = null;
-        this.currentCountry = null;
-
-        study = this.parseTrialIDsAndGetStudy(trial);
+        IDsHandler idsH = this.parseTrialIDs(trial);
+        Item study = this.getOrCreateStudyWithIDs(idsH);
 
         if (study == null) {
-            this.writeLog("Skipping null study");
+            this.writeLog("Skipping study with no unique ID");
             return;
         }
+
+        this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
         String trialUrl = this.getAndCleanValue(mainInfo, "url");
 
@@ -152,20 +153,12 @@ public class EuctrConverter extends CacheConverter {
         String scientificAcronym = this.getAndCleanValue(mainInfo, "scientificAcronym");
         this.parseTitles(study, publicTitle, scientificTitle, scientificAcronym);
 
-        /* WHO universal trial number */
-        String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
-        // TODO: identifier type?
-        // TODO: also gives duplicate errors
-        if (!this.existingStudy()) {
-            this.createAndStoreStudyIdentifier(study, trialUtrn, null, null);
-        }
-
         // "Date on which this record was first entered in the EudraCT database" (from
         // trials-full.txt dat format)
         // Using this as "newer update" date
         // TODO: more relevant to use date enrolment?
         String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
-        LocalDate dateRegistration = this.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        LocalDate dateRegistration = ConverterUtils.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
         /* Trial registry entry SO */
         this.createAndStoreRegistryEntryDO(study, dateRegistration, trialUrl);
@@ -182,7 +175,7 @@ public class EuctrConverter extends CacheConverter {
          * "Date of Ethics Committee Opinion"
          */
         String dateEnrolmentStr = this.getAndCleanValue(mainInfo, "dateEnrolment");
-        LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        LocalDate dateEnrolment = ConverterUtils.parseDate(dateEnrolmentStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
         this.setStudyStartDate(study, dateEnrolment);
 
         // Unused, "Date trial authorised"
@@ -238,7 +231,7 @@ public class EuctrConverter extends CacheConverter {
 
         /* Study end date ("global completion date") */
         String resultsDateCompletedStr = this.getAndCleanValue(mainInfo, "resultsDateCompleted");
-        LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr,
+        LocalDate resultsDateCompleted = ConverterUtils.parseDate(resultsDateCompletedStr,
                 ConverterUtils.P_DATE_D_M_Y_SLASHES);
         this.setStudyEndDate(study, resultsDateCompleted);
 
@@ -251,7 +244,8 @@ public class EuctrConverter extends CacheConverter {
         study.setAttributeIfNotNull("description", resultsSummary);
 
         String resultsDatePostedStr = this.getAndCleanValue(mainInfo, "resultsDatePosted");
-        LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        LocalDate resultsDatePosted = ConverterUtils.parseDate(resultsDatePostedStr,
+                ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
         /* Results summary SO */
         this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsDateCompleted, resultsDatePosted);
@@ -322,151 +316,64 @@ public class EuctrConverter extends CacheConverter {
         List<EuctrEthicsReview> ethicsReviews = trial.getEthicsReviews();
         this.parseEthicsReviews(study, ethicsReviews);
 
-        // Storing in cache
-        if (!this.existingStudy()) {
-            this.studies.put(this.currentTrialID, study);
-        }
-
         this.currentTrialID = null;
     }
 
-    /**
-     * TODO
-     * 
-     * @param trial
-     * @return
-     */
-    public Item parseTrialIDsAndGetStudy(EuctrTrial trial) throws Exception {
-        Item study = null;
+    public IDsHandler parseTrialIDs(EuctrTrial trial) throws Exception {
+        IDsHandler idsH = null;
 
         EuctrMainInfo mainInfo = trial.getMainInfo();
-
-        String mainId = this.getAndCleanValue(mainInfo, "trialId");
+        String trialId = this.getAndCleanValue(mainInfo, "trialId");
         String regName = this.getAndCleanValue(mainInfo, "regName");
 
-        String countryCode = null;
-        String fullEuctrID = null;
-        String cleanedEuctrID = null;
-        String ctisID = null;
-        String nctID = null;
+        String cleanID = trialId.substring(0, 14); // Removing country code or resubmission suffix
+        String idSuffix = null;
 
-        boolean isCtisTrial = false;
+        if (trialId.length() > 14) {
+            idSuffix = trialId.substring(15); // Country code or resubmission prefix
+        }
+
+        ID primaryId = null;
 
         // Always EUCTR except in 20251208.xml where its CTIS
-        if (!ConverterUtils.isBlankOrNull(regName) && REG_NAME_CTIS.equalsIgnoreCase(regName)) {
-            isCtisTrial = true;
-            ctisID = mainId.substring(0, 14); // Removing resubmission suffix
-
-            return study; // TODO: temporarily skipping CTIS studies to avoid duplicates
+        if (!ConverterUtils.isBlankOrNull(regName) && ConverterCVT.EUCTR_REG_NAME_CTIS.equalsIgnoreCase(regName)) {
+            primaryId = new ID(cleanID, ConverterCVT.ID_SOURCE_CTIS, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true);
+            // TODO: resubmission?
         } else {
-            fullEuctrID = mainId;
-        }
+            primaryId = new ID(cleanID, ConverterCVT.ID_SOURCE_EUCTR, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true);
 
-        List<EuctrSecondaryId> secondaryIDs = trial.getSecondaryIds();
-        for (EuctrSecondaryId secIdObj : secondaryIDs) {
-            String secId = secIdObj.getSecondaryId();
-
-            if (!ConverterUtils.isBlankOrNull(secId)) {
-                secId = secId.strip();
-                String issAuth = secIdObj.getIssuingAuthority();
-
-                // TODO: uncomment when duplicates are handled in CTG
-                // if (isCtisTrial) { // Attempting to find an EUCTR ID
-                // Matcher mEUCTR = P_EUCTR_ISS_AUTH.matcher(issAuth);
-
-                // // TODO: should verify ID format?
-                // if (mEUCTR.matches()) {
-                // if (fullEuctrID != null) {
-                // this.writeLog("Warning: found another EUCTR ID in a CTIS entry: " + secId);
-                // } else {
-                // fullEuctrID = secId;
-                // }
-                // }
-                // } else {
-                // // TODO: CTIS
-                // }
-
-                // NCT ID
-                Matcher mNCT = ConverterUtils.P_NCT_ID.matcher(secId);
-                if (mNCT.matches()) {
-                    if (nctID != null) {
-                        this.writeLog("Warning: found another NCT ID in secondary IDs: " + secId);
-                    } else {
-                        nctID = secId;
-                    }
+            // Getting current country from country code
+            if (idSuffix != null && idSuffix.length() == 2) {
+                this.currentCountry = this.getCountry(idSuffix);
+                if (this.currentCountry == null) {
+                    this.writeLog("Couldn't find country from country code: " + idSuffix);
                 }
             }
+            // TODO: else "Outside-EU/EEA"
         }
 
-        // Getting clean EUCTR ID (without prefix) and extracting country code prefix
-        if (fullEuctrID != null && fullEuctrID.length() >= 14) {
-            // ID without country code suffix
-            cleanedEuctrID = fullEuctrID.substring(0, 14);
+        idsH = new IDsHandler(this.dataSourceName, primaryId);
 
-            if (fullEuctrID.length() == 17) { // Else "Outside-EU/EEA"
-                countryCode = fullEuctrID.substring(15, 17);
-            }
-        }
+        Set<String> ids = null;
 
-        // Attempting to find an existing study with euctrID
-        if (cleanedEuctrID != null && this.studies.containsKey(cleanedEuctrID)) {
-            // Adding country-specific info to existing trial
-            this.currentTrialID = cleanedEuctrID;
-        }
-
-        // Attempting to find an existing study with ctisID
-        if (ctisID != null && this.studies.containsKey(ctisID)) {
-            if (study != null) {
-                this.writeLog("Warning: parsing a study with both existing CTIS and EUCTR ID: " + fullEuctrID + " + "
-                        + ctisID);
-            } else {
-                this.currentTrialID = ctisID;
-            }
-        }
-
-        // TODO: put all ids in studies map?
-        // Getting existing study or creating one
-        if (this.currentTrialID != null) {
-            this.existingStudy = this.studies.get(this.currentTrialID);
-            study = this.existingStudy;
+        // Adding other IDs if any
+        List<EuctrSecondaryId> secIds = trial.getSecondaryIds();
+        if (secIds != null && secIds.size() > 0) {
+            ids = secIds.stream()
+                    .map(EuctrSecondaryId::getSecondaryId)
+                    .map(String::strip)
+                    .collect(Collectors.toSet());
         } else {
-            study = createItem("Study");
-
-            // Setting currentTrialID
-            if (cleanedEuctrID != null) {
-                this.currentTrialID = cleanedEuctrID;
-            } else if (ctisID != null) {
-                this.currentTrialID = ctisID;
-            } else {
-                this.writeLog("Found study with no suitable ID (shouldn't happen)");
-            }
+            ids = new HashSet<String>();
         }
 
-        // Getting country from ID country code
-        if (!ConverterUtils.isBlankOrNull(countryCode)) {
-            this.currentCountry = this.getCountry(countryCode);
-            if (this.currentCountry == null) {
-                this.writeLog("Couldn't find country from country code: " + countryCode);
-            }
-        }
+        // WHO UTRN
+        String trialUtrn = this.getAndCleanValue(mainInfo, "utrn");
+        ids.add(trialUtrn);
 
-        // TODO: also add ID with suffix as StudyIdentifier?
-        // TODO: check for discrepancies
-        if (cleanedEuctrID != null && ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "euctrID"))) {
-            study.setAttribute("euctrID", cleanedEuctrID);
-        }
+        idsH.addIds(ids);
 
-        if (ctisID != null && ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "primaryIdentifier"))) {
-            study.setAttribute("primaryIdentifier", ctisID);
-        }
-
-        // TODO: handle duplicates
-        // if (nctID != null &&
-        // ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "nctID"))) {
-        // study.setAttribute("nctID", nctID);
-        // }
-
-        return study;
+        return idsH;
     }
 
     /**
@@ -1015,14 +922,6 @@ public class EuctrConverter extends CacheConverter {
             LocalDate resultsDatePosted) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && resultsDatePosted != null) {
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            } else {
-                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            }
 
             // Publication year
             String publicationYear = null;
@@ -1032,11 +931,10 @@ public class EuctrConverter extends CacheConverter {
 
             /* Results summary SO */
             Item resultsSummaryDO = this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "title", dotitle },
+                    new String[][] { { "accessUrl", resultsUrlLink },
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
-                            { "accessUrl", resultsUrlLink },
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
         }
     }
@@ -1344,8 +1242,10 @@ public class EuctrConverter extends CacheConverter {
                 secId = secIdObj.getSecondaryId();
 
                 mNA = P_ID_NA.matcher(secId); // Filtering out N/A and similar values from IDs
-                if (!mNA.matches() && !seenIds.contains(secId) && !dummyIDs.contains(secId)) { // Also filtering out
-                                                                                               // seen and "dummy" IDs
+                if (!mNA.matches() && !seenIds.contains(secId) && !ConverterUtils.dummyIDs.contains(secId)) { // Also
+                                                                                                              // filtering
+                                                                                                              // out
+                    // seen and "dummy" IDs
                     issAuth = secIdObj.getIssuingAuthority();
 
                     // Creating protocol SO if ID is of type "Sponsor Protocol Code"
@@ -1380,19 +1280,9 @@ public class EuctrConverter extends CacheConverter {
      */
     public void createAndStoreProtocolDO(Item study, String protocolCode) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(protocolCode)) {
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
-            } else {
-                dotitle = ConverterCVT.O_TYPE_PROT;
-            }
-
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "Protocol",
-                    new String[][] { { "protocolSponsorId", protocolCode },
-                            { "title", dotitle } });
+                    new String[][] { { "protocolSponsorId", protocolCode } });
         }
     }
 

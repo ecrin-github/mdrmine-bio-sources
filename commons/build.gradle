@@ -1,7 +1,14 @@
+plugins {
+    id 'groovy'
+}
+
 sourceSets {
     main {
         java {
             srcDirs = ['src/main/java', 'build/gen']
+        }
+        groovy {
+            srcDirs = ['src/main/groovy', 'build/gen']
         }
         resources {
             srcDirs = ['src/main/resources']
@@ -11,8 +18,29 @@ sourceSets {
         java {
             srcDirs = ['src/test/java']
         }
+        groovy {
+            srcDirs = ['src/test/groovy']
+        }
         resources {
             srcDirs = ['src/test/resources']
         }
+    }
+}
+
+dependencies {
+    compile project(':models')
+    implementation gradleApi()
+    implementation localGroovy()
+    compile group: 'com.opencsv', name: 'opencsv', version: '5.9'
+    compile group: "org.intermine", name: "plugin", version: System.getProperty("imVersion")
+}
+
+task buildIdFile {
+    dependsOn classes
+    doLast {
+        def cp = sourceSets.main.runtimeClasspath
+        def loader = new URLClassLoader(cp.collect { it.toURI().toURL() } as URL[], (ClassLoader) null)
+        def helper = loader.loadClass('org.intermine.bio.dataconversion.BuildIdFileTask').newInstance()
+        helper.run(project)
     }
 }

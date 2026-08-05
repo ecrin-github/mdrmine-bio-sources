@@ -102,12 +102,6 @@ public class WhoConverter extends CacheConverter {
 
     private String headersFilePath = "";
     private Map<String, Integer> fieldsToInd;
-    private String registry; // Registry name
-    private boolean cache; // Caching studies that have nct/euctr/ctis id
-    // Get a study's ID used for caching from any of its other IDs - key: trial id,
-    // value: single trial id used as key in this.studies
-    private Map<String, String> mainTrialIdMap = new HashMap<String, String>();
-    private HashMap<String, IDsHandler> previousSourcesStudyIDs = null;
 
     /**
      * Constructor
@@ -148,12 +142,11 @@ public class WhoConverter extends CacheConverter {
 
         boolean skipNext = false;
 
-        this.writeLog("Loading IDs from previous sources");
-        this.previousSourcesStudyIDs = this.getExistingStudyIDs();
-        this.writeLog("Loaded " + this.previousSourcesStudyIDs.size() + " IDs from previous sources");
-
         // nextLine[] is an array of values from the line
         String[] nextLine = csvReader.readNext();
+
+        // this.modifyStoredStudyId("NCT03754790", "2023-508884-59");
+        // this.modifyStoredStudyId("2023-508884-67", "2023-508884-59");
 
         // TODO: performance tests? compared to iterator
         while (nextLine != null) {
@@ -182,8 +175,6 @@ public class WhoConverter extends CacheConverter {
      */
     public void parseAndStoreValues(String[] lineValues) throws Exception {
         Item study = null;
-        this.registry = "";
-        this.cache = false;
         this.newerLastUpdate = false;
         this.existingStudy = null;
         this.currentCountry = null;
@@ -204,12 +195,20 @@ public class WhoConverter extends CacheConverter {
         String childs = this.getAndCleanValue(lineValues, "Childs");
 
         // TODO EUCTR: check for additional IDs with existing study
-        study = this.parseTrialIDsAndGetStudy(trialID, secondaryIDs, bridgingFlag, childs);
+        IDsHandler idsH = this.parseTrialIDs(trialID, secondaryIDs, bridgingFlag, childs);
+        study = this.getOrCreateStudyWithIDs(idsH);
+
+        if (study == null) {
+            this.writeLog("Skipping study with no unique ID");
+            return;
+        }
+
+        this.currentTrialID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
 
         // TODO: study end date? -> results posted date?
         // Used for registry entry SO
         String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
-        LocalDate lastUpdate = this.parseDate(lastUpdateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
+        LocalDate lastUpdate = ConverterUtils.parseDate(lastUpdateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
 
         /* Registry page URL */
         String url = this.getAndCleanValue(lineValues, "url");
@@ -248,17 +247,17 @@ public class WhoConverter extends CacheConverter {
         // "Date on which this record was first entered in the EudraCT database:" in
         // EUCTR
         String registrationDateStr = this.getAndCleanValue(lineValues, "Date_registration");
-        LocalDate registrationDate = this.parseDate(registrationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        LocalDate registrationDate = ConverterUtils.parseDate(registrationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
 
         /* Date enrolment (start date) */
         // "Date of Competent Authority Decision" in EUCTR
         String dateEnrolmentStr = this.getAndCleanValue(lineValues, "Date_enrollement");
-        LocalDate dateEnrolment = this.parseDate(dateEnrolmentStr, null);
+        LocalDate dateEnrolment = ConverterUtils.parseDate(dateEnrolmentStr, null);
         this.setStudyStartDate(study, dateEnrolment);
 
         // Results date posted also used later
         String resultsDatePostedStr = this.getAndCleanValue(lineValues, "results_date_posted");
-        LocalDate resultsDatePosted = this.parseDate(resultsDatePostedStr, null);
+        LocalDate resultsDatePosted = ConverterUtils.parseDate(resultsDatePostedStr, null);
         String publicationYear = resultsDatePosted != null ? String.valueOf(resultsDatePosted.getYear()) : "";
 
         // TODO EUCTR: replace updated date + registration date + publication year if
@@ -393,7 +392,7 @@ public class WhoConverter extends CacheConverter {
         // "Date of the global end of the trial" in EUCTR
         // TODO: update dates if existing study and later dates
         String resultsDateCompletedStr = this.getAndCleanValue(lineValues, "results_date_completed");
-        LocalDate resultsDateCompleted = this.parseDate(resultsDateCompletedStr, null);
+        LocalDate resultsDateCompleted = ConverterUtils.parseDate(resultsDateCompletedStr, null);
         this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsSummary, resultsDatePosted,
                 resultsDateCompleted);
 
@@ -438,28 +437,19 @@ public class WhoConverter extends CacheConverter {
         // Not in MDR, name of ethics committee (not exactly address)
         String ethicsContactEmail = this.getAndCleanValue(lineValues, "Ethics_Contact_Email");
 
-        if (!this.existingStudy() && !this.cache) {
-            store(study);
-        }
-
         this.currentTrialID = null;
     }
 
     /**
      * TODO
-     * TODO: method is too long
      * 
      * @param trialID
      * @param secondaryIDs
+     * @param bridgingFlag
+     * @param childs
      * @return
-     * @throws Exception
      */
-    public Item parseTrialIDsAndGetStudy(String trialID, String secondaryIDs, String bridgingFlag, String childs)
-            throws Exception {
-        Item study = null;
-        List<String> euIds = new ArrayList<String>();
-        List<String> otherIDs = new ArrayList<String>();
-
+    public IDsHandler parseTrialIDs(String trialID, String secondaryIDs, String bridgingFlag, String childs) {
         // Adding trialID, secondaryIDs, bridgingFlag and childs into one set
         Set<String> ids = Stream.concat(Arrays.stream(secondaryIDs.split(";")), Arrays.stream(childs.split(";")))
                 .map(String::strip)
@@ -467,320 +457,40 @@ public class WhoConverter extends CacheConverter {
         ids.add(bridgingFlag);
         ids.add(trialID);
 
-        /* Parsing of IDs */
-        IDsHandler idsH = new IDsHandler(this.logger);
+        IDsHandler idsH = new IDsHandler(this.dataSourceName, ids);
 
-        Iterator<String> idsIter = ids.iterator();
-        while (idsIter.hasNext()) {
-            String id = idsIter.next();
-
-            if (!P_NONVALID_ID.matcher(id).matches()) {
-                Matcher mEu = ConverterUtils.P_EU_ID.matcher(id);
-
-                // Attempting to match against ID types that have dedicated fields (ctis, euctr,
-                // nct)
-                if (ConverterUtils.P_NCT_ID.matcher(id).matches()) {
-                    if (idsH.nctID.isEmpty()) {
-                        idsH.nctID = id;
-                    } else if (!idsH.nctID.equals(id)) {
-                        this.writeLog("NCT id already set, existing id: " + idsH.nctID + "; parsed id: " + id);
-                    }
-                } else if (mEu.matches()) {
-                    String ctisPrefix = mEu.group(1);
-                    String euctrPrefix = mEu.group(2);
-                    String euId = mEu.group(3);
-                    String ctisSuffix = mEu.group(4);
-                    String euctrSuffix = mEu.group(5);
-
-                    if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
-                        if (euctrPrefix == null && euctrSuffix == null) {
-                            if (idsH.ctisID.isEmpty()) {
-                                // Setting CTIS ID without prefix and suffix
-                                idsH.ctisID = euId;
-                            } else if (!idsH.ctisID.equals(euId)) {
-                                this.writeLog(
-                                        "CTIS id already set, existing id: " + idsH.ctisID + "; parsed id: " + euId);
-                            }
-                        } else {
-                            this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " + id);
-                        }
-                    } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
-                        if (idsH.euctrID.isEmpty()) {
-                            // Setting EUCTR ID without prefix and suffix
-                            idsH.euctrID = euId;
-                        } else if (idsH.euctrID.equals(euId)) {
-                            this.writeLog(
-                                    "EUCTR id already set, existing id: " + idsH.euctrID + "; parsed id: " + euId);
-                        }
-
-                        // TODO: handle case where EUCTR ID ends up different from already set ID in
-                        // study found with other ID, current country discrepancy in this case
-                        // Country code, only processing if euctrID is main ID
-                        if (euctrSuffix != null && id.equals(trialID)) {
-                            // TODO: handle "Outside-EU/EEA" country code
-                            // Getting country from ID country code
-                            if (!ConverterUtils.isBlankOrNull(euctrSuffix)) {
-                                this.currentCountry = this.getCountry(euctrSuffix);
-                                if (this.currentCountry == null) {
-                                    this.writeLog("Couldn't find country from country code: " + euctrSuffix);
-                                }
-                            }
-                        }
-                    } else { // Undistinguishable ID
-                        if (!idsH.ctisID.isEmpty()) {
-                            if (idsH.euctrID.isEmpty()) {
-                                idsH.euctrID = euId;
-                            } else {
-                                this.writeLog("Found an EU id but both CTIS and EUCTR ID are already set, id: " + euId
-                                        + "; full string of IDs: " + ids);
-                            }
-                        } else if (!idsH.ctisID.isEmpty()) {
-                            idsH.ctisID = euId;
-                        } else {
-                            euIds.add(euId);
-                        }
-                    }
-                } else {
-                    otherIDs.add(id);
-                }
-            }
-        }
-
-        // Handling undistinguishable EU IDs
-        if (euIds.size() > 0) {
-            if (euIds.size() > 2) {
-                this.writeLog("More than 2 EU IDs found: " + euIds + "; full string of IDs: " + ids);
-            } else if (euIds.size() == 2) {
-                if (!idsH.ctisID.isEmpty() || !idsH.euctrID.isEmpty()) {
-                    this.writeLog("2 EU IDs found but CTIS ID or EUCTR ID has already been set: " + euIds
-                            + "; full string of IDs: " + ids);
-                } else {
-                    String id1 = euIds.get(0);
-                    String id2 = euIds.get(1);
-
-                    // Assuming that the more recent ID (year + sequential part after) is the CTIS
-                    // ID, and the other is the EUCTR ID
-                    if (id1.compareTo(id2) > 0) {
-                        idsH.ctisID = id1;
-                        idsH.euctrID = id2;
-                    } else {
-                        idsH.ctisID = id2;
-                        idsH.euctrID = id1;
-                    }
-                }
-            } else { // 1 ID
-                if (!idsH.ctisID.isEmpty() && !idsH.euctrID.isEmpty()) {
-                    this.writeLog("1 EU ID found but both CTIS and EUCTR IDs have already been set: " + euIds
-                            + "; full string of IDs: " + ids);
-                } else {
-                    String id1 = euIds.get(0);
-
-                    // Note: if both ctisID and euctrID have not been set before, we populate both
-                    // fields hoping for a merge to correct the fields later
-                    if (idsH.ctisID.isEmpty()) {
-                        idsH.ctisID = id1;
-                    }
-                    if (idsH.euctrID.isEmpty()) {
-                        idsH.euctrID = id1;
-                    }
-                }
-            }
-        }
-
-        /* Start matching with previous study IDs and local (WHO) study instances */
-
-        /* This finds all matching IDs from previous sources studies */
-        String[] parsedIDs = idsH.getIDsList();
-        Set<IDsHandler> allIdsSet = new HashSet<IDsHandler>();
-        for (int i = 0; i < parsedIDs.length; i++) {
-            IDsHandler idsList = this.previousSourcesStudyIDs.getOrDefault(parsedIDs[i], null);
-            if (idsList != null) {
-                // TODO: don't log if duplicate
-                // this.writeLog("Found id from previous source: " + parsedIDs[i]);
-                allIdsSet.add(idsList);
-            }
-        }
-
-        /*
-         * All previous studies found are distinct, we need to pick the most appropriate
-         * one if multiple were found,
-         * and remove any ID that would be common with other previous studies, e.g.
-         * previous study 1: CTIS2016-004754-15 NCT03059446 EUCTR2016-004754-15
-         * previous study 2: CTIS() NCT02217475 EUCTR2014-003164-21
-         * parsed ID: CTIS() NCT02217475 EUCTR2016-004754-15
-         */
-        if (allIdsSet.size() > 0) {
-            IDsHandler idsList;
-            if (allIdsSet.size() == 1) {
-                idsList = allIdsSet.iterator().next();
-            } else {
-                List<IDsHandler> allIdsList = new ArrayList<IDsHandler>(allIdsSet);
-                // TODO: match against title (with LevenshteinDistance) instead of arbitrarily
-                // taking 1st idsList
-                idsList = allIdsList.get(0);
-
-                // Note: if anything matches here, that means we have a "previous studies: NCT03
-                // + 2016-, NCT02 + 2014- current study: NCT02 + 2016-" situation
-
-                // Removing all IDs conflicting with other previous studies
-                for (int i = 1; i < allIdsList.size(); i++) {
-                    IDsHandler currIdsList = allIdsList.get(i);
-                    if (!ConverterUtils.isBlankOrNull(currIdsList.ctisID)) {
-                        if (idsH.ctisID.equalsIgnoreCase(currIdsList.ctisID)) {
-                            idsH.ctisID = "";
-                        }
-                    }
-                    if (!ConverterUtils.isBlankOrNull(currIdsList.nctID)) {
-                        if (idsH.nctID.equalsIgnoreCase(currIdsList.nctID)) {
-                            idsH.nctID = "";
-                        }
-                    }
-                    if (!ConverterUtils.isBlankOrNull(currIdsList.euctrID)) {
-                        if (idsH.euctrID.equalsIgnoreCase(currIdsList.euctrID)) {
-                            idsH.euctrID = "";
-                        }
-                    }
-                }
-            }
-
-            /*
-             * Handling various cases regarding CTIS and EUCTR IDs, as they can be equal
-             * (both in previous study IDs and parsed IDs)
-             */
-            idsH.updateIDs(idsList.ctisID, idsList.nctID, idsList.euctrID);
-        }
-
-        /* Attempting to find an existing (cached) study from the IDs we have */
-        HashSet<String> seenIds = new HashSet<String>(); // To avoid checking for the same ID multiple times
-        for (String id : idsH.getIDsList()) {
-            if (this.mainTrialIdMap.containsKey(id)) {
-                String mainId = this.mainTrialIdMap.get(id);
-
-                if (this.existingStudy == null) { // Regular case
-                    this.existingStudy = this.studies.get(mainId);
-                    study = this.existingStudy;
-                    this.currentTrialID = mainId;
-                    seenIds.add(mainId);
-                } else if (!seenIds.contains(mainId)) { // Existing study, meaning 2 existing studies are linked by a
-                                                        // 3rd study (=the current record being parsed)
-                    // TODO: add handling of IDs who are not euctr/ctis/nct but are in the 1st field
-                    // in the WHO data
-                    // TODO: merge info from the study to be deleted with the current study before
-                    // deleting it
-
-                    // Test if we found a different instance of the same study
-                    if (!this.existingStudy.getIdentifier().equals(this.studies.get(mainId).getIdentifier())) {
-                        // Deleting previously cached study and all cached items linked to that study
-                        this.removeStudyAndLinkedItems(mainId);
-                        // Re-adding the entry pointing to the existing study previously found, to not
-                        // break the mainTrialIdMap
-                        this.studies.put(mainId, this.existingStudy);
-                        this.writeLog("Found 2 different instances of the same study, ids: " + this.currentTrialID
-                                + ", " + mainId + ", deleting the second study");
-                    }
-
-                    seenIds.add(mainId);
-                }
-            }
-        }
-
-        // Not an already existing study
-        if (study == null) {
-            study = createItem("Study");
-        }
-
-        /* Setting the various ID fields */
-
-        // TODO: could be null or not?
-        String existingCtisID = ConverterUtils.getAttrValue(study, "primaryIdentifier");
-        String existingNctID = ConverterUtils.getAttrValue(study, "nctID");
-        String existingEuctrID = ConverterUtils.getAttrValue(study, "euctrID");
-        idsH.updateIDs(existingCtisID, existingNctID, existingEuctrID);
-
-        if (!ConverterUtils.isBlankOrNull(idsH.ctisID)) {
-            study.setAttribute("primaryIdentifier", idsH.ctisID);
-            if (this.currentTrialID == null) {
-                this.currentTrialID = idsH.ctisID;
-            }
-            if (this.registry.isEmpty()) {
-                this.registry = ConverterCVT.R_CTIS;
-            }
-        }
-
-        if (!ConverterUtils.isBlankOrNull(idsH.nctID)) {
-            study.setAttribute("nctID", idsH.nctID);
-            if (this.currentTrialID == null) {
-                this.currentTrialID = idsH.nctID;
-            }
-            if (this.registry.isEmpty()) {
-                this.registry = ConverterCVT.R_CTG;
-            }
-        }
-
-        if (!ConverterUtils.isBlankOrNull(idsH.euctrID)) {
-            study.setAttribute("euctrID", idsH.euctrID);
-            if (this.currentTrialID == null) {
-                this.currentTrialID = idsH.euctrID;
-            }
-            if (this.registry.isEmpty()) {
-                this.registry = ConverterCVT.R_EUCTR;
-            }
-        }
-
-        // Note: Not setting any other ID types as "primaryIdentifier" as there are some
-        // garbage IDs in "TrialID" field and non-unique IDs in "SecondaryIDs" field
-        // Setting currentTrialID however since it's just used for logging
-        if (this.currentTrialID == null) {
-            this.writeLog("Current study has no CTIS/NCT/EUCTR ID to be used as primary identifier, using this id: "
-                    + trialID);
+        if (!ConverterUtils.isBlankOrNull(trialID)) {
             this.currentTrialID = trialID;
         } else {
-            this.studies.put(this.currentTrialID, study);
-
-            // Adding this study's other IDs along with the main ID to be able to find it in
-            // the studies map
-            for (String id : idsH.getIDsList()) {
-                if (!ConverterUtils.isBlankOrNull(id) && !this.mainTrialIdMap.containsKey(id)) {
-                    this.mainTrialIdMap.put(id, this.currentTrialID);
-                }
-            }
-
-            // Caching study if currentTrialID is not null (=euctr/ctis/nct id)
-            if (!this.existingStudy()) {
-                this.cache = true;
-                // this.writeLog("New study, to be cached: " + this.currentTrialID);
-            } else {
-                // this.writeLog("Existing study: " + this.currentTrialID);
-                ;
-            }
+            ID uid = idsH.getAnyUid();
+            this.currentTrialID = uid.getId();
         }
 
-        // Storing other IDs
-        // TODO: infer ID type
-        for (String id : otherIDs) {
-            // Adding IDs if not an existing study or not added already for an existing
-            // study
-            if (!this.existingStudy()
-                    || (this.getItemFromItemMap(study, this.studyIdentifiers, "identifierValue", id) == null)) {
-                this.createAndStoreClassItem(study, "StudyIdentifier",
-                        new String[][] { { "identifierValue", id } });
-            }
-        }
+        // TODO: unnecessary?
+        idsH.setPrimaryIdentifier(this.currentTrialID);
 
-        return study;
+        return idsH;
     }
 
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param publicTitle
+     * @param scientificTitle
+     * @throws Exception
+     */
     public void parseTitles(Item study, String publicTitle, String scientificTitle) throws Exception {
         if (!this.existingStudy()) {
             boolean titleSet = false;
 
             if (!ConverterUtils.isBlankOrNull(publicTitle) && !publicTitle.equals("-")
-                && !publicTitle.equals("_") && !publicTitle.equals(".")) {
+                    && !publicTitle.equals("_") && !publicTitle.equals(".")) {
                 study.setAttributeIfNotNull("title", publicTitle);
                 titleSet = true;
             }
             if (!ConverterUtils.isBlankOrNull(scientificTitle) && !scientificTitle.equals("-")
-                && !scientificTitle.equals("_") && !scientificTitle.equals(".")) {
+                    && !scientificTitle.equals("_") && !scientificTitle.equals(".")) {
                 study.setAttributeIfNotNull("scientificTitle", scientificTitle);
                 if (!titleSet) {
                     study.setAttributeIfNotNull("title", scientificTitle);
@@ -839,7 +549,8 @@ public class WhoConverter extends CacheConverter {
              * appear in our model
              */
             // Using the field with the most semi-colon-separated elements for iterating
-            int maxLen = Math.max(Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length), emails.length);
+            int maxLen = Math.max(Math.max(Math.max(firstNames.length, lastNames.length), affiliations.length),
+                    emails.length);
 
             String firstName, lastName, affiliation, email;
 
@@ -929,7 +640,8 @@ public class WhoConverter extends CacheConverter {
      * @param affiliation the affiliation value
      * @param contactType public or scientific contact
      */
-    public void createAndStoreContact(Item study, String firstName, String lastName, String email, String affiliation, String contactType) throws Exception {
+    public void createAndStoreContact(Item study, String firstName, String lastName, String email, String affiliation,
+            String contactType) throws Exception {
         String fullName = null;
         String contribType = null;
 
@@ -951,12 +663,12 @@ public class WhoConverter extends CacheConverter {
 
         Item contactPerson = this.createAndStoreClassItem(study, "Person",
                 new String[][] { { "fullName", fullName },
-                        { "email", ConverterUtils.filterNonEmailString(email) }, 
+                        { "email", ConverterUtils.filterNonEmailString(email) },
                         { "contribType", contribType } });
-        
+
         if (!ConverterUtils.isBlankOrNull(affiliation)) {
             Item affiliationOrg = this.createAndStoreClassItem(study, "Organisation",
-                        new String[][] { { "name", affiliation } });
+                    new String[][] { { "name", affiliation } });
             this.handleReferencesAndCollections(contactPerson, affiliationOrg);
         }
     }
@@ -987,7 +699,8 @@ public class WhoConverter extends CacheConverter {
     public void parseAgeField(Item study, String ageStr, String ageAttr, String unitAttr) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(ageStr)) {
             if (!((ageAttr.equals(ConverterCVT.FIELD_MIN_AGE) || ageAttr.equals(ConverterCVT.FIELD_MAX_AGE))
-                && (unitAttr.equals(ConverterCVT.FIELD_MIN_AGE_UNIT) || unitAttr.equals(ConverterCVT.FIELD_MAX_AGE_UNIT)))) {
+                    && (unitAttr.equals(ConverterCVT.FIELD_MIN_AGE_UNIT)
+                            || unitAttr.equals(ConverterCVT.FIELD_MAX_AGE_UNIT)))) {
                 throw new Exception("Wrong age field names: " + ageStr + ", " + unitAttr);
             }
 
@@ -1001,7 +714,7 @@ public class WhoConverter extends CacheConverter {
                 } else {
                     study.setAttribute(ageAttr, ConverterCVT.AGE_MAX_YEARS);
                 }
-                
+
                 study.setAttribute(unitAttr, ConverterCVT.AGE_UNIT_YEARS);
             } else { // Not stated
                 Matcher mAge = P_AGE.matcher(ageStr);
@@ -1045,12 +758,13 @@ public class WhoConverter extends CacheConverter {
 
                             // TODO: how to check unit against data?
                             if (g3 != null) {
-                                if (g3.equalsIgnoreCase("age")) {   // Assuming "age" means years
+                                if (g3.equalsIgnoreCase("age")) { // Assuming "age" means years
                                     study.setAttributeIfNotNull(unitAttr, ConverterCVT.AGE_UNIT_YEARS);
                                 } else {
                                     study.setAttributeIfNotNull(unitAttr, ConverterUtils.normaliseUnit(g3));
                                 }
-                            } else {    // No unit, attempt to get it from the other age field unit, otherwise default to Years
+                            } else { // No unit, attempt to get it from the other age field unit, otherwise default
+                                     // to Years
                                 String unit = null;
                                 if (unitAttr.equals(ConverterCVT.FIELD_MIN_AGE_UNIT)) {
                                     unit = ConverterUtils.getAttrValue(study, ConverterCVT.FIELD_MAX_AGE_UNIT);
@@ -1152,7 +866,8 @@ public class WhoConverter extends CacheConverter {
                                     + phase + "; nb1: " + nb1 + "; nb2: " + nb2 + ", full string: " + phaseStr);
                         }
                     } else if (nb2 != null && !nb1.equalsIgnoreCase(nb2)) { // Two phases
-                        featureValue = ConverterCVT.FEATURE_T_PHASE + " " + ConverterUtils.constructMultiplePhasesString(nb1, nb2);
+                        featureValue = ConverterCVT.FEATURE_T_PHASE + " "
+                                + ConverterUtils.constructMultiplePhasesString(nb1, nb2);
                     } else { // One phase
                         featureValue = ConverterCVT.FEATURE_T_PHASE + " " + ConverterUtils.convertPhaseNumber(nb1);
                     }
@@ -1181,7 +896,8 @@ public class WhoConverter extends CacheConverter {
                             if (phasesRes.size() == 1) { // One phase
                                 featureValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0));
                             } else if (phasesRes.size() == 2) { // Two phases
-                                featureValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0)) + "/"
+                                featureValue = ConverterCVT.FEATURE_T_PHASE + " " + String.valueOf(phasesRes.get(0))
+                                        + "/"
                                         + String.valueOf(phasesRes.get(1));
                             } else {
                                 this.writeLog("Anomaly: matched more than 2 groups for \"verbose\" phase field, g1: "
@@ -1332,7 +1048,7 @@ public class WhoConverter extends CacheConverter {
     /**
      * TODO
      * 
-     * @param cadDate    date of competent authority decision
+     * @param cadDate date of competent authority decision
      */
     public void parseCountries(Item study, String countriesStr, String plannedEnrolment, LocalDate cadDate,
             String ecdDatesStr) throws Exception {
@@ -1420,7 +1136,7 @@ public class WhoConverter extends CacheConverter {
             if (conditionsStr != null) {
                 // TODO: match values with CT codes/ICD Codes
                 // TODO: some values contain semicolons (e.g. NCT00112593 trial)
-                for (String c: conditionsStr.split(";")) {
+                for (String c : conditionsStr.split(";")) {
                     this.linkStudyToStudyCondition(study, c, null, null, null);
                 }
             }
@@ -1454,15 +1170,6 @@ public class WhoConverter extends CacheConverter {
         // Filtering out drks.de URL with no date posted (they are placeholders)
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            } else {
-                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            }
-
             // Publication year
             String publicationYear = null;
             if (resultsDatePosted != null) {
@@ -1471,11 +1178,10 @@ public class WhoConverter extends CacheConverter {
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "title", dotitle }, 
+                    new String[][] { { "accessUrl", resultsUrlLink },
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
-                            { "accessUrl", resultsUrlLink },
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
         }
     }
@@ -1484,7 +1190,8 @@ public class WhoConverter extends CacheConverter {
      * TODO
      */
     public void parseResultsYesNo(Item study, String resultsYesNo) {
-        // In WHO, value is either "yes" or empty, we could also assume empty means no results
+        // In WHO, value is either "yes" or empty, we could also assume empty means no
+        // results
         if (!ConverterUtils.isBlankOrNull(resultsYesNo) && resultsYesNo.equalsIgnoreCase("yes")) {
             boolean hasResults = false;
             if (resultsYesNo.equalsIgnoreCase("yes")) {
@@ -1502,15 +1209,6 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlProtocol)) {
             Matcher mUrl = P_URL.matcher(resultsUrlProtocol);
             if (mUrl.find()) {
-                // Display title
-                String dotitle;
-                String studyTitle = ConverterUtils.getAttrValue(study, "title");
-                if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                    dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
-                } else {
-                    dotitle = ConverterCVT.O_TYPE_PROT;
-                }
-
                 /* Protocol SO */
                 // Object type: in practice, most of the time it's a link to the study page
                 // (e.g. CTIS) where there might be the study protocol
@@ -1534,8 +1232,7 @@ public class WhoConverter extends CacheConverter {
                 // Note: only specifying public, not using the various public types MDR has,
                 // maybe to change
                 this.createAndStoreClassItem(study, "Protocol",
-                        new String[][] { { "title", dotitle },
-                                { "publicationYear", publicationYear },
+                        new String[][] { { "publicationYear", publicationYear },
                                 { "accessUrl", protocolURL },
                                 { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
             }
@@ -1560,52 +1257,62 @@ public class WhoConverter extends CacheConverter {
             /* Registry entry SO */
             // TODO
             // if (!ConverterUtils.isBlankOrNull(entryUrl)) {
-            //     this.createAndStoreClassItem(study, "StudyObject",
-            //             new String[][] { { "title", dotitle }, 
-            //                     // TODO: created or published?
-            //                     // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
-            //                     { "dateCreated", registrationDate != null ? registrationDate.toString() : null },
-            //                     { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
-            //                     { "publicationYear", publicationYear },
-            //                     { "accessUrl", entryUrl },
-            //                     { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
-            //                     { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
-            //                     { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
+            // this.createAndStoreClassItem(study, "StudyObject",
+            // new String[][] { { "title", dotitle },
+            // // TODO: created or published?
+            // // TODO: format is usually dd/mm/yyyy but can also be mm-dd-yyyy
+            // { "dateCreated", registrationDate != null ? registrationDate.toString() :
+            // null },
+            // { "dateUpdated", lastUpdate != null ? lastUpdate.toString() : null },
+            // { "publicationYear", publicationYear },
+            // { "accessUrl", entryUrl },
+            // { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
+            // { "urlTargetType", ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT },
+            // { "type", ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY } });
             // }
         } else {
             // Update SO creation date
             // TODO
             // if (registrationDate != null) {
-            //     Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
-            //             ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
+            // Item doRegistryEntry = this.getItemFromItemMap(study, this.objects, "type",
+            // ConverterCVT.O_TYPE_TRIAL_REGISTRY_ENTRY);
 
-            //     if (doRegistryEntry != null) {
-            //         // dateCreated
-            //         String existingDateCreatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateCreated");
-            //         // Updating dateCreated if older than known creation date or there was no previous date
-            //         if (ConverterUtils.isBlankOrNull(existingDateCreatedStr) || registrationDate
-            //                         .compareTo(ConverterUtils.getDateFromString(existingDateCreatedStr, null)) < 0) {
-            //             doRegistryEntry.setAttributeIfNotNull("dateCreated", registrationDate.toString());
+            // if (doRegistryEntry != null) {
+            // // dateCreated
+            // String existingDateCreatedStr = ConverterUtils.getAttrValue(doRegistryEntry,
+            // "dateCreated");
+            // // Updating dateCreated if older than known creation date or there was no
+            // previous date
+            // if (ConverterUtils.isBlankOrNull(existingDateCreatedStr) || registrationDate
+            // .compareTo(ConverterUtils.getDateFromString(existingDateCreatedStr, null)) <
+            // 0) {
+            // doRegistryEntry.setAttributeIfNotNull("dateCreated",
+            // registrationDate.toString());
 
-            //             this.writeLog("older creation date: " + registrationDate.toString() + ", previous: "
-            //                     + existingDateCreatedStr + " -country: "
-            //                     + ConverterUtils.getAttrValue(this.currentCountry, "name"));
-            //         }
+            // this.writeLog("older creation date: " + registrationDate.toString() + ",
+            // previous: "
+            // + existingDateCreatedStr + " -country: "
+            // + ConverterUtils.getAttrValue(this.currentCountry, "name"));
+            // }
 
-            //         // dateUpdated
-            //         String existingDateUpdatedStr = ConverterUtils.getAttrValue(doRegistryEntry, "dateUpdated");
-            //         // Updating dateUpdated if older than known creation date or there was no previous date
-            //         if (ConverterUtils.isBlankOrNull(existingDateUpdatedStr)
-            //                 || lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateUpdatedStr, null)) > 0) {
-            //             doRegistryEntry.setAttributeIfNotNull("dateUpdated", lastUpdate.toString());
+            // // dateUpdated
+            // String existingDateUpdatedStr = ConverterUtils.getAttrValue(doRegistryEntry,
+            // "dateUpdated");
+            // // Updating dateUpdated if older than known creation date or there was no
+            // previous date
+            // if (ConverterUtils.isBlankOrNull(existingDateUpdatedStr)
+            // ||
+            // lastUpdate.compareTo(ConverterUtils.getDateFromString(existingDateUpdatedStr,
+            // null)) > 0) {
+            // doRegistryEntry.setAttributeIfNotNull("dateUpdated", lastUpdate.toString());
 
-            //             // TODO: newerLastUpdate logic in separate function?
-            //             this.newerLastUpdate = true;
-            //             this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: "
-            //                     + existingDateUpdatedStr + " -country: "
-            //                     + ConverterUtils.getAttrValue(this.currentCountry, "name"));
-            //         }
-            //     }
+            // // TODO: newerLastUpdate logic in separate function?
+            // this.newerLastUpdate = true;
+            // this.writeLog("newer last update: " + lastUpdate.toString() + ", previous: "
+            // + existingDateUpdatedStr + " -country: "
+            // + ConverterUtils.getAttrValue(this.currentCountry, "name"));
+            // }
+            // }
             // }
         }
     }
@@ -1744,7 +1451,7 @@ public class WhoConverter extends CacheConverter {
 
     public void parseDataSharingStatement(Item study, String resultsIPDPlan, String resultsIPDDescription) {
         if (!this.existingStudy()) {
-            if (!ConverterUtils.isBlankOrNull(resultsIPDPlan)) {    // Also checks for "NULL"
+            if (!ConverterUtils.isBlankOrNull(resultsIPDPlan)) { // Also checks for "NULL"
                 study.setAttributeIfNotNull("planToShareIPD", resultsIPDPlan);
             }
             if (!ConverterUtils.isBlankOrNull(resultsIPDDescription)) {
@@ -1803,35 +1510,6 @@ public class WhoConverter extends CacheConverter {
             return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s)).strip();
         }
         return ConverterUtils.unescapeHtml(ConverterUtils.removeQuotes(s));
-    }
-
-    public boolean isCtg() {
-        return this.registry.equals(ConverterCVT.R_CTG);
-    }
-
-    public boolean isCtis() {
-        return this.registry.equals(ConverterCVT.R_CTIS);
-    }
-
-    public boolean isEuctr() {
-        return this.registry.equals(ConverterCVT.R_EUCTR);
-    }
-
-    @Override
-    public Item createAndStoreClassItem(Item mainClassItem, String className, String[][] kv) throws Exception {
-        Item item = this.createClassItem(mainClassItem, className, kv);
-
-        if (item != null) {
-            if (this.isCtg() || this.isEuctr() || this.isCtis()) { // Saving in cache to itemMap
-                this.storeClassItem(mainClassItem, item);
-            } else {
-                store(item);
-            }
-        } else {
-            this.writeLog("Failed to create item of class " + className + ", attributes: " + kv);
-        }
-
-        return item;
     }
 
     /**

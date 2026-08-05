@@ -13,21 +13,33 @@ package org.intermine.bio.dataconversion;
 import java.text.ParseException;
 import java.time.DateTimeException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import org.apache.commons.text.WordUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.text.WordUtils;
+import org.intermine.metadata.ClassDescriptor;
+import org.intermine.metadata.Model;
+import org.intermine.metadata.ReferenceDescriptor;
 import org.intermine.xml.full.Attribute;
 import org.intermine.xml.full.Item;
 import org.intermine.xml.full.Reference;
+import org.intermine.xml.full.ReferenceList;
 import org.jsoup.Jsoup;
+
+import com.alibaba.fastjson2.JSON;
 
 /**
  * Class with utility functions for converter classes
@@ -52,30 +64,49 @@ public class ConverterUtils {
     /*
      * Regex to Java converter: https://www.regexplanet.com/advanced/java/index.html
      */
-    public static final Pattern P_PUBMED_ID = Pattern.compile(".*pubmed.*\\/([^?\\/]+).*");
-    public static final Pattern P_ID_AT_END_OF_URL = Pattern.compile(".*\\/([^?\\/]+).*");
+    public static final Set<String> dummyIDs = Set.of("NCT00000000", "NCT12345678", "ISRCTN00000000", "ISRCTN12345678",
+            "U0000-0000-0000", "U1234-1234-1234");
+    public static final Pattern P_ANZCTR_ID = Pattern.compile(".*ACTRN(?:\\s|0)?(\\d{14}).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_CHICTR_ID = Pattern.compile(".*(Chi(M)?CTR[^\\s,;]+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_CRIS_ID = Pattern.compile(".*\\b(KCT\\d+)[\\s]*$", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_CTRI_ID = Pattern.compile(".*(CTRI\\/\\d{4}\\/\\d{2,3}\\/\\d+).*",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_DRKS_ID = Pattern.compile(".*DRKS.*(\\d{8}).*", Pattern.CASE_INSENSITIVE);
     // Both EUCTR and CTIS (they might have the same format)
     public static final Pattern P_EU_ID = Pattern
-            .compile("(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?");
-    public static final Pattern P_NCT_ID = Pattern.compile("NCT\\d{8}");
-    public static final Pattern P_WHO_ID = Pattern.compile("U\\d{4}-\\d{4}-\\d{4}");
+            .compile(".*(?:(CTIS)|(EUCTR))?(\\d{4}-\\d{6}-\\d{2})(?:-(\\d{2})|-(.*))?.*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_IRCT_ID = Pattern.compile(".*(IRCT\\d+N\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_ISRCTN_ID = Pattern.compile(".*ISRCTN.*(\\d{8}).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_ITMCTR_ID = Pattern.compile("ITMCTR\\d+", Pattern.CASE_INSENSITIVE);
+    // Includes UMIN, jRCT and all JPRN IDs
+    public static final Pattern P_JPRN_ID = Pattern.compile(".*((?:UMIN|jRCTs?)\\d+)|(JPRN-(?!JPRN)[^\\s]*).*",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_LBCTR_ID = Pattern.compile("LBCTR\\d+", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_NCT_ID = Pattern.compile(".*(NCT\\d{8}).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_NTR_ID = Pattern.compile(".*\\b(NTR|NL)[\\s:]*?(\\d+)\\b.*",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_OMON_ID = Pattern.compile(".*\\b(OMON\\d{5})\\b.*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_PACTR_ID = Pattern.compile(".*(PACTR\\s*\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_REBEC_ID = Pattern.compile("^(RBR-\\w+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_REPEC_ID = Pattern.compile(".*\\b(PER-\\d+-\\d+(?:-[A-Z])?)",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_RPCEC_ID = Pattern.compile("RPCEC\\d+", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_SLCTR_ID = Pattern.compile(".*(SLCTR\\/\\d{4}\\/\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_SNCTP_ID = Pattern.compile(".*(SNCTP\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_TCTR_ID = Pattern.compile(".*\\b(TCTR\\d+).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_UTN_ID = Pattern.compile(".*(U\\d{4}-\\d{4}-\\d{4}).*", Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_PUBMED_ID = Pattern.compile(".*pubmed.*\\/([^?\\/]+).*");
+    public static final Pattern P_ID_AT_END_OF_URL = Pattern.compile(".*\\/([^?\\/]+).*");
+    public static final Pattern P_ID_GARBAGE = Pattern.compile(
+            "(?:[^\\w\\n]+)?(?:ND|no|[-\\/.]|ooo|N[\\/.]?A\\.?|NIL.*|NONE.*|NOT\\s+.*|.*aangevraagd.*)",
+            Pattern.CASE_INSENSITIVE);
+    // TODO: SNCTP
+    public static final List<Pattern> REGISTRY_ID_PATTERNS = Arrays.asList(
+            P_NCT_ID, P_EU_ID, P_UTN_ID, P_ISRCTN_ID, P_ANZCTR_ID, P_CTRI_ID, P_DRKS_ID, P_JPRN_ID, P_REBEC_ID,
+            P_CHICTR_ID, P_CRIS_ID, P_RPCEC_ID, P_IRCT_ID, P_PACTR_ID, P_REPEC_ID, P_LBCTR_ID, P_SLCTR_ID, P_TCTR_ID,
+            P_ITMCTR_ID, P_SNCTP_ID, P_NTR_ID, P_OMON_ID);
+
     public static final Pattern P_EMAIL = Pattern.compile("^[^@]+@[^.]+\\..+");
-    // public static final Pattern P_ANZCTR_ID = Pattern.compile();
-    // public static final Pattern P_CHICTR_ID = Pattern.compile();
-    // public static final Pattern P_CRIS_ID = Pattern.compile();
-    // public static final Pattern P_CTRI_ID = Pattern.compile();
-    // public static final Pattern P_DRKS_ID = Pattern.compile();
-    // public static final Pattern P_IRCT_ID = Pattern.compile();
-    // public static final Pattern P_ISRCTN_ID = Pattern.compile();
-    // public static final Pattern P_ITMCTR_ID = Pattern.compile();
-    // public static final Pattern P_JRCT_ID = Pattern.compile();
-    // public static final Pattern P_LBCTR_ID = Pattern.compile();
-    // public static final Pattern P_TCTR_ID = Pattern.compile();
-    // public static final Pattern P_PACTR_ID = Pattern.compile();
-    // public static final Pattern P_REBEC_ID = Pattern.compile();
-    // public static final Pattern P_REPEC_ID = Pattern.compile();
-    // public static final Pattern P_RPCEC_ID = Pattern.compile();
-    // public static final Pattern P_SLCTR_ID = Pattern.compile();
 
     /**
      * Check if a string is null, empty (after trim), or is equal to
@@ -86,6 +117,111 @@ public class ConverterUtils {
      */
     public static boolean isBlankOrNull(String s) {
         return (s == null || s.trim().isEmpty() || s.equalsIgnoreCase("NULL"));
+    }
+
+    /**
+     * TODO
+     */
+    public static ClassDescriptor getClassDescriptor(Model model, Item item) {
+        if (item == null) {
+            System.err.println("Error: called getClassDescriptor() with a null item");
+            return null;
+        }
+        return model.getClassDescriptorByName(item.getClassName());
+    }
+
+    /**
+     * TODO
+     */
+    public static Set<ClassDescriptor> getAllDescriptors(Model model, Item item) {
+        ClassDescriptor itemCD = ConverterUtils.getClassDescriptor(model, item);
+        if (itemCD == null) {
+            System.err.println("Error: getClassDescriptor() return a null ClassDescriptor");
+            return null;
+        } else {
+            Set<ClassDescriptor> allCDs = itemCD.getAllSuperDescriptors();
+            if (allCDs != null) {
+                allCDs.add(itemCD);
+            } else {
+                System.err.println(
+                        "Error: getAllSuperDescriptors() returned null and not an empty Set (shouldn't happen?)");
+            }
+            return allCDs;
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param idsMap
+     * @param idsH
+     * @return
+     */
+    public static Set<IDsHandler> getMatchingIDs(IDsMap idsMap, IDsHandler idsH) {
+        Set<IDsHandler> matchingHandlers = new HashSet<IDsHandler>();
+
+        if (idsH != null) {
+            for (ID id : idsH.uids) {
+                if (idsMap.containsId(id)) {
+                    matchingHandlers.add(idsMap.get(id));
+                }
+            }
+        }
+
+        return matchingHandlers;
+    }
+
+    /**
+     * TODO
+     * 
+     * @param idsMap
+     * @param idsH
+     * @return
+     * @throws Exception
+     */
+    public static boolean addToIdsMap(IDsMap idsMap, IDsHandler idsH) throws Exception {
+        boolean added = false;
+
+        // Only proceeding if there is at least one unique id
+        if (idsH.uids.size() > 0) {
+            added = true;
+
+            Set<IDsHandler> matchingHandlers = ConverterUtils.getMatchingIDs(idsMap, idsH);
+
+            if (matchingHandlers.size() == 0) {
+                // No matches, simply adding entries to idsMap
+                for (ID id : idsH.uids) {
+                    idsMap.add(id, idsH);
+                }
+            } else if (matchingHandlers.size() == 1) {
+                // One match, adding new IDs to IDsHandler and new entries to idsMap
+                IDsHandler matchedIdsH = matchingHandlers.iterator().next();
+
+                for (ID id : idsH.uids) {
+                    if (!matchedIdsH.hasUid(id)) {
+                        matchedIdsH.addId(id);
+                        idsMap.add(id, matchedIdsH);
+                    }
+                }
+            } else {
+                // Multiple matches, merging IDsHandler
+                IDsHandler mergedHandler = null;
+                for (IDsHandler idsHToMerge : matchingHandlers) {
+                    if (mergedHandler == null) {
+                        mergedHandler = idsHToMerge;
+                    } else {
+                        mergedHandler.mergeHandlers(idsHToMerge);
+                    }
+                }
+
+                // Replacing/adding entries in idsMap
+                for (ID id : mergedHandler.uids) {
+                    idsMap.put(id, mergedHandler);
+                }
+            }
+        }
+
+        return added;
     }
 
     /**
@@ -114,6 +250,134 @@ public class ConverterUtils {
             }
         }
         return lines;
+    }
+
+    /**
+     * TODO
+     * InterMine does not provide such a method
+     * Note: items (reference ids) in collections are stored in a list instead of a
+     * set for some reason
+     */
+    public static boolean removeItemFromCollection(Model model, Item item, Item itemToRemove) throws Exception {
+        boolean success = false;
+
+        if (item == null) {
+            throw new Exception("Item with collection is null");
+        }
+
+        if (itemToRemove == null) {
+            throw new Exception("Item to remove from collection is null");
+        }
+
+        ReferenceDescriptor rd = ConverterUtils.getReferenceDescriptorInItemAOfItemB(model, item, itemToRemove);
+        if (rd == null) {
+            throw new Exception(
+                    "Couldn't find collection of "
+                            + ConverterUtils.getClassDescriptor(model, itemToRemove).getSimpleName()
+                            + " in " + ConverterUtils.getClassDescriptor(model, item).getSimpleName());
+        }
+        if (!rd.isCollection()) {
+            throw new Exception("Item to remove from collection is null");
+        }
+
+        String collectionName = rd.getName();
+        ReferenceList collection = item.getCollection(collectionName);
+        if (collection == null) { // Shouldn't be null since getCollection() throws error before
+            throw new Exception(
+                    "Attempted to remove an item from an empty (uninitialised) collection (" + collectionName + ")");
+        }
+
+        List<String> refIds = collection.getRefIds();
+        String itemToRemoveId = itemToRemove.getIdentifier();
+
+        if (refIds == null || refIds.size() == 0) {
+            throw new Exception("Attempted to remove an item from an empty collection (" + collectionName + ")");
+        }
+
+        Iterator<String> it = refIds.iterator();
+        while (it.hasNext()) {
+            if (itemToRemoveId.equals(it.next())) {
+                it.remove();
+                success = true;
+                break;
+            }
+        }
+
+        // TODO: exception if not found?
+        if (success) {
+            item.setCollection(collectionName, refIds);
+        }
+
+        return success;
+    }
+
+    /**
+     * TODO
+     * Items order shouldn't matter
+     */
+    public static void handleReferencesAndCollections(Model model, Item itemA, Item itemB) throws Exception {
+        if (itemA != null && itemB != null) {
+            ReferenceDescriptor rdInAOfB = ConverterUtils.getReferenceDescriptorInItemAOfItemB(model, itemA, itemB); // Can
+                                                                                                                     // be
+                                                                                                                     // a
+            // CollectionDescriptor
+
+            // Reference in itemA to itemB
+            if (rdInAOfB != null) {
+                if (rdInAOfB.isCollection()) {
+                    itemA.addToCollection(rdInAOfB.getName(), itemB);
+                } else {
+                    itemA.setReference(rdInAOfB.getName(), itemB);
+                }
+
+                // Reference in itemB to itemA
+                ReferenceDescriptor rdInBOfA = rdInAOfB.getReverseReferenceDescriptor();
+                if (rdInBOfA != null) {
+                    if (rdInBOfA.isCollection()) {
+                        itemB.addToCollection(rdInBOfA.getName(), itemA);
+                    } else {
+                        itemB.setReference(rdInBOfA.getName(), itemA);
+                    }
+                } else {
+                    System.err.println("handleReferencesAndCollections(): shouldn't happen");
+                }
+            } else {
+                System.err.println("handleReferencesAndCollections(): Failed to find reference in "
+                        + ConverterUtils.getClassDescriptor(model, itemA).getSimpleName()
+                        + " class of " + ConverterUtils.getClassDescriptor(model, itemB).getSimpleName() + " class");
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * Note: ReferenceDescriptor here also includes CollectionDescriptor sub-class
+     */
+    public static ReferenceDescriptor getReferenceDescriptorInItemAOfItemB(Model model, Item itemA, Item itemB)
+            throws Exception {
+        ReferenceDescriptor foundRD = null;
+
+        Set<ReferenceDescriptor> rds = Stream
+                .concat(ConverterUtils.getClassDescriptor(model, itemA).getAllReferenceDescriptors().stream(),
+                        ConverterUtils.getClassDescriptor(model, itemA).getAllCollectionDescriptors().stream())
+                .collect(Collectors.toSet());
+        Iterator<ReferenceDescriptor> rdsIter = rds.iterator();
+
+        // B ClassDescriptor + super classes CDs (for now not more useful than just B CD
+        // but who knows)
+        Set<ClassDescriptor> bCDs = ConverterUtils.getAllDescriptors(model, itemB);
+
+        while (rdsIter.hasNext()) {
+            ReferenceDescriptor rd = rdsIter.next();
+            // Note: will not work as intended in case a Class has both a reference and a
+            // collection of the same Class
+            if (bCDs.contains(rd.getReferencedClassDescriptor())) {
+                foundRD = rd;
+                break;
+            }
+        }
+
+        return foundRD;
     }
 
     /**
@@ -214,8 +478,9 @@ public class ConverterUtils {
     /**
      * Uppercase first letter and lowercase the rest or not.
      * 
-     * @param s the string to normalise
-     * @param restToLowercase whether to convert to lowercase all characters after the first
+     * @param s               the string to normalise
+     * @param restToLowercase whether to convert to lowercase all characters after
+     *                        the first
      * @return the normalised string
      */
     public static String capitaliseFirstLetter(String s, boolean restToLowercase) {
@@ -342,7 +607,8 @@ public class ConverterUtils {
 
     /**
      * TODO
-     * Note: "In utero" age group edge case is only present and therefore only handled in CTIS
+     * Note: "In utero" age group edge case is only present and therefore only
+     * handled in CTIS
      */
     public static String calculateAgeGroup(Item study) {
         EnumSet<ConverterCVT.AgeGroup> ageGroups = EnumSet.noneOf(ConverterCVT.AgeGroup.class);
@@ -354,7 +620,7 @@ public class ConverterUtils {
 
         // Checking min age
         if (!ConverterUtils.isBlankOrNull(minAge) && !ConverterUtils.isBlankOrNull(minAgeUnit)) {
-            if (!minAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {  // If unit is not years, means it's a smaller unit
+            if (!minAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) { // If unit is not years, means it's a smaller unit
                 ageGroups.add(ConverterCVT.AgeGroup.Pediatric);
             } else {
                 if (NumberUtils.isParsable(minAge)) {
@@ -373,7 +639,8 @@ public class ConverterUtils {
 
             // Checking max age
             if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
-                // If unit is not years it's a smaller unit, and child age group has already been added with min age
+                // If unit is not years it's a smaller unit, and child age group has already
+                // been added with min age
                 if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
                     if (NumberUtils.isParsable(maxAge)) {
                         Float maxAgeF = Float.parseFloat(maxAge);
@@ -382,7 +649,8 @@ public class ConverterUtils {
                         } else if (maxAgeF >= 65) {
                             ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
 
-                            // If minAge is of child age group and max age of older adult age group, need to add adult age group as well
+                            // If minAge is of child age group and max age of older adult age group, need to
+                            // add adult age group as well
                             if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
                                 ageGroups.add(ConverterCVT.AgeGroup.Adult);
                             }
@@ -391,15 +659,15 @@ public class ConverterUtils {
                         // TODO: write log?
                     }
                 }
-            } else {    // No max age, adding all groups older than the one added with minAge
+            } else { // No max age, adding all groups older than the one added with minAge
                 if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
                     ageGroups.add(ConverterCVT.AgeGroup.Adult);
                     ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
                 } else if (ageGroups.contains(ConverterCVT.AgeGroup.Pediatric)) {
                     ageGroups.add(ConverterCVT.AgeGroup.OlderAdult);
-                }   // Else OLDER_ADULT, nothing to add
+                } // Else OLDER_ADULT, nothing to add
             }
-        } else {    // Checking max age with no min age
+        } else { // Checking max age with no min age
             if (!ConverterUtils.isBlankOrNull(maxAge) && !ConverterUtils.isBlankOrNull(maxAgeUnit)) {
                 ageGroups.add(ConverterCVT.AgeGroup.Pediatric); // No min age, adding child age group in any case
                 if (maxAgeUnit.equals(ConverterCVT.AGE_UNIT_YEARS)) {
@@ -424,7 +692,8 @@ public class ConverterUtils {
 
     /**
      * TODO
-     * Get title from a study item if there is any (publicTitle or scientificTitle or acronym)
+     * Get title from a study item if there is any (publicTitle or scientificTitle
+     * or acronym)
      */
     public static String getStudyTitle(Item study) {
         String title = null;
@@ -511,5 +780,204 @@ public class ConverterUtils {
             return email;
         }
         return null;
+    }
+
+    /**
+     * TODO
+     */
+    public static LocalDate parseDate(String dateStr, DateTimeFormatter df) {
+        LocalDate date = null;
+        if (!ConverterUtils.isBlankOrNull(dateStr)) {
+            // Test the passed formatter
+            if (df != null) {
+                date = ConverterUtils.getDateFromString(dateStr, df);
+            }
+
+            // Test other various patterns (null is ISO format)
+            if (date == null) {
+                DateTimeFormatter[] patterns = { null, ConverterUtils.P_DATE_D_M_Y_SLASHES,
+                        ConverterUtils.P_DATE_D_MWORD_Y_SPACES,
+                        ConverterUtils.P_DATE_MWORD_D_Y_HOUR, ConverterUtils.P_DATE_M_D_Y_TIME };
+                for (DateTimeFormatter pattern : patterns) {
+                    date = ConverterUtils.getDateFromString(dateStr, pattern);
+                    if (date != null) {
+                        break;
+                    }
+                }
+            }
+
+            // if (date == null) {
+            // System.err.println("parseDate(): couldn't parse date: " + dateStr);
+            // }
+        }
+
+        return date;
+    }
+
+    public static Matcher getMatchingIdMatcher(String id) {
+        Matcher m = null;
+
+        for (Pattern p : REGISTRY_ID_PATTERNS) {
+            m = p.matcher(id);
+
+            if (m.matches()) {
+                return m;
+            }
+        }
+
+        return null;
+    }
+
+    public static boolean isUniqueId(String id) {
+        return (ConverterUtils.getMatchingIdMatcher(id) != null);
+    }
+
+    public static String getCurrentTimestamp() {
+        return LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+    }
+
+    /**
+     * This method is here to avoid errors in Groovy task
+     * 
+     * @param line
+     * @return
+     */
+    public static CtgStudy getCtgStudy(String line) {
+        return JSON.parseObject(line, CtgStudy.class);
+    }
+
+    /**
+     * TODO
+     * Method infers, when possible, ID type, source, and uniqueness
+     */
+    public static ID createID(String id) {
+        ID studyIdentifier = null;
+
+        if (!ConverterUtils.isBlankOrNull(id)) {
+            String idValue = id;
+
+            String type = null;
+            String source = null;
+            Boolean unique = false;
+
+            // Testing different ID patterns to try to get ID type/source
+            Matcher m = ConverterUtils.getMatchingIdMatcher(id);
+
+            if (m != null) { // Found a matching ID pattern
+                unique = true;
+                type = ConverterCVT.ID_TYPE_TRIAL_REGISTRY;
+
+                Pattern p = m.pattern();
+
+                if (p == ConverterUtils.P_NCT_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_CTG;
+                } else if (p == ConverterUtils.P_EU_ID) {
+                    idValue = m.group(3);
+                    String ctisPrefix = m.group(1);
+                    String euctrPrefix = m.group(2);
+                    String ctisSuffix = m.group(4);
+                    String euctrSuffix = m.group(5);
+
+                    if (ctisPrefix != null || ctisSuffix != null) { // CTIS ID
+                        if (euctrPrefix == null && euctrSuffix == null) {
+                            source = ConverterCVT.ID_SOURCE_CTIS; // EUCT Number
+                        } else {
+                            source = ConverterCVT.ID_SOURCE_AMBIG_EU;
+                            // this.writeLog("CTIS ID matched but also has EUCTR ID characteristics: " +
+                            // id);
+                        }
+                    } else if (euctrPrefix != null || euctrSuffix != null) { // EUCTR ID
+                        source = ConverterCVT.ID_SOURCE_EUCTR; // EudraCT Number
+                    } else { // Undistinguishable ID
+                        source = ConverterCVT.ID_SOURCE_AMBIG_EU;
+                    }
+                } else if (p == ConverterUtils.P_ISRCTN_ID) {
+                    idValue = "ISRCTN" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_ISRCTN;
+                } else if (p == ConverterUtils.P_UTN_ID) {
+                    // TODO: missing a few cases with space after U and spaces around hyphens
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_WHO;
+                } else if (p == ConverterUtils.P_ANZCTR_ID) {
+                    // TODO: missing a few cases where prefix is ANZCTR instead of ACTRN
+                    idValue = "ACTRN" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_ANZCTR;
+                } else if (p == ConverterUtils.P_DRKS_ID) {
+                    idValue = "DRKS" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_DRKS;
+                } else if (p == ConverterUtils.P_CTRI_ID) {
+                    // TODO: missing very few cases where slashes are missing or the 1st slash is a
+                    // whitespace instead
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_CTRI;
+                } else if (p == ConverterUtils.P_JPRN_ID) {
+                    // TODO: missing very few cases such as "UMIN_ID:C000000091"
+                    String noPrefixId = m.group(1);
+                    String idWithPrefix = m.group(2);
+
+                    // Prefixing all IDs (UMIN, jRCT(s), JapicCTI, etc.) with JPRN-
+                    if (noPrefixId != null) {
+                        idValue = "JPRN-" + noPrefixId;
+                    } else {
+                        idValue = idWithPrefix;
+                    }
+                    source = ConverterCVT.ID_SOURCE_JPRN;
+                } else if (p == ConverterUtils.P_REBEC_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_REBEC;
+                } else if (p == ConverterUtils.P_CHICTR_ID) {
+                    // Note: unsure how CHIMCTR and CHICTR differ, possibly a EUCTR/CTIS situation?
+                    idValue = m.group(1);
+                    if (m.group(2) == null) { // ChiCTR ID
+                        source = ConverterCVT.ID_SOURCE_CHICTR;
+                    } else { // ChiMCTR ID
+                        source = ConverterCVT.ID_SOURCE_CHIMCTR;
+                    }
+                } else if (p == ConverterUtils.P_CRIS_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_CRIS;
+                } else if (p == ConverterUtils.P_RPCEC_ID) {
+                    source = ConverterCVT.ID_SOURCE_RPCEC;
+                } else if (p == ConverterUtils.P_IRCT_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_IRCT;
+                } else if (p == ConverterUtils.P_PACTR_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_PACTR;
+                } else if (p == ConverterUtils.P_REPEC_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_REPEC;
+                } else if (p == ConverterUtils.P_LBCTR_ID) {
+                    source = ConverterCVT.ID_SOURCE_LBCTR;
+                } else if (p == ConverterUtils.P_SLCTR_ID) {
+                    // TODO: missing very few cases with whitespace before first slash
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_SLCTR;
+                } else if (p == ConverterUtils.P_TCTR_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_TCTR;
+                } else if (p == ConverterUtils.P_ITMCTR_ID) {
+                    source = ConverterCVT.ID_SOURCE_ITMCTR;
+                } else if (p == ConverterUtils.P_SNCTP_ID) {
+                    idValue = m.group(1);
+                    source = ConverterCVT.ID_SOURCE_SNCTP;
+                } else if (p == ConverterUtils.P_NTR_ID) {
+                    // Note: missing some IDs registered in various free-text formats
+                    // Note 2: NTR prefix seems to be for older IDs and NL prefix for newer ones
+                    // (even though it is also obsolete and is OMON now)
+                    // See page 10: https://onderzoekmetmensen.nl/nl/node/24969/pdf
+                    idValue = m.group(1) + m.group(2);
+                    source = ConverterCVT.ID_SOURCE_NTR;
+                } else if (p == ConverterUtils.P_OMON_ID) {
+                    idValue = "NL-" + m.group(1);
+                    source = ConverterCVT.ID_SOURCE_OMON;
+                }
+            }
+
+            studyIdentifier = new ID(idValue, source, type, unique);
+        }
+
+        return studyIdentifier;
     }
 }

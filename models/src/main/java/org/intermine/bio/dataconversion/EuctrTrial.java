@@ -1,5 +1,4 @@
 package org.intermine.bio.dataconversion;
-
 /*
  * Copyright (C) 2024-2025 MDRMine
  *
@@ -10,7 +9,7 @@ package org.intermine.bio.dataconversion;
  *
  */
 
- import java.util.ArrayList;
+import java.util.ArrayList;
 import java.util.List;
 
 import com.fasterxml.jackson.dataformat.xml.annotation.JacksonXmlElementWrapper;
@@ -20,10 +19,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-
-
-
-
 
 @Getter
 @Setter
