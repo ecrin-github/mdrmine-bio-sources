@@ -576,10 +576,9 @@ public class BiolinccConverter extends CacheConverter {
         // TODO: managingOrg NHLBI?
         // TODO: normalized values for yes / no / n/a?
         this.createAndStoreClassItem(study, "IndividualParticipantData",
-                new String[][] { { "title", ConverterCVT.O_TYPE_IPD },
+                new String[][] { { "publicationYear", publicationYear },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },
                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
-                        { "publicationYear", publicationYear },
                         { "restrictCommercial", commercialUseDataRestrictions },
                         { "restrictGeo", "Yes" }, // See above
                         { "restrictResearchType", dataRestrictionsBasedOnAreaOfResearch },
@@ -621,11 +620,10 @@ public class BiolinccConverter extends CacheConverter {
         // TODO: managingOrg NHLBI?
         // TODO: normalized values for yes / no / n/a?
         Item biospecimenDO = this.createAndStoreClassItem(study, "Biosample",
-                new String[][] { { "title", ConverterCVT.O_TYPE_BIOSPECIMEN },
+                new String[][] { { "publicationYear", publicationYear },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },
                         { "materialTypes", materialTypes },
                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
-                        { "publicationYear", publicationYear },
                         { "restrictCommercial", commercialUseSpecimenRestrictions },
                         { "restrictGeo", "Yes" }, // See above
                         { "restrictResearchTypeNonGenetic", nonGeneticUseSpecimenRestrictions },

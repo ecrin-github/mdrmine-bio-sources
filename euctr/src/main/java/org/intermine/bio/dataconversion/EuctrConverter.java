@@ -922,14 +922,6 @@ public class EuctrConverter extends CacheConverter {
             LocalDate resultsDatePosted) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && resultsDatePosted != null) {
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            } else {
-                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            }
 
             // Publication year
             String publicationYear = null;
@@ -939,11 +931,10 @@ public class EuctrConverter extends CacheConverter {
 
             /* Results summary SO */
             Item resultsSummaryDO = this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "title", dotitle },
+                    new String[][] { { "accessUrl", resultsUrlLink },
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
-                            { "accessUrl", resultsUrlLink },
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
         }
     }
@@ -1289,19 +1280,9 @@ public class EuctrConverter extends CacheConverter {
      */
     public void createAndStoreProtocolDO(Item study, String protocolCode) throws Exception {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(protocolCode)) {
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
-            } else {
-                dotitle = ConverterCVT.O_TYPE_PROT;
-            }
-
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "Protocol",
-                    new String[][] { { "protocolSponsorId", protocolCode },
-                            { "title", dotitle } });
+                    new String[][] { { "protocolSponsorId", protocolCode } });
         }
     }
 
