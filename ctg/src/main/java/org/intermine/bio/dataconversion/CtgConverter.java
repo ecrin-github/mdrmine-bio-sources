@@ -1097,16 +1097,6 @@ public class CtgConverter extends CacheConverter {
                 }
             }
 
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " +
-                        ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            } else {
-                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            }
-
             // Publication year
             String publicationYear = null;
             if (datePublished != null && datePublished.length() >= 4) {
@@ -1115,8 +1105,7 @@ public class CtgConverter extends CacheConverter {
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "title", dotitle },
-                            { "dateCreated", dateCreated },
+                    new String[][] { { "dateCreated", dateCreated },
                             { "datePublished", datePublished },
                             { "dateUpdated", dateUpdated },
                             { "publicationYear", publicationYear },
@@ -1346,11 +1335,10 @@ public class CtgConverter extends CacheConverter {
 
                     if (!ConverterUtils.isBlankOrNull(ipdUrl)) {
                         Item ipdDO = this.createAndStoreClassItem(study, "IndividualParticipantData",
-                                new String[][] { { "title", ConverterCVT.O_TYPE_IPD },
+                                new String[][] { { "accessUrl", ipdUrl },
                                         // TODO
                                         // { "objectId", objectId },
-                                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
-                                        { "accessUrl", ipdUrl } });
+                                        { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD } });
                     }
                 } else { // Other fields are empty
                     study.setAttributeIfNotNull("dataSharingStatement", ipdModule.description);

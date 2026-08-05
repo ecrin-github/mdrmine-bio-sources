@@ -348,19 +348,9 @@ public class CtisConverter extends CacheConverter {
             // TODO: Try to get URL from euclinicaltrials.eu/ctis-public/view/[trial ID]?
             // protocol can be in trial documents tab
 
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
-            } else {
-                dotitle = ConverterCVT.O_TYPE_PROT;
-            }
-
             /* Protocol SO */
             Item protocolDO = this.createAndStoreClassItem(study, "Protocol",
-                    new String[][] { { "protocolSponsorId", protocolCode },
-                            { "title", dotitle } });
+                    new String[][] { { "protocolSponsorId", protocolCode } });
         }
     }
 
@@ -766,20 +756,10 @@ public class CtisConverter extends CacheConverter {
             LocalDate decisionDate = ConverterUtils.getDateFromString(decisionDateStr,
                     ConverterUtils.P_DATE_D_M_Y_SLASHES);
             if (decisionDate != null) {
-                // Display title
-                String studyTitle = ConverterUtils.getAttrValue(study, "title");
-                String dotitle;
-                if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                    dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
-                } else {
-                    dotitle = ConverterCVT.O_TYPE_ETHICS_APPROVAL_NOTIFICATION;
-                }
-
                 /* Ethics approval notification SO */
                 // TODO: decision field?
                 Item ethicsApprovalDO = this.createAndStoreClassItem(study, "EthicsApprovalNotification",
-                        new String[][] { { "datePublished", decisionDate.toString() },
-                                { "title", dotitle } });
+                        new String[][] { { "datePublished", decisionDate.toString() } });
             }
         }
     }

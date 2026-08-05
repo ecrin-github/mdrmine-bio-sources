@@ -1170,15 +1170,6 @@ public class WhoConverter extends CacheConverter {
         // Filtering out drks.de URL with no date posted (they are placeholders)
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
                 && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
-            // Display title
-            String studyTitle = ConverterUtils.getAttrValue(study, "title");
-            String dotitle;
-            if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                dotitle = studyTitle + " - " + ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            } else {
-                dotitle = ConverterCVT.O_TITLE_RESULTS_SUMMARY;
-            }
-
             // Publication year
             String publicationYear = null;
             if (resultsDatePosted != null) {
@@ -1187,11 +1178,10 @@ public class WhoConverter extends CacheConverter {
 
             /* Results summary SO */
             this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "title", dotitle },
+                    new String[][] { { "accessUrl", resultsUrlLink },
                             { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
                             { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
                             { "publicationYear", publicationYear },
-                            { "accessUrl", resultsUrlLink },
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
         }
     }
@@ -1219,15 +1209,6 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlProtocol)) {
             Matcher mUrl = P_URL.matcher(resultsUrlProtocol);
             if (mUrl.find()) {
-                // Display title
-                String dotitle;
-                String studyTitle = ConverterUtils.getAttrValue(study, "title");
-                if (!ConverterUtils.isBlankOrNull(studyTitle)) {
-                    dotitle = studyTitle + " - " + ConverterCVT.O_TYPE_PROT;
-                } else {
-                    dotitle = ConverterCVT.O_TYPE_PROT;
-                }
-
                 /* Protocol SO */
                 // Object type: in practice, most of the time it's a link to the study page
                 // (e.g. CTIS) where there might be the study protocol
@@ -1251,8 +1232,7 @@ public class WhoConverter extends CacheConverter {
                 // Note: only specifying public, not using the various public types MDR has,
                 // maybe to change
                 this.createAndStoreClassItem(study, "Protocol",
-                        new String[][] { { "title", dotitle },
-                                { "publicationYear", publicationYear },
+                        new String[][] { { "publicationYear", publicationYear },
                                 { "accessUrl", protocolURL },
                                 { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
             }
