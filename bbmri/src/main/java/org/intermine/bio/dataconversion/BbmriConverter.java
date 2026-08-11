@@ -80,6 +80,7 @@ public class BbmriConverter extends CacheConverter
                     study = this.studyMap.get(trialID);
                 } else {
                     study = this.createItem("Study");
+                    study.setAttributeIfNotNull("primaryIdentifier", trialID);
                     store(study);
                     this.studyMap.put(trialID, study);
                 }
