@@ -815,7 +815,7 @@ public class EuctrConverter extends CacheConverter {
                 }
             }
         }
-        // TODO: add check for new conditions for exisiting studies
+        // TODO: add check for new conditions for existing studies
     }
 
     /**
