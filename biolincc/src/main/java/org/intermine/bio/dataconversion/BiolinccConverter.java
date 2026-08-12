@@ -619,6 +619,8 @@ public class BiolinccConverter extends CacheConverter {
         // TODO: lang code en by default?
         // TODO: managingOrg NHLBI?
         // TODO: normalized values for yes / no / n/a?
+        // Note: no primaryId (=no detectable duplicates), so no attempt to reuse
+        // Biosample items
         Item biospecimenDO = this.createAndStoreClassItem(study, "Biosample",
                 new String[][] { { "publicationYear", publicationYear },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },

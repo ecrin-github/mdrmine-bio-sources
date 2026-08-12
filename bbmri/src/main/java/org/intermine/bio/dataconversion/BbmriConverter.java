@@ -85,12 +85,20 @@ public class BbmriConverter extends CacheConverter
                     this.studyMap.put(trialID, study);
                 }
 
-                this.createAndStoreClassItem(study, "Biosample",
-                    new String[][] { { "bbmriID", this.getAndCleanValue(nextLine, "bbmri_id") },
-                            { "title", this.getAndCleanValue(nextLine, "title") },
-                            { "description", this.getAndCleanValue(nextLine, "description") },
-                            { "materialTypes", this.getAndCleanValue(nextLine, "material_types") },
-                            { "accessUrl", this.getAndCleanValue(nextLine, "url") } });
+                String bbmriID = this.getAndCleanValue(nextLine, "bbmri_id");
+                if (!ConverterUtils.isBlankOrNull(bbmriID)) {
+                    Item biosample = this.linkStudyToBiosample(study, bbmriID); // Get or create Biosample based on ID
+                    biosample.setAttributeIfNotNull("title", this.getAndCleanValue(nextLine, "title"));
+                    biosample.setAttributeIfNotNull("description", this.getAndCleanValue(nextLine, "description"));
+                    biosample.setAttributeIfNotNull("materialTypes", this.getAndCleanValue(nextLine, "material_types"));
+                    biosample.setAttributeIfNotNull("accessUrl", this.getAndCleanValue(nextLine, "url"));
+                } else {
+                    this.createAndStoreClassItem(study, "Biosample",
+                        new String[][] { { "title", this.getAndCleanValue(nextLine, "title") },
+                                { "description", this.getAndCleanValue(nextLine, "description") },
+                                { "materialTypes", this.getAndCleanValue(nextLine, "material_types") },
+                                { "accessUrl", this.getAndCleanValue(nextLine, "url") } });
+                }
             } else {
                 skipNext = false;
             }
