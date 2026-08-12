@@ -32,8 +32,8 @@ import java.util.HashMap;
 public class BbmriConverter extends CacheConverter
 {
     //
-    private static final String DATASET_TITLE = "20230903 mapping";
-    private static final String DATA_SOURCE_NAME = "BBMRI Biosamples Manual mapping";
+    private static final String DATASET_TITLE = "BBMRI Biosamples Manual mapping 20230903";
+    private static final String DATA_SOURCE_NAME = "BBMRI";
 
     private Map<String, Item> studyMap = new HashMap<String, Item>();
     private Map<String, Integer> fieldsToInd;
