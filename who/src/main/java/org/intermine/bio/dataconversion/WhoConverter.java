@@ -97,7 +97,7 @@ public class WhoConverter extends CacheConverter {
     private static final String IC_PREFIX = "Inclusion criteria: ";
     private static final String EC_PREFIX = "Exclusion criteria: ";
 
-    private static final String DATASET_TITLE = "ICTRPFullExport";
+    private static final String DATASET_TITLE = "ICTRPFullExport 20260629";
     private static final String DATA_SOURCE_NAME = "ICTRP";
 
     private String headersFilePath = "";
