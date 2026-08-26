@@ -116,7 +116,7 @@ public class ConverterUtils {
      *         "NULL", false otherwise
      */
     public static boolean isBlankOrNull(String s) {
-        return (s == null || s.trim().isEmpty() || s.equalsIgnoreCase("NULL"));
+        return (s == null || s.trim().isEmpty() || s.trim().equalsIgnoreCase("NULL"));
     }
 
     /**
