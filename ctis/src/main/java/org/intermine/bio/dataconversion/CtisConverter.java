@@ -58,7 +58,7 @@ public class CtisConverter extends CacheConverter {
 
     private static final String REGISTRY_ENTRY_BASE_URL = "https://euclinicaltrials.eu/ctis-public/view/";
 
-    private static final String DATASET_TITLE = "CTIS_trials_20260428";
+    private static final String DATASET_TITLE = "CTIS all trials";
     private static final String DATA_SOURCE_NAME = "CTIS";
     private static final String DATA_SOURCE_DESC = "Clinical Trials Information System (EMA)";
 

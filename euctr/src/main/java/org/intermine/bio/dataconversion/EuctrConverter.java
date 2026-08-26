@@ -40,7 +40,7 @@ import java.util.stream.Collectors;
  * @author
  */
 public class EuctrConverter extends CacheConverter {
-    private static final String DATASET_TITLE = "EUCTR_2026-03-04";
+    private static final String DATASET_TITLE = "EUCTR Digest";
     private static final String DATA_SOURCE_NAME = "EUCTR";
     private static final String DATA_SOURCE_DESC = "EU Clinical Trials Register";
 

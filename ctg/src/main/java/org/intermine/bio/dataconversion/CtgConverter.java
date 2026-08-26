@@ -29,7 +29,7 @@ import com.alibaba.fastjson2.reader.ObjectReader;
  */
 public class CtgConverter extends CacheConverter {
     //
-    private static final String DATASET_TITLE = "CTG-Studies";
+    private static final String DATASET_TITLE = "CTG-studies-all-fields";
     private static final String DATA_SOURCE_NAME = "CTG";
     private static final String DATA_SOURCE_DESC = "ClinicalTrials.gov (NIH)";
     private static final String RESULTS_TAB_URL_SUFFIX = "?tab=results";
