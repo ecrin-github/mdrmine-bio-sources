@@ -227,7 +227,8 @@ public class BiolinccConverter extends CacheConverter {
         String hivStudyClassification = this.getAndCleanValue(lineValues, "HIV study classification");
 
         // ? Unused
-        String ingestionStatus = this.getAndCleanValue(lineValues, "Ingestion Status");
+        // String ingestionStatus = this.getAndCleanValue(lineValues, "Ingestion
+        // Status");
 
         // TODO: create Organisation item?
         String nhlbiDivision = this.getAndCleanValue(lineValues, "NHLBI Division");
