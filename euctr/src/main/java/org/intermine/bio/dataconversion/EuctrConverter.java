@@ -155,7 +155,7 @@ public class EuctrConverter extends CacheConverter {
         // Using this as "newer update" date
         // TODO: more relevant to use date enrolment?
         String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
-        LocalDate dateRegistration = ConverterUtils.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        this.parseRegistrationDate(study, dateRegistrationStr);
 
         /* Study people: primary sponsor */
         String primarySponsor = this.getAndCleanValue(mainInfo, "primarySponsor");
@@ -407,6 +407,24 @@ public class EuctrConverter extends CacheConverter {
                 }
 
                 study.setAttributeIfNotNull("acronym", scientificAcronym);
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param dateRegistrationStr
+     */
+    public void parseRegistrationDate(Item study, String dateRegistrationStr) {
+        if (!ConverterUtils.isBlankOrNull(dateRegistrationStr)) {
+            LocalDate dateRegistration = ConverterUtils.parseDate(dateRegistrationStr,
+                    ConverterUtils.P_DATE_D_M_Y_SLASHES);
+            if (dateRegistration != null) {
+                study.setAttributeIfNotNull("registrationDate", dateRegistration.toString());
+            } else {
+                this.writeLog("Failed to parse study registration date: " + dateRegistrationStr);
             }
         }
     }

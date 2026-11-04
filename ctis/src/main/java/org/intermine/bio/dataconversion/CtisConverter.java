@@ -238,7 +238,7 @@ public class CtisConverter extends CacheConverter {
 
         /* Trial registry entry SO + instance + last updated date */
         String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
-        LocalDate lastUpdated = ConverterUtils.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        this.parseLastUpdatedDate(study, lastUpdatedStr);
 
         /* Description (constructed) */
         // TODO: missing Main Objective field from CTIS UI
@@ -801,6 +801,23 @@ public class CtisConverter extends CacheConverter {
                         seenSponsors.add(sponsor);
                     }
                 }
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param lastUpdatedDateStr
+     */
+    public void parseLastUpdatedDate(Item study, String lastUpdatedDateStr) {
+        if (!ConverterUtils.isBlankOrNull(lastUpdatedDateStr)) {
+            LocalDate lastUpdated = ConverterUtils.parseDate(lastUpdatedDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+            if (lastUpdated != null) {
+                study.setAttributeIfNotNull("lastUpdate", String.valueOf(lastUpdated.toString()));
+            } else {
+                this.writeLog("Failed to parse last updated date: " + lastUpdatedDateStr);
             }
         }
     }

@@ -206,7 +206,7 @@ public class WhoConverter extends CacheConverter {
         // TODO: study end date? -> results posted date?
         // Used for registry entry SO
         String lastUpdateStr = this.getAndCleanValue(lineValues, "last_update");
-        LocalDate lastUpdate = ConverterUtils.parseDate(lastUpdateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
+        this.parseLastUpdate(study, lastUpdateStr);
 
         /* Registry page URL */
         String url = this.getAndCleanValue(lineValues, "url");
@@ -245,7 +245,7 @@ public class WhoConverter extends CacheConverter {
         // "Date on which this record was first entered in the EudraCT database:" in
         // EUCTR
         String registrationDateStr = this.getAndCleanValue(lineValues, "Date_registration");
-        LocalDate registrationDate = ConverterUtils.parseDate(registrationDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
+        this.parseRegistrationDate(study, registrationDateStr);
 
         /* Date enrolment (start date) */
         // "Date of Competent Authority Decision" in EUCTR
@@ -454,6 +454,26 @@ public class WhoConverter extends CacheConverter {
         idsH.setPrimaryIdentifier(this.currentTrialID);
 
         return idsH;
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param lastUpdateStr
+     */
+    public void parseLastUpdate(Item study, String lastUpdateStr) {
+        if (!ConverterUtils.isBlankOrNull(lastUpdateStr)) {
+            LocalDate lastUpdate = ConverterUtils.parseDate(lastUpdateStr, ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
+
+            if (lastUpdate != null) {
+                if (!this.existingStudy() || !ConverterUtils.hasValueForItemField(study, "lastUpdate")) {
+                    study.setAttributeIfNotNull("lastUpdate", lastUpdate.toString());
+                }
+            } else {
+                this.writeLog("Failed to parse last update date: " + lastUpdateStr);
+            }
+        }
     }
 
     /**
@@ -947,6 +967,27 @@ public class WhoConverter extends CacheConverter {
             } else { // Using raw value
                 this.createAndStoreClassItem(study, "StudyFeature",
                         new String[][] { { "value", featuresStr } });
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param registrationDateStr
+     */
+    public void parseRegistrationDate(Item study, String registrationDateStr) {
+        if (!ConverterUtils.isBlankOrNull(registrationDateStr)) {
+            LocalDate registrationDate = ConverterUtils.parseDate(registrationDateStr,
+                    ConverterUtils.P_DATE_D_MWORD_Y_SPACES);
+
+            if (registrationDate != null) {
+                if (!this.existingStudy() || !ConverterUtils.hasValueForItemField(study, "registrationDate")) {
+                    study.setAttributeIfNotNull("registrationDate", registrationDate.toString());
+                }
+            } else {
+                this.writeLog("Failed to parse registration date: " + registrationDateStr);
             }
         }
     }

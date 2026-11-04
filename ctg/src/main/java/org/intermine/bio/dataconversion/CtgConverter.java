@@ -108,6 +108,12 @@ public class CtgConverter extends CacheConverter {
         /* Study status */
         this.parseStatus(study, ctgStudy);
 
+        /* Study registration date */
+        this.parseRegistrationDate(study, ctgStudy);
+
+        /* Study last updated date */
+        this.parseLastUpdateDate(study, ctgStudy);
+
         /* Study description */
         this.parseBriefSummary(study, ctgStudy);
 
@@ -253,7 +259,6 @@ public class CtgConverter extends CacheConverter {
                 study.setAttributeIfNotNull("acronym", idModule.acronym);
             }
         }
-
     }
 
     /**
@@ -273,6 +278,42 @@ public class CtgConverter extends CacheConverter {
                 }
                 study.setAttributeIfNotNull("status", cleanedStatus);
             }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param ctgStudy
+     */
+    public void parseRegistrationDate(Item study, CtgStudy ctgStudy) {
+        if (Optional.ofNullable(ctgStudy.protocolSection.statusModule)
+                .map(StatusModule::getStudyFirstPostDateStruct)
+                .map(DateStruct::getDate)
+                .isPresent()) {
+
+            String registrationDateStr = CtgConverter
+                    .normaliseDateString(ctgStudy.protocolSection.statusModule.studyFirstPostDateStruct.date);
+            study.setAttributeIfNotNull("registrationDate", registrationDateStr);
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param ctgStudy
+     */
+    public void parseLastUpdateDate(Item study, CtgStudy ctgStudy) {
+        if (Optional.ofNullable(ctgStudy.protocolSection.statusModule)
+                .map(StatusModule::getLastUpdatePostDateStruct)
+                .map(DateStruct::getDate)
+                .isPresent()) {
+
+            String lastUpdateStr = CtgConverter
+                    .normaliseDateString(ctgStudy.protocolSection.statusModule.lastUpdatePostDateStruct.date);
+            study.setAttributeIfNotNull("lastUpdate", lastUpdateStr);
         }
     }
 

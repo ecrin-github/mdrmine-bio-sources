@@ -57,6 +57,7 @@ public class ConverterUtils {
             "iii", "3",
             "iv", "4");
     public static final DateTimeFormatter P_DATE_D_M_Y_SLASHES = DateTimeFormatter.ofPattern("d/M/uuuu");
+    public static final DateTimeFormatter P_DATE_D_M_Y_DASHES = DateTimeFormatter.ofPattern("d-M-uuuu");
     public static final DateTimeFormatter P_DATE_D_MWORD_Y_SPACES = DateTimeFormatter.ofPattern("d MMMM uuuu");
     public static final DateTimeFormatter P_DATE_MWORD_D_Y_HOUR = DateTimeFormatter.ofPattern("MMM d uuuu hh:mma");
     public static final DateTimeFormatter P_DATE_M_D_Y_TIME = DateTimeFormatter.ofPattern("M/d/uuuu hh:mm:ss");
@@ -939,6 +940,7 @@ public class ConverterUtils {
             // Test other various patterns (null is ISO format)
             if (date == null) {
                 DateTimeFormatter[] patterns = { null, ConverterUtils.P_DATE_D_M_Y_SLASHES,
+                        ConverterUtils.P_DATE_D_M_Y_DASHES,
                         ConverterUtils.P_DATE_D_MWORD_Y_SPACES,
                         ConverterUtils.P_DATE_MWORD_D_Y_HOUR, ConverterUtils.P_DATE_M_D_Y_TIME };
                 for (DateTimeFormatter pattern : patterns) {
