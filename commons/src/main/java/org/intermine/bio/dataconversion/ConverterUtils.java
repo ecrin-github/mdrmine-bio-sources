@@ -106,7 +106,22 @@ public class ConverterUtils {
             P_CHICTR_ID, P_CRIS_ID, P_RPCEC_ID, P_IRCT_ID, P_PACTR_ID, P_REPEC_ID, P_LBCTR_ID, P_SLCTR_ID, P_TCTR_ID,
             P_ITMCTR_ID, P_SNCTP_ID, P_NTR_ID, P_OMON_ID);
 
+    // TODO
     public static final Pattern P_EMAIL = Pattern.compile("^[^@]+@[^.]+\\..+");
+    public static final Pattern P_GARBAGE = Pattern.compile("^(?:-|\\/|\\.|_)+$");
+    public static final Pattern P_GENERAL_INVALID = Pattern.compile(
+            "^(?:-+|\\/|\\.|_|N[\\/\\.]?[AD]\\.?|none?|null?|it does not|does not exist|no[nt]?\\s+(?:aplica|applicable|available|applicabile - ND|fornito|disponibile|required|aplicable|exist|yet|availble|existed|acronyms?)\\.?)$",
+            Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_NOT_APPLICABLE = Pattern.compile(
+            "^(?:N[\\/\\.]?A\\.?|no[nt]?\\s+(?:aplica|applicable|applicabile - ND|aplicable)\\.?)$",
+            Pattern.CASE_INSENSITIVE); // N/A
+    public static final Pattern P_URL_DOC = Pattern.compile(
+            "(?:[^\\s]+\\/\\/)?(?:www\\.)?(\\b[^\\s]*\\.[^\\s]*\\/[^\\s]*)",
+            Pattern.CASE_INSENSITIVE);
+    // https://stackoverflow.com/questions/27910/finding-a-doi-in-a-document-or-page
+    public static final Pattern P_DOI = Pattern
+            .compile("\\b(10[.][0-9]{4,}(?:[.][0-9]+)*/(?:(?![\\\"&\\'<>])\\S)+)\\b");
+    public static final Pattern P_NO_IPD = Pattern.compile("^(?:-|\\/|\\.|_|no[^\\s]*)+$", Pattern.CASE_INSENSITIVE);
 
     /**
      * Check if a string is null, empty (after trim), or is equal to
@@ -116,7 +131,20 @@ public class ConverterUtils {
      *         "NULL", false otherwise
      */
     public static boolean isBlankOrNull(String s) {
-        return (s == null || s.trim().isEmpty() || s.equalsIgnoreCase("NULL"));
+        return (s == null || s.trim().isEmpty() || s.trim().equalsIgnoreCase("NULL"));
+    }
+
+    /**
+     * Check if an item's field has already a value set. Wrapper for getAttrValue
+     * and isBlankOrNull.
+     * 
+     * @param item  the item to check the field of
+     * @param field the field name
+     * @return true if the item has already a non-blank/null value for the field,
+     *         false otherwise
+     */
+    public static boolean hasValueForItemField(Item item, String field) {
+        return !ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(item, field));
     }
 
     /**
@@ -440,9 +468,9 @@ public class ConverterUtils {
      */
     public static String normaliseUnit(String u) {
         if (u.endsWith("s")) {
-            return ConverterUtils.capitaliseFirstLetter(u, true);
+            return ConverterUtils.capitaliseFirstLetterOnly(u);
         }
-        return ConverterUtils.capitaliseFirstLetter(u, true) + "s";
+        return ConverterUtils.capitaliseFirstLetterOnly(u) + "s";
     }
 
     /**
@@ -450,7 +478,7 @@ public class ConverterUtils {
      */
     public static String normaliseStatus(String s) {
         if (s != null) {
-            s = ConverterUtils.capitaliseFirstLetter(s.replace('_', ' '), true);
+            s = ConverterUtils.capitaliseFirstLetterOnly(s.replace('_', ' '));
         }
         return s;
     }
@@ -473,6 +501,18 @@ public class ConverterUtils {
             return WordUtils.capitalizeFully(i.strip(), ' ', '-');
         }
         return i;
+    }
+
+    /**
+     * Uppercase first letter and lowercase the rest or not.
+     * 
+     * @param s               the string to normalise
+     * @param restToLowercase whether to convert to lowercase all characters after
+     *                        the first
+     * @return the normalised string
+     */
+    public static String capitaliseFirstLetterOnly(String s) {
+        return ConverterUtils.capitaliseFirstLetter(s, true);
     }
 
     /**
@@ -555,7 +595,7 @@ public class ConverterUtils {
      *              to the study's description
      */
     public static void addToDescription(Item study, String text) {
-        if (!ConverterUtils.isBlankOrNull(text)) {
+        if (ConverterUtils.isValidValue(text)) {
             Attribute description = study.getAttribute("description");
             if (description != null) {
                 String currentDesc = description.getValue();
@@ -779,6 +819,109 @@ public class ConverterUtils {
         if (!ConverterUtils.isBlankOrNull(email) && P_EMAIL.matcher(email).matches()) {
             return email;
         }
+        return null;
+    }
+
+    /**
+     * TODO
+     * 
+     * @param s
+     * @return
+     */
+    public static boolean isNotApplicable(final String s) {
+        return !ConverterUtils.isBlankOrNull(s) && P_NOT_APPLICABLE.matcher(s).matches();
+    }
+
+    /**
+     * TODO
+     * 
+     * @param s
+     * @return
+     */
+    public static String normaliseNotApplicable(final String s) {
+        if (ConverterUtils.isNotApplicable(s)) {
+            return ConverterCVT.NOT_APPLICABLE;
+        }
+        return s;
+    }
+
+    /**
+     * Check if value is blank, null, or one or more of -, /, ., or _
+     * 
+     * @param v the string to check
+     * @return true if value is a garbage value, false otherwise
+     */
+    public static boolean isGarbageValue(final String v) {
+        return ConverterUtils.isBlankOrNull(v) || P_GARBAGE.matcher(v.strip()).matches();
+    }
+
+    /**
+     * TODO
+     * 
+     * @param v
+     * @return
+     */
+    public static boolean isValidValue(final String v) {
+        return !ConverterUtils.isBlankOrNull(v) && !P_GENERAL_INVALID.matcher(v.strip()).matches();
+    }
+
+    /**
+     * Check is value for planToShareIPD or dataSharingStatement is "no" or
+     * "no-like"
+     * 
+     * @param s the value to test
+     * @return true if the value is no or "no-like", false otherwise
+     */
+    public static boolean isNoIpd(final String s) {
+        return !ConverterUtils.isBlankOrNull(s) && P_NO_IPD.matcher(s.strip()).matches();
+    }
+
+    /**
+     * Find and return URL in string, if any
+     * Matches URLs without protocol/www prefixes, but that have a slash in the URL,
+     * as we're matching "documents" and not generic URLs
+     * 
+     * @param s the string potentially containing a URL
+     * @return the found URL, or null
+     */
+    public static String getDocUrlFromString(final String s) {
+        String url = null;
+        Matcher mUrl = P_URL_DOC.matcher(s);
+
+        if (mUrl.matches()) {
+            url = "http://www." + mUrl.group(1);
+        }
+
+        return url;
+    }
+
+    /**
+     * Find and return DOI in string, if any
+     * 
+     * @param s the string to be searched
+     * @return the found DOI, or null
+     */
+    public static String getDoiFromString(final String s) {
+        Matcher mDoi = P_DOI.matcher(s);
+
+        if (mDoi.find()) {
+            return mDoi.group(0);
+        }
+
+        return null;
+    }
+
+    /**
+     * Construct DOI url from DOI
+     * 
+     * @param s the DOI
+     * @return the DOI URL, or null if s was null/empty
+     */
+    public static String getUrlFromDoi(final String s) {
+        if (!ConverterUtils.isBlankOrNull(s)) {
+            return "https://doi.org/" + s;
+        }
+
         return null;
     }
 

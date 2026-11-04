@@ -156,9 +156,6 @@ public class CtgConverter extends CacheConverter {
         /* Study hasResults */
         this.parseHasResults(study, ctgStudy);
 
-        /* Trial registry entry SO */
-        this.createAndStoreRegistryEntrySO(study, ctgStudy);
-
         /* Trial results summary SO */
         this.createAndStoreResultsSummarySO(study, ctgStudy);
 
@@ -225,19 +222,17 @@ public class CtgConverter extends CacheConverter {
     public void parseStudyTitle(Item study, CtgStudy ctgStudy) throws Exception {
         IdentificationModule idModule = ctgStudy.protocolSection.identificationModule;
 
-        // TODO: check for "-", "_", ".", etc.?
-
         if (idModule != null) {
             boolean titleSet = false;
 
             /* Brief (public) title */
-            if (!ConverterUtils.isBlankOrNull(idModule.briefTitle)) {
+            if (ConverterUtils.isValidValue(idModule.briefTitle)) {
                 study.setAttributeIfNotNull("title", idModule.briefTitle);
                 titleSet = true;
             }
 
             /* Official (scientific) title */
-            if (!ConverterUtils.isBlankOrNull(idModule.officialTitle)) {
+            if (ConverterUtils.isValidValue(idModule.officialTitle)) {
                 // Only setting officialTitle to title if no briefTitle
                 if (!titleSet) {
                     study.setAttributeIfNotNull("title", idModule.officialTitle);
@@ -248,7 +243,7 @@ public class CtgConverter extends CacheConverter {
             }
 
             /* Acronym */
-            if (!ConverterUtils.isBlankOrNull(idModule.acronym)) {
+            if (ConverterUtils.isValidValue(idModule.acronym)) {
                 // Only setting acronym to title if no briefTitle and no officialTitle
                 if (!titleSet) {
                     study.setAttributeIfNotNull("title", idModule.acronym);
@@ -271,7 +266,7 @@ public class CtgConverter extends CacheConverter {
         StatusModule statusModule = ctgStudy.protocolSection.statusModule;
 
         if (statusModule != null) {
-            if (!ConverterUtils.isBlankOrNull(statusModule.overallStatus)) {
+            if (ConverterUtils.isValidValue(statusModule.overallStatus)) {
                 String cleanedStatus = ConverterUtils.normaliseStatus(statusModule.overallStatus);
                 if (cleanedStatus.equals("Active not recruiting")) { // Temporary
                     cleanedStatus = ConverterCVT.STATUS_ACTIVE_NOT_RECRUITING;
@@ -290,7 +285,7 @@ public class CtgConverter extends CacheConverter {
     public void parseBriefSummary(Item study, CtgStudy ctgStudy) {
         DescriptionModule descModule = ctgStudy.protocolSection.descriptionModule;
 
-        if (descModule != null) {
+        if (descModule != null && ConverterUtils.isValidValue(descModule.briefSummary)) {
             study.setAttribute("description", descModule.briefSummary);
         }
     }
@@ -307,7 +302,6 @@ public class CtgConverter extends CacheConverter {
 
         if (condModule != null) {
             if (condModule.conditions != null && condModule.conditions.size() > 0) {
-
                 /*
                  * Getting MeSH terms corresponding to conditions from the conditionBrowseModule
                  * (if any)
@@ -373,9 +367,11 @@ public class CtgConverter extends CacheConverter {
 
                 /* Interventions */
                 Iterator<Intervention> interventionsIter = armsModule.interventions.iterator();
-                while (interventionsIter.hasNext()) {
 
+                while (interventionsIter.hasNext()) {
                     Intervention intervention = interventionsIter.next();
+
+                    // TODO: garbage values possible here?
                     if (!ConverterUtils.isBlankOrNull(intervention.name)
                             && !seenInterventionNames.contains(intervention.name.toLowerCase())) {
                         String interventionType = ConverterUtils.capitaliseAndReplaceCharBySpace(intervention.type,
@@ -396,6 +392,40 @@ public class CtgConverter extends CacheConverter {
     }
 
     /**
+     * Build outcome string from Outcome object.
+     * 
+     * @param o outcome object
+     * @return outcome string
+     */
+    public static String getOutcomeString(Outcome o) {
+        StringBuilder oSb = new StringBuilder();
+
+        if (ConverterUtils.isValidValue(o.measure)) {
+            oSb.append(o.measure);
+        }
+
+        if (ConverterUtils.isValidValue(o.description)) {
+            oSb.append(": ");
+            oSb.append(o.description);
+
+            if (ConverterUtils.isValidValue(o.timeFrame)) {
+                oSb.append(", ");
+                oSb.append(o.timeFrame);
+            }
+        } else if (ConverterUtils.isValidValue(o.timeFrame)) {
+            oSb.append(": ");
+            oSb.append(", ");
+            oSb.append(o.timeFrame);
+        }
+
+        if (!ConverterUtils.isBlankOrNull(oSb.toString()) && !oSb.toString().endsWith(".")) {
+            oSb.append(".");
+        }
+
+        return oSb.toString();
+    }
+
+    /**
      * TODO
      *
      * @param study
@@ -408,31 +438,13 @@ public class CtgConverter extends CacheConverter {
             if (outcomesModule.primaryOutcomes != null && outcomesModule.primaryOutcomes.size() > 0) {
                 StringBuilder poSb = new StringBuilder();
 
-                boolean firstOutcome = true;
                 for (Outcome po : outcomesModule.primaryOutcomes) {
-                    if (!firstOutcome) {
+                    String oStr = CtgConverter.getOutcomeString(po);
+
+                    if (!ConverterUtils.isGarbageValue(oStr)) {
+                        oStr = ConverterUtils.normaliseNotApplicable(oStr);
+                        poSb.append(oStr);
                         poSb.append(" ");
-                    } else {
-                        firstOutcome = false;
-                    }
-
-                    poSb.append(po.measure);
-
-                    if (!ConverterUtils.isBlankOrNull(po.description)) {
-                        poSb.append(": ");
-                        poSb.append(po.description);
-                    }
-
-                    if (!ConverterUtils.isBlankOrNull(po.timeFrame)) {
-                        if (ConverterUtils.isBlankOrNull(po.description)) {
-                            poSb.append(": ");
-                        }
-                        poSb.append(", ");
-                        poSb.append(po.timeFrame);
-                    }
-
-                    if (!poSb.toString().endsWith(".")) {
-                        poSb.append(".");
                     }
                 }
 
@@ -456,66 +468,36 @@ public class CtgConverter extends CacheConverter {
             if (outcomesModule.secondaryOutcomes != null && outcomesModule.secondaryOutcomes.size() > 0) {
                 boolean firstOutcome = true;
                 for (Outcome so : outcomesModule.secondaryOutcomes) {
+                    String oStr = CtgConverter.getOutcomeString(so);
+
                     if (!firstOutcome) {
                         oSb.append(" ");
-                    } else {
+                    } else if (!ConverterUtils.isBlankOrNull(oStr)) {
                         firstOutcome = false;
                     }
 
-                    oSb.append(so.measure);
-
-                    if (!ConverterUtils.isBlankOrNull(so.description)) {
-                        oSb.append(": ");
-                        oSb.append(so.description);
-                    }
-
-                    if (!ConverterUtils.isBlankOrNull(so.timeFrame)) {
-                        if (ConverterUtils.isBlankOrNull(so.description)) {
-                            oSb.append(": ");
-                        }
-                        oSb.append(", ");
-                        oSb.append(so.timeFrame);
-                    }
-
-                    if (!oSb.toString().endsWith(".")) {
-                        oSb.append(".");
-                    }
+                    oSb.append(oStr);
                 }
             }
 
             // TODO: should otherOutcomes be included in secondaryOutcomes?
             // separate field in model?
             if (outcomesModule.otherOutcomes != null && outcomesModule.otherOutcomes.size() > 0) {
-                if (oSb.toString().length() > 0) {
+                if (!ConverterUtils.isBlankOrNull(oSb.toString())) {
                     oSb.append(" ");
                 }
 
                 boolean firstOutcome = true;
                 for (Outcome oo : outcomesModule.otherOutcomes) {
+                    String oStr = CtgConverter.getOutcomeString(oo);
+
                     if (!firstOutcome) {
                         oSb.append(" ");
-                    } else {
+                    } else if (!ConverterUtils.isBlankOrNull(oStr)) {
                         firstOutcome = false;
                     }
 
-                    oSb.append(oo.measure);
-
-                    if (!ConverterUtils.isBlankOrNull(oo.description)) {
-                        oSb.append(": ");
-                        oSb.append(oo.description);
-                    }
-
-                    if (!ConverterUtils.isBlankOrNull(oo.timeFrame)) {
-                        if (ConverterUtils.isBlankOrNull(oo.description)) {
-                            oSb.append(": ");
-                        }
-                        oSb.append(", ");
-                        oSb.append(oo.timeFrame);
-                    }
-
-                    if (!oSb.toString().endsWith(".")) {
-                        oSb.append(".");
-                    }
+                    oSb.append(oStr);
                 }
             }
 
@@ -786,21 +768,21 @@ public class CtgConverter extends CacheConverter {
                         if (early != null) {
                             phaseValue = ConverterCVT.FEATURE_V_EARLY_PHASE_1;
                         } else if (p2 == null) { // One phase number
-                            phaseValue = ConverterUtils.convertPhaseNumber(p1);
+                            phaseValue = ConverterCVT.FEATURE_T_PHASE + " " + ConverterUtils.convertPhaseNumber(p1);
                         } else { // Two phase numbers
-                            phaseValue = ConverterUtils.constructMultiplePhasesString(p1, p2);
+                            phaseValue = ConverterCVT.FEATURE_T_PHASE + " "
+                                    + ConverterUtils.constructMultiplePhasesString(p1, p2);
                         }
                     }
 
                     this.createAndStoreClassItem(study, "StudyFeature",
                             new String[][] { { "type", ConverterCVT.FEATURE_T_PHASE },
-                                    { "value", ConverterCVT.FEATURE_T_PHASE + " " + phaseValue } });
+                                    { "value", phaseValue } });
                 } else {
                     this.writeLog("Failed to match phase value: " + phasesStr);
                 }
             }
         }
-
     }
 
     /**
@@ -857,6 +839,7 @@ public class CtgConverter extends CacheConverter {
         if (designModule != null) {
             DesignInfo designInfo = designModule.designInfo;
 
+            // TODO: garbage value filtering?
             if (designInfo != null) {
                 // StudyFeature: Allocation
                 if (!ConverterUtils.isBlankOrNull(designInfo.allocation)) {
@@ -1125,6 +1108,7 @@ public class CtgConverter extends CacheConverter {
         ContactsLocationsModule contactsLocationsModule = ctgStudy.protocolSection.contactsLocationsModule;
 
         // TODO: location contacts
+        // TODO: filter out garbage values?
         if (contactsLocationsModule != null) {
             List<Location> locations = contactsLocationsModule.locations;
             if (locations != null && locations.size() > 0) {
@@ -1179,7 +1163,7 @@ public class CtgConverter extends CacheConverter {
             objectClassName = "StatisticalAnalysisPlan";
         }
 
-        if (objectClassName != null) {
+        if (objectClassName != null && !ConverterUtils.isBlankOrNull(url)) {
             this.createAndStoreClassItem(study, objectClassName,
                     new String[][] { { "accessUrl", url },
                             { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC },
@@ -1254,14 +1238,15 @@ public class CtgConverter extends CacheConverter {
                 .isPresent()) {
             IpdSharingStatementModule ipdModule = ctgStudy.protocolSection.ipdSharingStatementModule;
 
-            String planToShareIPD = null;
             if (!ConverterUtils.isBlankOrNull(ipdModule.ipdSharing)) {
-                planToShareIPD = WordUtils.capitalizeFully(ipdModule.ipdSharing);
+                String planToShareIPD = ConverterUtils.capitaliseFirstLetterOnly(ipdModule.ipdSharing);
+
+                study.setAttributeIfNotNull("planToShareIPD", planToShareIPD);
 
                 if (ConverterUtils.isYes(planToShareIPD)) {
                     StringBuilder dssSb = new StringBuilder();
 
-                    if (!ConverterUtils.isBlankOrNull(ipdModule.description)) {
+                    if (ConverterUtils.isValidValue(ipdModule.description)) {
                         dssSb.append(ipdModule.description);
 
                         if (!ipdModule.description.endsWith(".")) {
@@ -1281,7 +1266,7 @@ public class CtgConverter extends CacheConverter {
                         }
                     }
 
-                    if (!ConverterUtils.isBlankOrNull(ipdModule.timeFrame)) {
+                    if (ConverterUtils.isValidValue(ipdModule.timeFrame)) {
                         dssSb.append(" Time frame: ");
                         dssSb.append(ipdModule.timeFrame);
 
@@ -1290,7 +1275,7 @@ public class CtgConverter extends CacheConverter {
                         }
                     }
 
-                    if (!ConverterUtils.isBlankOrNull(ipdModule.accessCriteria)) {
+                    if (ConverterUtils.isValidValue(ipdModule.accessCriteria)) {
                         dssSb.append(" Access criteria : ");
                         dssSb.append(ipdModule.accessCriteria);
 
@@ -1340,12 +1325,11 @@ public class CtgConverter extends CacheConverter {
                                         // { "objectId", objectId },
                                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD } });
                     }
-                } else { // Other fields are empty
-                    study.setAttributeIfNotNull("dataSharingStatement", ipdModule.description);
+                } else if (!ConverterUtils.isGarbageValue(ipdModule.description)) { // Other fields are empty
+                    String desc = ConverterUtils.normaliseNotApplicable(ipdModule.description);
+                    study.setAttributeIfNotNull("dataSharingStatement", desc);
                 }
             }
-
-            study.setAttributeIfNotNull("planToShareIPD", planToShareIPD);
         }
     }
 

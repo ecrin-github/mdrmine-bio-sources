@@ -38,7 +38,6 @@ import java.util.regex.Pattern;
  */
 public class CtisConverter extends CacheConverter {
     private static final Pattern P_STATUS_COUNTRY = Pattern.compile("^(.+),(.+)$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_NOT_APPLICABLE = Pattern.compile("N/A", Pattern.CASE_INSENSITIVE); // N/A
     private static final Pattern P_AGE_SECONDARY_SINGLE = Pattern
             .compile("^[^\\d]*?(<?\\d+\\+?)(?:\\h*-\\h*)?(\\d+)?\\h+(\\w+)[^\\d]*$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_AGE_SECONDARY_MULTIPLE = Pattern
@@ -234,12 +233,12 @@ public class CtisConverter extends CacheConverter {
         /* Study organisation: sponsors */
         String sponsors = this.getAndCleanValue(lineValues, "Sponsor/Co-Sponsors");
         String sponsorType = this.getAndCleanValue(lineValues, "Sponsor type");
+        // TODO: check for garbage values for sponsors?
         this.parseSponsors(study, sponsors, sponsorType);
 
         /* Trial registry entry SO + instance + last updated date */
         String lastUpdatedStr = this.getAndCleanValue(lineValues, "Last updated");
         LocalDate lastUpdated = ConverterUtils.parseDate(lastUpdatedStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-        this.createAndStoreRegistryEntryDO(study, lastUpdated);
 
         /* Description (constructed) */
         // TODO: missing Main Objective field from CTIS UI
@@ -264,7 +263,6 @@ public class CtisConverter extends CacheConverter {
 
             ID id = new ID(this.currentTrialID, ConverterCVT.ID_SOURCE_CTIS, ConverterCVT.ID_TYPE_TRIAL_REGISTRY, true);
             idsH = new IDsHandler(this.dataSourceName, id);
-            this.writeLog("idsH: " + idsH);
         } else {
             this.writeLog("Unexpected length for trial ID: " + trialID);
         }
@@ -330,7 +328,7 @@ public class CtisConverter extends CacheConverter {
      * @param trialTitle
      */
     public void parseTrialTitle(Item study, String trialTitle) {
-        if (!ConverterUtils.isBlankOrNull(trialTitle)) {
+        if (ConverterUtils.isValidValue(trialTitle)) {
             study.setAttributeIfNotNull("title", trialTitle);
             study.setAttributeIfNotNull("scientificTitle", trialTitle);
         }
@@ -344,7 +342,7 @@ public class CtisConverter extends CacheConverter {
      * https://www.bfarm.de/SharedDocs/Downloads/DE/Arzneimittel/KlinischePruefung/EudraCT_EU-CTR_QuA.pdf?__blob=publicationFile
      */
     public void parseProtocolCode(Item study, String protocolCode) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(protocolCode)) {
+        if (ConverterUtils.isValidValue(protocolCode)) {
             // TODO: Try to get URL from euclinicaltrials.eu/ctis-public/view/[trial ID]?
             // protocol can be in trial documents tab
 
@@ -358,6 +356,7 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parseStudyStatus(Item study, String overallTrialStatus) {
+        overallTrialStatus = ConverterUtils.normaliseNotApplicable(overallTrialStatus);
         study.setAttributeIfNotNull("status", ConverterUtils.normaliseStatus(overallTrialStatus));
     }
 
@@ -443,9 +442,7 @@ public class CtisConverter extends CacheConverter {
         String maxAgeUnit = null;
 
         // N/A check
-        Matcher mAgeNASecondary = P_NOT_APPLICABLE.matcher(ageRangeSecondaryIdentifier);
-
-        if (!mAgeNASecondary.matches()) {
+        if (!ConverterUtils.isNotApplicable(ageRangeSecondaryIdentifier)) {
             if (mAgeSingle.matches()) { // Single range
                 String a1 = mAgeSingle.group(1);
                 String a2 = mAgeSingle.group(2);
@@ -638,7 +635,7 @@ public class CtisConverter extends CacheConverter {
     public void parseStudyConditions(Item study, String studyConditions) throws Exception {
         // TODO: separate multiple conditions somehow?
         // TODO: match with MedDRA/other medical terms
-        if (!ConverterUtils.isBlankOrNull(studyConditions)) {
+        if (ConverterUtils.isValidValue(studyConditions)) {
             this.linkStudyToStudyCondition(study, studyConditions, null, null, null);
         }
     }
@@ -713,16 +710,13 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parseProduct(Item study, String product) throws Exception {
-        if (!ConverterUtils.isBlankOrNull(product)) {
+        // TODO: match with CT
+        if (ConverterUtils.isValidValue(product)) {
             // Setting interventions field as well
             study.setAttribute("interventionsDescription", product);
 
-            Matcher mNA = P_NOT_APPLICABLE.matcher(product);
-            // TODO: match with CT
-            if (!mNA.matches() && !product.equals("-")) {
-                this.linkStudyToIntervention(study, ConverterCVT.INTERVENTION_T_DRUG,
-                        product, null, null);
-            }
+            this.linkStudyToIntervention(study, ConverterCVT.INTERVENTION_T_DRUG,
+                    product, null, null);
         }
     }
 
@@ -730,14 +724,19 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parsePrimaryEndpoint(Item study, String primaryEndpoint) {
-        study.setAttributeIfNotNull("primaryOutcome", primaryEndpoint);
+        if (!ConverterUtils.isGarbageValue(primaryEndpoint)) {
+            primaryEndpoint = ConverterUtils.normaliseNotApplicable(primaryEndpoint);
+            study.setAttributeIfNotNull("primaryOutcome", primaryEndpoint);
+        }
     }
 
     /**
      * TODO
      */
     public void parseSecondaryEndpoints(Item study, String secondaryEndpoints) {
-        study.setAttributeIfNotNull("secondaryOutcomes", secondaryEndpoints);
+        if (ConverterUtils.isValidValue(secondaryEndpoints)) {
+            study.setAttributeIfNotNull("secondaryOutcomes", secondaryEndpoints);
+        }
     }
 
     /**
@@ -768,8 +767,7 @@ public class CtisConverter extends CacheConverter {
      * TODO
      */
     public void parseStudyStartDate(Item study, String startDateStr) {
-        Matcher mNA = P_NOT_APPLICABLE.matcher(startDateStr);
-        if (!mNA.matches()) {
+        if (!ConverterUtils.isNotApplicable(startDateStr)) {
             LocalDate startDate = ConverterUtils.getDateFromString(startDateStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
             if (startDate != null) {
                 study.setAttributeIfNotNull("startDate", String.valueOf(startDate.toString()));
@@ -836,14 +834,10 @@ public class CtisConverter extends CacheConverter {
     public void parseTrialEndDate(Item study, String endDateStr, String globalEndDateStr) throws Exception {
         String dateStr = null;
         // Attempting to use global end date first, end date second
-        Matcher mNA = P_NOT_APPLICABLE.matcher(globalEndDateStr);
-        if (!mNA.matches()) {
+        if (!ConverterUtils.isNotApplicable(globalEndDateStr)) {
             dateStr = globalEndDateStr;
-        } else {
-            mNA = P_NOT_APPLICABLE.matcher(endDateStr);
-            if (!mNA.matches()) {
-                dateStr = endDateStr;
-            }
+        } else if (!ConverterUtils.isNotApplicable(endDateStr)) {
+            dateStr = endDateStr;
         }
 
         if (dateStr != null) {

@@ -18,11 +18,15 @@ package org.intermine.bio.dataconversion;
 public class ConverterCVT {
     public static final String EUCTR_REG_NAME_CTIS = "clinical trials information system";
 
-    /* Studies */
-    public static final String NOT_APPLICABLE = "N/A";
+    /* Common values */
+    public static final String YES = "Yes";
+    public static final String NO = "No";
+    public static final String NOT_APPLICABLE = "Not applicable";
     public static final String UNKNOWN = "Unknown";
     public static final String NONE = "None";
     public static final String NOT_STATED = "Not stated";
+
+    /* Studies */
     public static final String TYPE_INTERVENTIONAL = "Interventional";
     public static final String TYPE_OBSERVATIONAL = "Observational";
     public static final String TYPE_BASIC_SCIENCE = "Basic science";

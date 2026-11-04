@@ -3,7 +3,6 @@ package org.intermine.bio.dataconversion;
 import java.io.Reader;
 import java.text.ParseException;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -153,10 +152,6 @@ public class BiolinccConverter extends CacheConverter {
         // Unused, not in our model
         String covidStudyClassification = this.getAndCleanValue(lineValues, "COVID study classification");
 
-        /* Registry entry SOs */
-        // Also sets Study.nctID (should probably be moved outside of this function)
-        this.createAndStoreRegistryEntryDO(study, biolinccUrl, ctgUrls);
-
         /* Study age IC */
         String cohortType = this.getAndCleanValue(lineValues, "Cohort type");
         this.parseAge(study, cohortType);
@@ -255,7 +250,6 @@ public class BiolinccConverter extends CacheConverter {
 
         /* Study website SO */
         String studyWebsite = this.getAndCleanValue(lineValues, "Study Website");
-        this.parseStudyWebsite(study, studyWebsite);
 
         /* Study start and end dates */
         String studyYears = this.getAndCleanValue(lineValues, "Study Years");
@@ -329,13 +323,13 @@ public class BiolinccConverter extends CacheConverter {
         boolean titleSet = false;
 
         /* Public title */
-        if (!ConverterUtils.isBlankOrNull(studyTitle)) {
+        if (ConverterUtils.isValidValue(studyTitle)) {
             study.setAttributeIfNotNull("title", studyTitle);
             titleSet = true;
         }
 
         /* Acronym */
-        if (!ConverterUtils.isBlankOrNull(acronym)) {
+        if (ConverterUtils.isValidValue(acronym)) {
             if (!titleSet) {
                 study.setAttributeIfNotNull("title", acronym);
             }
@@ -355,13 +349,13 @@ public class BiolinccConverter extends CacheConverter {
         StringBuilder sb = new StringBuilder();
 
         // Background
-        if (!ConverterUtils.isBlankOrNull(background)) {
+        if (ConverterUtils.isValidValue(background)) {
             sb.append("Background: ");
             sb.append(background);
         }
 
         // Objectives
-        if (!ConverterUtils.isBlankOrNull(objectives)) {
+        if (ConverterUtils.isValidValue(objectives)) {
             if (!sb.toString().isEmpty()) {
                 if (!sb.toString().endsWith(".")) {
                     sb.append(".");
@@ -425,6 +419,14 @@ public class BiolinccConverter extends CacheConverter {
         }
     }
 
+    /**
+     * TODO: unused
+     * 
+     * @param study
+     * @param biolinccUrl
+     * @param ctgUrls
+     * @throws Exception
+     */
     public void createAndStoreRegistryEntryDO(Item study, String biolinccUrl, List<String> ctgUrls)
             throws Exception {
         // Display title
@@ -466,9 +468,8 @@ public class BiolinccConverter extends CacheConverter {
      * @param conclusions
      */
     public void parseConclusions(Item study, String conclusions) {
-        if (conclusions.equalsIgnoreCase("n/a")) {
-            study.setAttributeIfNotNull("primaryOutcome", ConverterCVT.NOT_APPLICABLE);
-        } else {
+        if (!ConverterUtils.isGarbageValue(conclusions)) {
+            conclusions = ConverterUtils.normaliseNotApplicable(conclusions);
             study.setAttributeIfNotNull("primaryOutcome", conclusions);
         }
     }
@@ -484,7 +485,10 @@ public class BiolinccConverter extends CacheConverter {
         // TODO: match values with CT codes/ICD Codes
         if (!ConverterUtils.isBlankOrNull(conditionsStr)) {
             for (String c : conditionsStr.split(",")) {
-                this.linkStudyToStudyCondition(study, c, null, null, null);
+                c = c.strip();
+                if (ConverterUtils.isValidValue(c)) {
+                    this.linkStudyToStudyCondition(study, c, null, null, null);
+                }
             }
         }
     }
@@ -567,20 +571,27 @@ public class BiolinccConverter extends CacheConverter {
         }
 
         // Consent details: specific restrictions
-        consentDetailsSb.append(specificConsentRestrictions);
+        if (!ConverterUtils.isBlankOrNull(specificConsentRestrictions)
+                && !specificConsentRestrictions.toLowerCase().startsWith("none")) {
+            consentDetailsSb.append(specificConsentRestrictions);
+        }
+
+        // N/A normalisation
+        commercialUseDataRestrictions = ConverterUtils.normaliseNotApplicable(commercialUseDataRestrictions);
+        dataRestrictionsBasedOnAreaOfResearch = ConverterUtils
+                .normaliseNotApplicable(dataRestrictionsBasedOnAreaOfResearch);
 
         /* IPD SO */
         // Note: Last updated date is on the BioLINCC website but not the data exported
         // TODO: access URL?
         // TODO: lang code en by default?
         // TODO: managingOrg NHLBI?
-        // TODO: normalized values for yes / no / n/a?
         this.createAndStoreClassItem(study, "IndividualParticipantData",
                 new String[][] { { "publicationYear", publicationYear },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },
                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
                         { "restrictCommercial", commercialUseDataRestrictions },
-                        { "restrictGeo", "Yes" }, // See above
+                        { "restrictGeo", ConverterCVT.YES }, // See above
                         { "restrictResearchType", dataRestrictionsBasedOnAreaOfResearch },
                         { "consentDetails", consentDetailsSb.toString() } });
     }
@@ -612,20 +623,29 @@ public class BiolinccConverter extends CacheConverter {
                 "These countries include China (including Hong Kong and Macau), Russia, Iran, North Korea, Cuba, and Venezuela (NOT-OD-25-083). \n");
 
         // Consent details: specific restrictions
-        consentDetailsSb.append(specificConsentRestrictions);
+        if (!ConverterUtils.isBlankOrNull(specificConsentRestrictions)
+                && !specificConsentRestrictions.toLowerCase().startsWith("none")) {
+            consentDetailsSb.append(specificConsentRestrictions);
+        }
+
+        // N/A normalisation
+        commercialUseSpecimenRestrictions = ConverterUtils.normaliseNotApplicable(commercialUseSpecimenRestrictions);
+        nonGeneticUseSpecimenRestrictions = ConverterUtils.normaliseNotApplicable(nonGeneticUseSpecimenRestrictions);
+        geneticUseAreaOfResearchRestrictions = ConverterUtils
+                .normaliseNotApplicable(geneticUseAreaOfResearchRestrictions);
+        geneticUseOfSpecimensAllowed = ConverterUtils.normaliseNotApplicable(geneticUseOfSpecimensAllowed);
 
         /* Biosample */
         // Note: Last updated date is on the BioLINCC website but not the data exported
         // TODO: lang code en by default?
         // TODO: managingOrg NHLBI?
-        // TODO: normalized values for yes / no / n/a?
         Item biospecimenDO = this.createAndStoreClassItem(study, "Biosample",
                 new String[][] { { "publicationYear", publicationYear },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },
                         { "materialTypes", materialTypes },
                         { "accessType", ConverterCVT.O_ACCESS_TYPE_CASE_BY_CASE_DOWNLOAD },
                         { "restrictCommercial", commercialUseSpecimenRestrictions },
-                        { "restrictGeo", "Yes" }, // See above
+                        { "restrictGeo", ConverterCVT.YES }, // See above
                         { "restrictResearchTypeNonGenetic", nonGeneticUseSpecimenRestrictions },
                         { "restrictResearchTypeGenetic", geneticUseAreaOfResearchRestrictions },
                         { "geneticUseAllowed", geneticUseOfSpecimensAllowed },
@@ -641,8 +661,10 @@ public class BiolinccConverter extends CacheConverter {
      */
     public void parseNetwork(Item study, String networkStr) throws Exception {
         // TODO: contribType?
-        this.createAndStoreClassItem(study, "Organisation",
-                new String[][] { { "name", networkStr }, { "type", ConverterCVT.ORG_TYPE_NETWORK } });
+        if (ConverterUtils.isValidValue(networkStr)) {
+            this.createAndStoreClassItem(study, "Organisation",
+                    new String[][] { { "name", networkStr }, { "type", ConverterCVT.ORG_TYPE_NETWORK } });
+        }
     }
 
     /**

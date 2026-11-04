@@ -1,5 +1,28 @@
 package org.intermine.bio.dataconversion;
 
+import java.io.File;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import org.apache.commons.lang3.math.NumberUtils;
+import org.intermine.dataconversion.ItemWriter;
+import org.intermine.metadata.Model;
+import org.intermine.xml.full.Item;
+
 /*
  * Copyright (C) 2024-2025 MDRMine
  * Modified from 2002-2019 FlyMine 
@@ -16,23 +39,6 @@ import com.opencsv.CSVParserBuilder;
 import com.opencsv.CSVReader;
 import com.opencsv.CSVReaderBuilder;
 import com.opencsv.exceptions.CsvMalformedLineException;
-import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.commons.text.WordUtils;
-import org.intermine.dataconversion.ItemWriter;
-import org.intermine.metadata.Model;
-import org.intermine.xml.full.Item;
-
-import java.io.File;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.time.LocalDate;
-import java.util.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Class to parse values from a WHO data file and store them as MDRMine items
@@ -43,9 +49,6 @@ public class WhoConverter extends CacheConverter {
     private static final Pattern P_NONVALID_ID = Pattern.compile(
             "(?:\\bnull\\b)|(?:\\bnill?(?:\\h*known)?\\.?)|(?:not\\h*applicable)|(?:not\\h*available)|(?:N[\\/\\.]?A\\.?)|(?:none\\.?)|(?:NCT00000000)|(?:NCT12345678)|(?:ISRCTN00000000)|(?:ISRCTN12345678)|(?:[0\\.-:\\?\\h\\*]+)",
             Pattern.CASE_INSENSITIVE);
-    // TODO: "-"/"--" are none or unknown?
-    private static final Pattern P_NOT_APPLICABLE = Pattern.compile(".*(not\\h*applicable|N\\/?A).*",
-            Pattern.CASE_INSENSITIVE); // N/A
     private static final Pattern P_NONE = Pattern.compile(".*\\b(none|no)\\b.*", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_UNKNOWN = Pattern.compile(".*\\b(unknown|not\\h*specified|not\\h*stated)\\b.*",
             Pattern.CASE_INSENSITIVE);
@@ -90,8 +93,6 @@ public class WhoConverter extends CacheConverter {
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_IEC_NA = Pattern.compile(
             "^((?:inclusion|exclusion) criteria):\\h*(not\\h*applicable|n\\/?a)\\.?$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern P_URL = Pattern.compile("\\b[^\\s]+\\.(pdf|doc|[a-zA-Z]).*\\b",
-            Pattern.CASE_INSENSITIVE); // TODO: improve probably
     private static final Pattern P_FIX_EUCTR = Pattern.compile("(?<!:)\\/\\/", Pattern.CASE_INSENSITIVE);
 
     private static final String IC_PREFIX = "Inclusion criteria: ";
@@ -144,9 +145,6 @@ public class WhoConverter extends CacheConverter {
 
         // nextLine[] is an array of values from the line
         String[] nextLine = csvReader.readNext();
-
-        // this.modifyStoredStudyId("NCT03754790", "2023-508884-59");
-        // this.modifyStoredStudyId("2023-508884-67", "2023-508884-59");
 
         // TODO: performance tests? compared to iterator
         while (nextLine != null) {
@@ -260,31 +258,16 @@ public class WhoConverter extends CacheConverter {
         LocalDate resultsDatePosted = ConverterUtils.parseDate(resultsDatePostedStr, null);
         String publicationYear = resultsDatePosted != null ? String.valueOf(resultsDatePosted.getYear()) : "";
 
-        // TODO EUCTR: replace updated date + registration date + publication year if
-        // existing study + start date more recent
-        // TODO: publication year wrong
-        this.createAndStoreRegistryEntryDO(study, url, registrationDate, publicationYear, lastUpdate);
-
         /* Study planned enrolment */
         // In EUCTR: for the whole clinical trial
         // TODO: handle "verbose" values, example study: SLCTR/2017/032
         String targetSize = this.getAndCleanValue(lineValues, "Target_size");
-        if (ConverterUtils.isPosWholeNumber(targetSize) && !(Long.valueOf(targetSize) > Integer.MAX_VALUE)) {
-            if (!this.existingStudy() || this.newerLastUpdate) { // Updating planned enrolment for more recent last
-                                                                 // update date
-                study.setAttributeIfNotNull("plannedEnrolment", targetSize);
-            }
-        }
+        this.parseEnrolment(study, targetSize, "plannedEnrolment");
 
         /* Study actual enrolment */
         // In EUCTR: for the whole clinical trial
         String resultsActualEnrolment = this.getAndCleanValue(lineValues, "results_actual_enrollment");
-        if (ConverterUtils.isPosWholeNumber(resultsActualEnrolment)
-                && !(Long.valueOf(resultsActualEnrolment) > Integer.MAX_VALUE)) {
-            if (this.newerLastUpdate) { // Updating actual enrolment for more recent last update date
-                study.setAttributeIfNotNull("actualEnrolment", resultsActualEnrolment);
-            }
-        }
+        this.parseEnrolment(study, resultsActualEnrolment, "actualEnrolment");
 
         /* Study status */
         // TODO: normalise values
@@ -304,6 +287,7 @@ public class WhoConverter extends CacheConverter {
              * Primary and secondary sponsors, scientific support organisation (source
              * support)
              */
+            // TODO: garbage value check?
             this.createAndStoreStudyOrg(study, primarySponsor, ConverterCVT.CONTRIB_TYPE_SPONSOR);
             // TODO: there may be multiple sponsors in this field
             this.createAndStoreStudyOrg(study, secondarySponsors, ConverterCVT.CONTRIB_TYPE_SPONSOR);
@@ -325,6 +309,7 @@ public class WhoConverter extends CacheConverter {
 
         /* Study conditions */
         String conditions = this.getAndCleanValue(lineValues, "Conditions");
+        // TODO: garbage value check?
         this.parseConditions(study, conditions);
 
         /* Interventions */
@@ -352,9 +337,8 @@ public class WhoConverter extends CacheConverter {
         this.parseIEC(study, ic, ec);
 
         /* Primary outcome */
-        // TODO: handle main empty values
         String primaryOutcome = this.getAndCleanValue(lineValues, "Primary_Outcome");
-        study.setAttributeIfNotNull("primaryOutcome", primaryOutcome);
+        this.parsePrimaryOutcome(study, primaryOutcome);
 
         /* Description 3/3 (primary outcome) */
         if (!this.existingStudy()) {
@@ -384,7 +368,7 @@ public class WhoConverter extends CacheConverter {
         this.parseRetrospectiveFlag(study, retrospectiveFlag);
 
         /* Results summary SO */
-        String resultsUrlLink = this.getAndCleanValue(lineValues, "results_url_link");
+        String resultsUrlLinkStr = this.getAndCleanValue(lineValues, "results_url_link");
         // TODO: check if actual results summary? may not be for EUCTR trials at least
         String resultsSummary = this.getAndCleanValue(lineValues, "results_summary");
         // resultsDatePosted used earlier
@@ -393,7 +377,7 @@ public class WhoConverter extends CacheConverter {
         // TODO: update dates if existing study and later dates
         String resultsDateCompletedStr = this.getAndCleanValue(lineValues, "results_date_completed");
         LocalDate resultsDateCompleted = ConverterUtils.parseDate(resultsDateCompletedStr, null);
-        this.createAndStoreResultsSummaryDO(study, resultsUrlLink, resultsSummary, resultsDatePosted,
+        this.createAndStoreResultsSummaryDO(study, resultsUrlLinkStr, resultsSummary, resultsDatePosted,
                 resultsDateCompleted);
 
         /* Results */
@@ -415,9 +399,9 @@ public class WhoConverter extends CacheConverter {
         String resultsOutcomeMeasures = this.getAndCleanValue(lineValues, "results_outcome_measures");
 
         /* Protocol SO */
-        String resultsUrlProtocol = this.getAndCleanValue(lineValues, "results_url_protocol");
+        String resultsUrlProtocolStr = this.getAndCleanValue(lineValues, "results_url_protocol");
         // TODO: publication year irrelevant?
-        this.createAndStoreProtocolDO(study, resultsUrlProtocol, publicationYear);
+        this.createAndStoreProtocolDO(study, resultsUrlProtocolStr, publicationYear);
 
         // Indicates if there is a plan to share IPD
         String resultsIPDPlan = this.getAndCleanValue(lineValues, "results_IPD_plan");
@@ -484,13 +468,11 @@ public class WhoConverter extends CacheConverter {
         if (!this.existingStudy()) {
             boolean titleSet = false;
 
-            if (!ConverterUtils.isBlankOrNull(publicTitle) && !publicTitle.equals("-")
-                    && !publicTitle.equals("_") && !publicTitle.equals(".")) {
+            if (ConverterUtils.isValidValue(publicTitle)) {
                 study.setAttributeIfNotNull("title", publicTitle);
                 titleSet = true;
             }
-            if (!ConverterUtils.isBlankOrNull(scientificTitle) && !scientificTitle.equals("-")
-                    && !scientificTitle.equals("_") && !scientificTitle.equals(".")) {
+            if (ConverterUtils.isValidValue(scientificTitle)) {
                 study.setAttributeIfNotNull("scientificTitle", scientificTitle);
                 if (!titleSet) {
                     study.setAttributeIfNotNull("title", scientificTitle);
@@ -677,7 +659,7 @@ public class WhoConverter extends CacheConverter {
      * TODO
      */
     public void parseInterventions(Item study, String interventions) {
-        if (!ConverterUtils.isBlankOrNull(interventions)) {
+        if (ConverterUtils.isValidValue(interventions)) {
             study.setAttribute("interventionsDescription", interventions);
         }
 
@@ -825,8 +807,7 @@ public class WhoConverter extends CacheConverter {
                         if (mTypeBasicScience.matches()) {
                             study.setAttributeIfNotNull("type", ConverterCVT.TYPE_BASIC_SCIENCE);
                         } else { // N/A
-                            Matcher mTypeNA = P_NOT_APPLICABLE.matcher(studyTypeStr);
-                            if (mTypeNA.matches()) {
+                            if (ConverterUtils.isNotApplicable(studyTypeStr)) {
                                 study.setAttributeIfNotNull("type", ConverterCVT.NOT_APPLICABLE);
                             } else { // Expanded access
                                 Matcher mTypeExpandedAcess = P_TYPE_EXPANDED_ACCESS.matcher(studyTypeStr);
@@ -911,13 +892,11 @@ public class WhoConverter extends CacheConverter {
                         this.writeLog("Anomaly: matched but couldn't properly parse \"verbose\" phase field, g1: " + p1
                                 + "; g2: " + p2 + "; g3: " + p3 + ", full string: " + phaseStr);
                     }
-                } else {
-                    Matcher mPhaseNA = P_NOT_APPLICABLE.matcher(phaseStr);
-                    if (mPhaseNA.matches()) { // N/A
-                        featureValue = ConverterCVT.NOT_APPLICABLE;
-                    } else { // Using raw value
-                        featureValue = phaseStr;
-                    }
+                } else if (ConverterUtils.isNotApplicable(phaseStr)) {
+                    featureValue = ConverterCVT.NOT_APPLICABLE;
+                } else { // Using raw value
+                    // TODO: log? harmonise? filter out?
+                    featureValue = phaseStr;
                 }
             }
 
@@ -974,17 +953,22 @@ public class WhoConverter extends CacheConverter {
 
     /**
      * TODO
+     * 
+     * @param study
+     * @param secondaryOutcomes
+     * @param resultsAdverseEvents
+     * @param resultsDatePosted
      */
     public void parseSecondaryOutcomes(Item study, String secondaryOutcomes, String resultsAdverseEvents,
             LocalDate resultsDatePosted) {
         if (!this.existingStudy()) {
             StringBuilder constructedSecondaryOutcomes = new StringBuilder();
-            if (!ConverterUtils.isBlankOrNull(secondaryOutcomes)) {
+            if (ConverterUtils.isValidValue(secondaryOutcomes)) {
                 constructedSecondaryOutcomes.append(secondaryOutcomes);
             }
             // TODO: check that resultsDatePosted date is valid
             // Filtering out placeholder links (drks.de)
-            if (!ConverterUtils.isBlankOrNull(resultsAdverseEvents)
+            if (ConverterUtils.isValidValue(resultsAdverseEvents)
                     && !(resultsAdverseEvents.contains("drks.de") && resultsDatePosted != null)) {
                 if (secondaryOutcomes.length() > 0) {
                     if (!secondaryOutcomes.endsWith(".")) {
@@ -1004,9 +988,25 @@ public class WhoConverter extends CacheConverter {
 
     /**
      * TODO
+     * 
+     * @param study
+     * @param enrolment
+     * @param enrolmentField
+     */
+    public void parseEnrolment(Item study, String enrolment, String enrolmentField) {
+        if (ConverterUtils.isPosWholeNumber(enrolment) && !(Long.valueOf(enrolment) > Integer.MAX_VALUE)) {
+            if (!this.existingStudy() || this.newerLastUpdate) { // Updating enrolment for more recent last update date
+                study.setAttributeIfNotNull(enrolmentField, enrolment);
+            }
+        }
+    }
+
+    /**
+     * TODO
      */
     public void parseRecruitmentStatus(Item study, String studyStatus) {
-        if (!this.existingStudy()) {
+        if (!this.existingStudy() || this.newerLastUpdate) {
+            studyStatus = ConverterUtils.normaliseNotApplicable(studyStatus);
             study.setAttributeIfNotNull("status", ConverterUtils.normaliseStatus(studyStatus));
         }
     }
@@ -1019,29 +1019,28 @@ public class WhoConverter extends CacheConverter {
         if (!ConverterUtils.isBlankOrNull(studyOrgStr)) {
             // TODO: setting studyOrganisation object for now, need logic to distinguish
             // people from orgs
-
             // TODO: createAndStoreClassItem needs to deal with many2many as well
 
-            // TODO: refactor
-            Matcher mNA = P_NOT_APPLICABLE.matcher(studyOrgStr);
-            if (mNA.matches()) { // N/A
-                this.createAndStoreClassItem(study, "Organisation",
-                        new String[][] { { "contribType", contribType },
-                                { "name", ConverterCVT.NOT_APPLICABLE } });
+            String orgName = "";
+
+            // TODO: ?
+            if (ConverterUtils.isNotApplicable(studyOrgStr)) { // N/A
+                orgName = ConverterCVT.NOT_APPLICABLE;
             } else {
                 Matcher mNone = P_NONE.matcher(studyOrgStr);
                 if (mNone.matches()) { // No sponsor
                     if (contribType.equals(ConverterCVT.CONTRIB_TYPE_SPONSOR)) {
-                        this.createAndStoreClassItem(study, "Organisation",
-                                new String[][] { { "contribType", contribType },
-                                        { "name", ConverterCVT.SPONSOR_NONE } });
+                        orgName = ConverterCVT.SPONSOR_NONE;
                     }
                 } else { // Using raw value
-                    this.createAndStoreClassItem(study, "Organisation",
-                            new String[][] { { "contribType", contribType },
-                                    { "name", studyOrgStr } });
+                    // TODO: garbage value check?
+                    orgName = studyOrgStr;
                 }
             }
+
+            this.createAndStoreClassItem(study, "Organisation",
+                    new String[][] { { "contribType", contribType },
+                            { "name", orgName } });
         }
     }
 
@@ -1145,6 +1144,10 @@ public class WhoConverter extends CacheConverter {
 
     /**
      * TODO
+     * 
+     * @param study
+     * @param retrospectiveFlag
+     * @throws Exception
      */
     public void parseRetrospectiveFlag(Item study, String retrospectiveFlag) throws Exception {
         if (!ConverterUtils.isBlankOrNull(retrospectiveFlag) && !this.existingStudy()) {
@@ -1160,29 +1163,44 @@ public class WhoConverter extends CacheConverter {
 
     /**
      * TODO
-     * TODO: should return created SO
+     * 
+     * @param study
+     * @param resultsUrlLinkStr
+     * @param resultsSummary
+     * @param resultsDatePosted
+     * @param resultsDateCompleted
+     * @throws Exception
      */
-    public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, String resultsSummary,
+    public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLinkStr, String resultsSummary,
             LocalDate resultsDatePosted, LocalDate resultsDateCompleted) throws Exception {
-        // TODO: filter out non-urls
         // Note: current MDR avoids duplicate with registry entry url, but maybe it
         // makes sense to have duplicate
         // Filtering out drks.de URL with no date posted (they are placeholders)
-        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
-                && !resultsUrlLink.contains("drks.de") && resultsDatePosted != null) {
-            // Publication year
-            String publicationYear = null;
-            if (resultsDatePosted != null) {
-                publicationYear = String.valueOf(resultsDatePosted.getYear());
+        if (!this.existingStudy() && resultsDatePosted != null) {
+            String doi = ConverterUtils.getDoiFromString(resultsUrlLinkStr);
+            String resultsUrl;
+            if (doi != null) {
+                resultsUrl = ConverterUtils.getUrlFromDoi(doi);
+            } else {
+                resultsUrl = ConverterUtils.getDocUrlFromString(resultsUrlLinkStr);
             }
 
-            /* Results summary SO */
-            this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "accessUrl", resultsUrlLink },
-                            { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
-                            { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
-                            { "publicationYear", publicationYear },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
+            if (resultsUrl != null && !resultsUrl.contains("drks.de")) {
+                String publicationYear = null;
+                if (resultsDatePosted != null) {
+                    publicationYear = String.valueOf(resultsDatePosted.getYear());
+                }
+
+                /* Results summary SO */
+                this.createAndStoreClassItem(study, "RegistryResultsSummary",
+                        new String[][] { { "accessUrl", resultsUrl },
+                                { "doi", doi },
+                                { "dateCreated",
+                                        resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
+                                { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
+                                { "publicationYear", publicationYear },
+                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
+            }
         }
     }
 
@@ -1204,36 +1222,31 @@ public class WhoConverter extends CacheConverter {
     /**
      * TODO
      */
-    public void createAndStoreProtocolDO(Item study, String resultsUrlProtocol, String publicationYear)
+    public void createAndStoreProtocolDO(Item study, String resultsUrlProtocolStr, String publicationYear)
             throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlProtocol)) {
-            Matcher mUrl = P_URL.matcher(resultsUrlProtocol);
-            if (mUrl.find()) {
+        if (!this.existingStudy()) {
+            String doi = ConverterUtils.getDoiFromString(resultsUrlProtocolStr);
+            String resultsUrlProtocol;
+            if (doi != null) {
+                resultsUrlProtocol = ConverterUtils.getUrlFromDoi(doi);
+            } else {
+                resultsUrlProtocol = ConverterUtils.getDocUrlFromString(resultsUrlProtocolStr);
+            }
+
+            if (resultsUrlProtocol != null) {
                 /* Protocol SO */
                 // Object type: in practice, most of the time it's a link to the study page
                 // (e.g. CTIS) where there might be the study protocol
                 // TODO: follow MDR logic then? ("CSR summary" type by default and protocol if
                 // prot in url name)
 
-                // TODO: Fix euctr links
-                String protocolURL = P_FIX_EUCTR.matcher(mUrl.group(0)).replaceAll("/");
-
-                String resourceType;
-                // File extension (if any) to help determine resource type
-                if (mUrl.group(1).equalsIgnoreCase("pdf")) {
-                    resourceType = ConverterCVT.O_RESOURCE_TYPE_PDF;
-                } else if (mUrl.group(1).equalsIgnoreCase("doc")) {
-                    resourceType = ConverterCVT.O_RESOURCE_TYPE_WORD_DOC;
-                } else {
-                    resourceType = ConverterCVT.O_RESOURCE_TYPE_WEB_TEXT;
-                }
-
                 // Access type: in practice it might not be the correct access type
                 // Note: only specifying public, not using the various public types MDR has,
                 // maybe to change
                 this.createAndStoreClassItem(study, "Protocol",
                         new String[][] { { "publicationYear", publicationYear },
-                                { "accessUrl", protocolURL },
+                                { "doi", doi },
+                                { "accessUrl", resultsUrlProtocol },
                                 { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
             }
         }
@@ -1319,6 +1332,9 @@ public class WhoConverter extends CacheConverter {
 
     /**
      * TODO
+     * 
+     * @param study
+     * @param genderStr
      */
     public void parseGender(Item study, String genderStr) {
         if (!ConverterUtils.isBlankOrNull(genderStr) && this.existingStudy()) {
@@ -1331,13 +1347,13 @@ public class WhoConverter extends CacheConverter {
                 if (mGenderStructured.matches()) {
                     this.setGenderFromMatches(study, mGenderStructured, genderStr, ConverterCVT.GENDER_WOMEN,
                             ConverterCVT.GENDER_MEN, true);
-                } else { // "Non-structured" pattern
+                } else { // "Non-structured" pattern (MF)
 
                     Matcher mGenderMF = P_GENDER_MF.matcher(genderStr);
                     if (mGenderMF.matches()) {
                         this.setGenderFromMatches(study, mGenderMF, genderStr, ConverterCVT.GENDER_MEN,
                                 ConverterCVT.GENDER_WOMEN, false);
-                    } else {
+                    } else { // "Non-structured" pattern (FM)
 
                         Matcher mGenderFM = P_GENDER_FM.matcher(genderStr);
                         if (mGenderFM.matches()) {
@@ -1348,10 +1364,8 @@ public class WhoConverter extends CacheConverter {
                             Matcher mGenderNotSpecified = P_UNKNOWN.matcher(genderStr);
                             if (mGenderNotSpecified.matches()) {
                                 study.setAttributeIfNotNull("genderElig", ConverterCVT.UNKNOWN);
-                            } else { // Raw value (shouldn't happen)
-
-                                study.setAttributeIfNotNull("genderElig", genderStr);
-                                this.writeLog("Couldn't parse study gender (used raw value): " + genderStr);
+                            } else {
+                                this.writeLog("Couldn't parse study gender: " + genderStr);
                             }
                         }
                     }
@@ -1388,6 +1402,10 @@ public class WhoConverter extends CacheConverter {
 
     /**
      * TODO
+     * 
+     * @param study
+     * @param icStr
+     * @param ecStr
      */
     public void parseIEC(Item study, String icStr, String ecStr) {
         if (!this.existingStudy()) {
@@ -1417,24 +1435,21 @@ public class WhoConverter extends CacheConverter {
             if (!ConverterUtils.isBlankOrNull(ecStr)) { // None
                 Matcher mEcNone = P_IEC_NONE.matcher(ecStr);
 
-                String adaptedEcPrefix = "";
                 if (iec.length() > 0) {
-                    adaptedEcPrefix = ". " + EC_PREFIX;
-                } else {
-                    adaptedEcPrefix = EC_PREFIX;
+                    iec.append(". ");
                 }
 
                 if (mEcNone.matches()) {
                     String g2None = mEcNone.group(2);
                     if (!ConverterUtils.isBlankOrNull(g2None)) {
-                        iec.append(adaptedEcPrefix + ConverterCVT.NONE);
+                        iec.append(EC_PREFIX + ConverterCVT.NONE);
                     } else {
-                        iec.append(adaptedEcPrefix + ConverterCVT.UNKNOWN);
+                        iec.append(EC_PREFIX + ConverterCVT.UNKNOWN);
                     }
                 } else { // N/A
                     Matcher mEcNA = P_IEC_NA.matcher(ecStr);
                     if (mEcNA.matches()) {
-                        iec.append(adaptedEcPrefix + ConverterCVT.NOT_APPLICABLE);
+                        iec.append(EC_PREFIX + ConverterCVT.NOT_APPLICABLE);
                     } else { // Raw value
                         iec.append(ecStr);
                     }
@@ -1449,21 +1464,51 @@ public class WhoConverter extends CacheConverter {
         }
     }
 
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param primaryOutcome
+     */
+    public void parsePrimaryOutcome(Item study, String primaryOutcome) {
+        if (!ConverterUtils.isGarbageValue(primaryOutcome)) {
+            primaryOutcome = ConverterUtils.normaliseNotApplicable(primaryOutcome);
+            study.setAttributeIfNotNull("primaryOutcome", primaryOutcome);
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param resultsIPDPlan
+     * @param resultsIPDDescription
+     */
     public void parseDataSharingStatement(Item study, String resultsIPDPlan, String resultsIPDDescription) {
-        if (!this.existingStudy()) {
-            if (!ConverterUtils.isBlankOrNull(resultsIPDPlan)) { // Also checks for "NULL"
-                study.setAttributeIfNotNull("planToShareIPD", resultsIPDPlan);
-            }
-            if (!ConverterUtils.isBlankOrNull(resultsIPDDescription)) {
-                study.setAttributeIfNotNull("dataSharingStatement", resultsIPDDescription);
-            }
-        } else {
-            if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "planToShareIPD"))) {
-                study.setAttributeIfNotNull("planToShareIPD", resultsIPDPlan);
+        if (!ConverterUtils.isBlankOrNull(resultsIPDPlan)) {
+            String planToShareIPD = ConverterUtils.capitaliseFirstLetterOnly(resultsIPDPlan);
+
+            if (ConverterUtils.isNoIpd(resultsIPDPlan)) {
+                planToShareIPD = ConverterCVT.NO;
+            } else { // Normalise N/A (if is N/A)
+                planToShareIPD = ConverterUtils.normaliseNotApplicable(planToShareIPD);
             }
 
-            if (ConverterUtils.isBlankOrNull(ConverterUtils.getAttrValue(study, "dataSharingStatement"))) {
-                study.setAttributeIfNotNull("dataSharingStatement", resultsIPDDescription);
+            if (!this.existingStudy() || !ConverterUtils.hasValueForItemField(study, "planToShareIPD")) {
+                study.setAttributeIfNotNull("planToShareIPD", planToShareIPD);
+            }
+        }
+
+        if (!ConverterUtils.isBlankOrNull(resultsIPDDescription)) {
+            String dss = ConverterUtils.capitaliseFirstLetterOnly(resultsIPDDescription);
+            if (ConverterUtils.isNoIpd(dss)) {
+                dss = ConverterCVT.NO;
+            } else { // Normalise N/A (if is N/A)
+                dss = ConverterUtils.normaliseNotApplicable(dss);
+            }
+
+            if (!this.existingStudy() || !ConverterUtils.hasValueForItemField(study, "dataSharingStatement")) {
+                study.setAttributeIfNotNull("dataSharingStatement", dss);
             }
         }
     }
