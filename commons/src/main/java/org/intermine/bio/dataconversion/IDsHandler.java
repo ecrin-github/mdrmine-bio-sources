@@ -320,7 +320,10 @@ public class IDsHandler {
         this.addUids(idsHToMerge.uids);
         this.addNonUids(idsHToMerge.nonUids);
 
-        // TODO primaryId if both current source and no hit in idresolver
+        // Prioritising ID file primary IDs for consistency
+        if (idsHToMerge.dataSource.equals(ConverterCVT.SOURCE_NAME_ID_FILE)) {
+            this.primaryIdentifier = idsHToMerge.primaryIdentifier;
+        }
     }
 
     /**

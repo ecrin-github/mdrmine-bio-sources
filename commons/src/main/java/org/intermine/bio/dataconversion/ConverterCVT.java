@@ -155,6 +155,7 @@ public class ConverterCVT {
     public static final String SOURCE_NAME_CTIS = "Clinical Trials Information System (CTIS)";
     public static final String SOURCE_NAME_EUCTR = "EU Clinical Trials Register";
     public static final String SOURCE_NAME_WHO = "International Clinical Trials Registry Platform (ICTRP)";
+    public static final String SOURCE_NAME_ID_FILE = "idfile";
 
     public static final String CTG_STUDY_BASE_URL = "https://clinicaltrials.gov/study/";
     public static final String CTG_DOCUMENT_BASE_URL = "https://cdn.clinicaltrials.gov/large-docs/";

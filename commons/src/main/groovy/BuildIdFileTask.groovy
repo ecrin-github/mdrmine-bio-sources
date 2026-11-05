@@ -31,7 +31,9 @@ import org.intermine.plugin.project.Source
 class BuildIdFileTask {
 
     String DEFAULT_LOG_DIR = '/home/ubuntu/mdrmine/logs'
-    String DEFAULT_OUTPUT_DIR = '/home/ubuntu/data/idfile'
+    String DEFAULT_IDFILE_DIR = '/home/ubuntu/data/idfile'
+    String DEFAULT_IDFILE_NAME = 'clinicaltrial'
+
     Pattern P_HEADER_BIOLINCC = Pattern.compile('\\w+.*')
     IDsMap idsMap = IDsMap.getIDsMap()
     Set<IDsHandler> noUidsIdsHandlers = new HashSet<IDsHandler>()
@@ -40,7 +42,8 @@ class BuildIdFileTask {
     // @TaskAction
     void run(project) {
         String logDir = project.findProperty('logDir') ?: DEFAULT_LOG_DIR
-        String outputDir = project.findProperty('outputDir') ?: DEFAULT_OUTPUT_DIR
+        String idfileDir = project.findProperty('idfileDir') ?: DEFAULT_IDFILE_DIR
+        String idFileName = project.findProperty('idfileName') ?: DEFAULT_IDFILE_NAME
 
         String mineName = project.getProjectDir().getParentFile().getName().split('-')[0]
         String projectXml = project.getProjectDir().getParentFile().getParent() + File.separator + mineName + File.separator + 'project.xml'
@@ -48,9 +51,14 @@ class BuildIdFileTask {
         org.intermine.plugin.project.Project imProject = ProjectXmlBinding.unmarshall(new File(projectXml))
         println "Fetching source data using ${projectXml}"
 
+        Files.createDirectories(Paths.get(idfileDir))
+
+        // Loading existing "clinicaltrial" if it exist to have consistent primary IDs, otherwise start from scratch
+        Path existingIdFileFP = Paths.get(idfileDir, idFileName)
+        this.parseExistingIdFile(existingIdFileFP)
+
         // Creating ID file directory if not exists
-        Files.createDirectories(Paths.get(outputDir))
-        String idFileFP = outputDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_id_file.tsv'
+        String idFileFP = idfileDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_id_file.tsv'
 
         imProject.sources.keySet().each { sourceNameV ->
             Source source = imProject.sources.get(sourceNameV)
@@ -97,7 +105,7 @@ class BuildIdFileTask {
         this.writeIdFile(idFileFP)
 
         println 'Writing nonUid file'
-        String nonUidFileFP = outputDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
+        String nonUidFileFP = idfileDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
         this.writeNonUidFile(nonUidFileFP)
     }
 
@@ -114,6 +122,42 @@ class BuildIdFileTask {
 
         if (!added) {
             this.noUidsIdsHandlers.add(idsH)
+        }
+    }
+
+    void parseExistingIdFile(Path idFileFP) {
+        if (!(Files.isSymbolicLink(idFileFP) || Files.isRegularFile(idFileFP))) {
+            println "No existing ID file at ${idfileFP.toString()}, building ID file from scratch"
+        } else {
+            println 'Parsing existing ID file to populate idsMap'
+            BufferedReader br = Files.newBufferedReader(idFileFP)
+
+            String line
+            int lineNumber = 0
+            while ((line = br.readLine()) != null) {
+                lineNumber++
+
+                if (lineNumber % 10000 == 0) {
+                    println "Line: ${lineNumber}"
+                }
+
+                String[] split = line.split('\t')
+
+                if (split.length != 2) {
+                    println "Unexpected number of items after split: ${split.length}"
+                } else {
+                    IDsHandler idsH = new IDsHandler(ConverterCVT.SOURCE_NAME_ID_FILE, split[0], true)
+
+                    String[] ids = split[1].split(',')
+                    if (ids.length > 1) {
+                        for (String id: ids) {
+                            idsH.addId(id)
+                        }
+                    }
+
+                    this.addToIdsMap(idsH)
+                }
+            }
         }
     }
 
@@ -482,7 +526,7 @@ class BuildIdFileTask {
             if (Character.getNumericValue(headersLine.charAt(0)) == -1 ||
                 Integer.toHexString(Character.getNumericValue(headersLine.charAt(0)) | 0x10000).substring(1).toLowerCase() == ('feff')) {
                 headersLine = headersLine.substring(1)
-                }
+            }
             String[] fields = headersLine.split(',')
 
             for (int ind = 0; ind < fields.length; ind++) {
@@ -505,7 +549,7 @@ class BuildIdFileTask {
                 if (Character.getNumericValue(headersList[ind].charAt(0)) == -1 ||
                     Integer.toHexString(Character.getNumericValue(headersList[ind].charAt(0)) | 0x10000).substring(1).toLowerCase() == ('feff')) {
                     headersList[ind] = headersList[ind].substring(1)
-                    }
+                }
                 fieldsToInd.put(headersList[ind], ind)
             }
         } else {
