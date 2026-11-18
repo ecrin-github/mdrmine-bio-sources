@@ -2,29 +2,18 @@ package org.intermine.bio.dataconversion;
 
 import java.io.IOException;
 import java.time.LocalDate;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Properties;
 import java.util.Set;
+
 import org.apache.commons.text.WordUtils;
 import org.intermine.dataconversion.ItemWriter;
 import org.intermine.metadata.ClassDescriptor;
-import org.intermine.metadata.ConstraintOp;
 import org.intermine.metadata.Model;
 import org.intermine.metadata.ReferenceDescriptor;
-import org.intermine.model.InterMineObject;
-import org.intermine.model.bio.Study;
 import org.intermine.objectstore.ObjectStore;
 import org.intermine.objectstore.ObjectStoreFactory;
 import org.intermine.objectstore.ObjectStoreWriter;
 import org.intermine.objectstore.ObjectStoreWriterFactory;
-import org.intermine.objectstore.query.Query;
-import org.intermine.objectstore.query.QueryClass;
-import org.intermine.objectstore.query.QueryField;
-import org.intermine.objectstore.query.QueryValue;
-import org.intermine.objectstore.query.Results;
-import org.intermine.objectstore.query.ResultsRow;
-import org.intermine.objectstore.query.SimpleConstraint;
 import org.intermine.util.PropertiesUtil;
 import org.intermine.xml.full.Item;
 
@@ -222,52 +211,6 @@ public abstract class BaseConverter extends BioFileConverter {
     public ReferenceDescriptor getReferenceDescriptorInItemAOfItemB(Item itemA, Item itemB)
             throws Exception {
         return ConverterUtils.getReferenceDescriptorInItemAOfItemB(this.getModel(), itemA, itemB);
-    }
-
-    /**
-     * TODO
-     * primaryIdentifier modification
-     */
-    public void modifyStoredStudyId(String existingID, String newID) throws Exception {
-        ClassDescriptor cdStudy = this.getModel().getClassDescriptorByName("Study");
-        Query q = new Query();
-        QueryClass qcStudy = new QueryClass(cdStudy.getType());
-
-        QueryField qfPrimaryID = new QueryField(qcStudy, "primaryIdentifier");
-
-        q.addFrom(qcStudy);
-        q.addToSelect(qcStudy);
-        q.setConstraint(new SimpleConstraint(qfPrimaryID, ConstraintOp.EQUALS, new QueryValue(existingID)));
-
-        Results res = this.os.execute(q);
-        Iterator<?> resIter = res.iterator();
-
-        if (resIter.hasNext()) {
-            ResultsRow<?> rr = (ResultsRow<?>) resIter.next();
-            Study study = (Study) rr.get(0); // Study is InterMineObject (superclass of Item)
-
-            study.setPrimaryIdentifier(newID);
-
-            InterMineObject studyObj = (InterMineObject) study;
-            this.osw.store(studyObj);
-
-            // TODO: check if hasnext again?
-
-            // Database db = ((ObjectStoreWriterInterMineImpl) this.osw).getDatabase();
-            // Connection con = db.getConnection();
-            // con.setAutoCommit(true);
-
-            // this.writeLog("Attempting to update stored study ID from " + existingID + "
-            // to " + newID);
-            // Statement stm = con.createStatement();
-            // String sql3 = "UPDATE study SET primaryidentifier='" + newID
-            // + "' WHERE primaryidentifier='" + existingID + "'";
-            // stm.executeUpdate(sql3);
-            // stm.close();
-            // con.close();
-        } else {
-            this.writeLog("Couldn't find stored study ID to change to the new ID, tried: " + existingID);
-        }
     }
 
     /**

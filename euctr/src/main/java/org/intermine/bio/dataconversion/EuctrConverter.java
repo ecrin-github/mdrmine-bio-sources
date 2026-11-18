@@ -44,7 +44,6 @@ public class EuctrConverter extends CacheConverter {
     private static final String DATA_SOURCE_NAME = "EUCTR";
     private static final String DATA_SOURCE_DESC = "EU Clinical Trials Register";
 
-    private static final Pattern P_TITLE_NA = Pattern.compile("^-|_|N\\/?A$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_HC_CODE = Pattern.compile(
             "\\h*therapeutic\\h*area:\\h*(.*)\\h+\\[(\\w+)\\]\\h*-\\h*(.*)\\h+\\[(\\w+)\\]\\h*",
             Pattern.CASE_INSENSITIVE);
@@ -56,8 +55,6 @@ public class EuctrConverter extends CacheConverter {
             Pattern.CASE_INSENSITIVE);
     private static final Pattern P_GENDER = Pattern.compile(".*female:\\h*(yes|no|)\\h*\\nmale:\\h*(yes|no|).*",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
-    private static final Pattern P_ID_NA = Pattern.compile("^\\h*(?:n[\\.\\/]?(?:a|d)\\.?|not\\h*.*|-+|none)\\h*$",
-            Pattern.CASE_INSENSITIVE); // N/A (all forms) or - or none
     private static final Pattern P_PRODUCT_NA = Pattern.compile(
             "^(?:(?:not|to)\\h|none?(?:\\h|$)|(?:n[.\\/]?a\\.?|-|\\.|tbd)$|unknown).*",
             Pattern.CASE_INSENSITIVE); // Invalid values for product name or INN
@@ -158,10 +155,7 @@ public class EuctrConverter extends CacheConverter {
         // Using this as "newer update" date
         // TODO: more relevant to use date enrolment?
         String dateRegistrationStr = this.getAndCleanValue(mainInfo, "dateRegistration");
-        LocalDate dateRegistration = ConverterUtils.parseDate(dateRegistrationStr, ConverterUtils.P_DATE_D_M_Y_SLASHES);
-
-        /* Trial registry entry SO */
-        this.createAndStoreRegistryEntryDO(study, dateRegistration, trialUrl);
+        this.parseRegistrationDate(study, dateRegistrationStr);
 
         /* Study people: primary sponsor */
         String primarySponsor = this.getAndCleanValue(mainInfo, "primarySponsor");
@@ -241,7 +235,7 @@ public class EuctrConverter extends CacheConverter {
         // Results summary here is actually more of a general trial summary than a
         // results summary
         String resultsSummary = this.getAndCleanValue(mainInfo, "resultsSummary");
-        study.setAttributeIfNotNull("description", resultsSummary);
+        this.parseResultsSummary(study, resultsSummary);
 
         String resultsDatePostedStr = this.getAndCleanValue(mainInfo, "resultsDatePosted");
         LocalDate resultsDatePosted = ConverterUtils.parseDate(resultsDatePostedStr,
@@ -389,17 +383,14 @@ public class EuctrConverter extends CacheConverter {
             throws Exception {
         if (!this.existingStudy()) {
             boolean titleSet = false;
-            // TODO: only 1 matcher object?
             /* Public title */
-            Matcher mPublicTitleNA = P_TITLE_NA.matcher(publicTitle);
-            if (!ConverterUtils.isBlankOrNull(publicTitle) && !mPublicTitleNA.matches()) {
+            if (ConverterUtils.isValidValue(publicTitle)) {
                 study.setAttributeIfNotNull("title", publicTitle);
                 titleSet = true;
             }
 
             /* Scientific title */
-            Matcher mScientificTitleNA = P_TITLE_NA.matcher(scientificTitle);
-            if (!ConverterUtils.isBlankOrNull(scientificTitle) && !mScientificTitleNA.matches()) {
+            if (ConverterUtils.isValidValue(scientificTitle)) {
                 if (!titleSet) {
                     study.setAttributeIfNotNull("title", scientificTitle);
                     titleSet = true;
@@ -409,8 +400,7 @@ public class EuctrConverter extends CacheConverter {
             }
 
             /* Acronym */
-            Matcher mScientificAcronymNA = P_TITLE_NA.matcher(scientificAcronym);
-            if (!ConverterUtils.isBlankOrNull(scientificAcronym) && !mScientificAcronymNA.matches()) {
+            if (ConverterUtils.isValidValue(scientificAcronym)) {
                 if (!titleSet) {
                     study.setAttributeIfNotNull("title", scientificAcronym);
                     titleSet = true;
@@ -425,11 +415,29 @@ public class EuctrConverter extends CacheConverter {
      * TODO
      * 
      * @param study
+     * @param dateRegistrationStr
+     */
+    public void parseRegistrationDate(Item study, String dateRegistrationStr) {
+        if (!ConverterUtils.isBlankOrNull(dateRegistrationStr)) {
+            LocalDate dateRegistration = ConverterUtils.parseDate(dateRegistrationStr,
+                    ConverterUtils.P_DATE_D_M_Y_SLASHES);
+            if (dateRegistration != null) {
+                study.setAttributeIfNotNull("registrationDate", dateRegistration.toString());
+            } else {
+                this.writeLog("Failed to parse study registration date: " + dateRegistrationStr);
+            }
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
      * @param primarySponsor
      * @throws Exception
      */
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
-        if (!this.existingStudy()) {
+        if (!this.existingStudy() && ConverterUtils.isValidName(primarySponsor)) {
             this.createAndStoreClassItem(study, "Organisation",
                     new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                             { "name", primarySponsor } });
@@ -520,9 +528,15 @@ public class EuctrConverter extends CacheConverter {
         }
     }
 
+    /**
+     * TODO
+     * 
+     * @param study
+     * @param studyStatus
+     */
     public void parseRecruitmentStatus(Item study, String studyStatus) {
-        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(studyStatus)
-                && !studyStatus.equalsIgnoreCase("NA")) {
+        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(studyStatus)) {
+            studyStatus = ConverterUtils.normaliseNotApplicable(studyStatus);
             study.setAttributeIfNotNull("status", ConverterUtils.normaliseStatus(studyStatus));
         }
     }
@@ -564,6 +578,8 @@ public class EuctrConverter extends CacheConverter {
             // Processing feature-value tuples
             boolean maskingSet = false;
             boolean interventionSet = false;
+
+            // TODO: garbage value check?
 
             for (int i = 0; i < splitFeatures.length; i++) {
                 String[] tuple = splitFeatures[i].split(": ");
@@ -913,6 +929,18 @@ public class EuctrConverter extends CacheConverter {
      * TODO
      * 
      * @param study
+     * @param resultsSummary
+     */
+    public void parseResultsSummary(Item study, String resultsSummary) {
+        if (ConverterUtils.isValidValue(resultsSummary)) {
+            study.setAttributeIfNotNull("description", resultsSummary);
+        }
+    }
+
+    /**
+     * TODO
+     * 
+     * @param study
      * @param resultsUrlLink
      * @param resultsDateCompleted
      * @param resultsDatePosted
@@ -920,22 +948,32 @@ public class EuctrConverter extends CacheConverter {
      */
     public void createAndStoreResultsSummaryDO(Item study, String resultsUrlLink, LocalDate resultsDateCompleted,
             LocalDate resultsDatePosted) throws Exception {
-        if (!this.existingStudy() && !ConverterUtils.isBlankOrNull(resultsUrlLink)
-                && resultsDatePosted != null) {
-
-            // Publication year
-            String publicationYear = null;
-            if (resultsDatePosted != null) {
-                publicationYear = String.valueOf(resultsDatePosted.getYear());
+        if (!this.existingStudy() && resultsDatePosted != null) {
+            String doi = ConverterUtils.getDoiFromString(resultsUrlLink);
+            String resultsUrl;
+            if (doi != null) {
+                resultsUrl = ConverterUtils.getUrlFromDoi(doi);
+            } else {
+                resultsUrl = ConverterUtils.getDocUrlFromString(resultsUrlLink);
             }
 
-            /* Results summary SO */
-            Item resultsSummaryDO = this.createAndStoreClassItem(study, "RegistryResultsSummary",
-                    new String[][] { { "accessUrl", resultsUrlLink },
-                            { "dateCreated", resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
-                            { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
-                            { "publicationYear", publicationYear },
-                            { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
+            if (resultsUrl != null) {
+                // Publication year
+                String publicationYear = null;
+                if (resultsDatePosted != null) {
+                    publicationYear = String.valueOf(resultsDatePosted.getYear());
+                }
+
+                /* Results summary SO */
+                Item resultsSummaryDO = this.createAndStoreClassItem(study, "RegistryResultsSummary",
+                        new String[][] { { "accessUrl", resultsUrl },
+                                { "doi", doi },
+                                { "dateCreated",
+                                        resultsDateCompleted != null ? resultsDateCompleted.toString() : null },
+                                { "datePublished", resultsDatePosted != null ? resultsDatePosted.toString() : null },
+                                { "publicationYear", publicationYear },
+                                { "accessType", ConverterCVT.O_ACCESS_TYPE_PUBLIC } });
+            }
         }
     }
 
@@ -947,6 +985,7 @@ public class EuctrConverter extends CacheConverter {
      * @throws Exception
      */
     public void parseContacts(Item study, List<EuctrContact> contacts) throws Exception {
+        // TODO: probably filter out garbage values
         if (!this.existingStudy()) {
             for (EuctrContact contact : contacts) {
                 String type = contact.getType();
@@ -969,13 +1008,13 @@ public class EuctrConverter extends CacheConverter {
 
                     // TODO: add reference to organisation affiliation
                     // TODO: differentiate people from organisations
-                    if (!firstName.equalsIgnoreCase("not applicable")) {
+                    if (ConverterUtils.isValidName(firstName)) {
                         Item contactPerson = this.createAndStoreClassItem(study, "Person",
                                 new String[][] { { "fullName", firstName },
-                                        { "email", ConverterUtils.filterNonEmailString(email) },
+                                        { "email", ConverterUtils.getEmailFromString(email) },
                                         { "contribType", type } });
 
-                        if (!ConverterUtils.isBlankOrNull(affiliation)) {
+                        if (ConverterUtils.isValidName(affiliation)) {
                             Item affiliationOrg = this.createAndStoreClassItem(study, "Organisation",
                                     new String[][] { { "name", affiliation } });
                             this.handleReferencesAndCollections(contactPerson, affiliationOrg);
@@ -1013,20 +1052,22 @@ public class EuctrConverter extends CacheConverter {
 
         if (countries.size() > 0) {
             for (String countryName : countries) {
-                Item country = this.getCountry(countryName);
-                if (!seenCountries.contains(country)) {
-                    if (this.currentCountry != null && this.currentCountry.equals(country)) {
-                        // Setting more info for current country
-                        this.createAndStoreStudyCountry(study, country, countryName, status, null, null, null);
-                        // this.createAndStoreStudyCountry(study, countryName, status, plannedEnrolment,
-                        // cadDate, null);
-                        foundCurrentCountry = true;
-                    } else { // Regular parsing
-                        this.createAndStoreStudyCountry(study, country, countryName, null, null, null, null);
-                    }
+                if (ConverterUtils.isValidValue(countryName)) {
+                    Item country = this.getCountry(countryName);
+                    if (!seenCountries.contains(country)) {
+                        if (this.currentCountry != null && this.currentCountry.equals(country)) {
+                            // Setting more info for current country
+                            this.createAndStoreStudyCountry(study, country, countryName, status, null, null, null);
+                            // this.createAndStoreStudyCountry(study, countryName, status, plannedEnrolment,
+                            // cadDate, null);
+                            foundCurrentCountry = true;
+                        } else { // Regular parsing
+                            this.createAndStoreStudyCountry(study, country, countryName, null, null, null, null);
+                        }
 
-                    if (country != null) {
-                        seenCountries.add(country);
+                        if (country != null) {
+                            seenCountries.add(country);
+                        }
                     }
                 }
             }
@@ -1066,11 +1107,13 @@ public class EuctrConverter extends CacheConverter {
 
             /* Inclusion criteria */
             if (!ConverterUtils.isBlankOrNull(icStr)) {
+                icStr = ConverterUtils.normaliseNotApplicable(icStr);
                 iec.append(icStr);
             }
 
             /* Exclusion criteria */
             if (!ConverterUtils.isBlankOrNull(ecStr)) {
+                ecStr = ConverterUtils.normaliseNotApplicable(ecStr);
                 if (!iec.toString().isEmpty()) {
                     if (!iec.toString().endsWith(".")) {
                         iec.append(".");
@@ -1188,11 +1231,14 @@ public class EuctrConverter extends CacheConverter {
             // Building outcome string from all the outcome fields
             for (String outcome : outcomes) {
                 outcome = outcome.strip();
-                outcomesSb.append(outcome);
-                if (!outcome.endsWith(".")) {
-                    outcomesSb.append(".");
+
+                if (!ConverterUtils.isGarbageValue(outcome)) {
+                    outcomesSb.append(outcome);
+                    if (!outcome.endsWith(".")) {
+                        outcomesSb.append(".");
+                    }
+                    outcomesSb.append(" ");
                 }
-                outcomesSb.append(" ");
             }
 
             // Setting primary or secondary outcomes
@@ -1215,10 +1261,12 @@ public class EuctrConverter extends CacheConverter {
     public void parseSecondarySponsors(Item study, List<String> secondarySponsors) throws Exception {
         if (!this.existingStudy()) {
             for (String secondarySponsor : secondarySponsors) {
-                // TODO: link to CV
-                this.createAndStoreClassItem(study, "Organisation",
-                        new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
-                                { "name", secondarySponsor } });
+                // TODO: ROR
+                if (ConverterUtils.isValidName(secondarySponsor)) {
+                    this.createAndStoreClassItem(study, "Organisation",
+                            new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
+                                    { "name", secondarySponsor } });
+                }
             }
         }
     }
@@ -1241,25 +1289,16 @@ public class EuctrConverter extends CacheConverter {
             for (EuctrSecondaryId secIdObj : secondaryIDs) {
                 secId = secIdObj.getSecondaryId();
 
-                mNA = P_ID_NA.matcher(secId); // Filtering out N/A and similar values from IDs
-                if (!mNA.matches() && !seenIds.contains(secId) && !ConverterUtils.dummyIDs.contains(secId)) { // Also
-                                                                                                              // filtering
-                                                                                                              // out
-                    // seen and "dummy" IDs
+                // Filtering out garbage values, as well as seen and "dummy" IDs
+                if (ConverterUtils.isValidValue(secId) && !seenIds.contains(secId)
+                        && !ConverterUtils.dummyIDs.contains(secId)) {
                     issAuth = secIdObj.getIssuingAuthority();
 
                     // Creating protocol SO if ID is of type "Sponsor Protocol Code"
                     if (issAuth.equalsIgnoreCase(ISS_AUTH_PROTOCOL_CODE)) {
                         this.createAndStoreProtocolDO(study, secId);
                     } else {
-                        mNA = P_ID_NA.matcher(issAuth); // Not setting identifier type if issuing authority is N/A (or
-                                                        // similar value)
-                        // TODO: normalise identifier type
-
-                        // TODO: uncomment once multiple IDs errors resolved
-                        // this.createAndStoreClassItem(study, "StudyIdentifier",
-                        // new String[][]{{"identifierValue", secId}, {"identifierType", mNA.matches() ?
-                        // "" : issAuth}});
+                        // TODO: ?
                     }
 
                     seenIds.add(secId);
@@ -1296,8 +1335,8 @@ public class EuctrConverter extends CacheConverter {
     public void parseSourceSupports(Item study, List<String> sourceSupports) throws Exception {
         if (!this.existingStudy()) {
             for (String org : sourceSupports) {
-                // TODO: match with CV
-                if (!ConverterUtils.isBlankOrNull(org)) {
+                // TODO: ROR
+                if (ConverterUtils.isValidName(org)) {
                     this.createAndStoreClassItem(study, "Organisation",
                             new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_STUDY_FUNDER },
                                     { "name", org } });

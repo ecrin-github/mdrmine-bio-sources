@@ -18,11 +18,15 @@ package org.intermine.bio.dataconversion;
 public class ConverterCVT {
     public static final String EUCTR_REG_NAME_CTIS = "clinical trials information system";
 
-    /* Studies */
-    public static final String NOT_APPLICABLE = "N/A";
+    /* Common values */
+    public static final String YES = "Yes";
+    public static final String NO = "No";
+    public static final String NOT_APPLICABLE = "Not applicable";
     public static final String UNKNOWN = "Unknown";
     public static final String NONE = "None";
     public static final String NOT_STATED = "Not stated";
+
+    /* Studies */
     public static final String TYPE_INTERVENTIONAL = "Interventional";
     public static final String TYPE_OBSERVATIONAL = "Observational";
     public static final String TYPE_BASIC_SCIENCE = "Basic science";
@@ -151,6 +155,7 @@ public class ConverterCVT {
     public static final String SOURCE_NAME_CTIS = "Clinical Trials Information System (CTIS)";
     public static final String SOURCE_NAME_EUCTR = "EU Clinical Trials Register";
     public static final String SOURCE_NAME_WHO = "International Clinical Trials Registry Platform (ICTRP)";
+    public static final String SOURCE_NAME_ID_FILE = "idfile";
 
     public static final String CTG_STUDY_BASE_URL = "https://clinicaltrials.gov/study/";
     public static final String CTG_DOCUMENT_BASE_URL = "https://cdn.clinicaltrials.gov/large-docs/";
