@@ -37,6 +37,10 @@ import java.util.regex.Pattern;
  * @author
  */
 public class CtisConverter extends CacheConverter {
+    private static final String DATASET_TITLE = "CTIS all trials 20260826";
+    private static final String DATA_SOURCE_NAME = "CTIS";
+    private static final String DATA_SOURCE_DESC = "Clinical Trials Information System (EMA)";
+
     private static final Pattern P_STATUS_COUNTRY = Pattern.compile("^(.+),(.+)$", Pattern.CASE_INSENSITIVE);
     private static final Pattern P_AGE_SECONDARY_SINGLE = Pattern
             .compile("^[^\\d]*?(<?\\d+\\+?)(?:\\h*-\\h*)?(\\d+)?\\h+(\\w+)[^\\d]*$", Pattern.CASE_INSENSITIVE);
@@ -56,10 +60,6 @@ public class CtisConverter extends CacheConverter {
     private static final String AGE_GROUP_OLDER_ADULT = "65+ years";
 
     private static final String REGISTRY_ENTRY_BASE_URL = "https://euclinicaltrials.eu/ctis-public/view/";
-
-    private static final String DATASET_TITLE = "CTIS_trials_20260428";
-    private static final String DATA_SOURCE_NAME = "CTIS";
-    private static final String DATA_SOURCE_DESC = "Clinical Trials Information System (EMA)";
 
     private Map<String, Integer> fieldsToInd;
     private Map<String, Integer> baseIdsResubmissions = new HashMap<String, Integer>(); // Base ID -> resubmissiong

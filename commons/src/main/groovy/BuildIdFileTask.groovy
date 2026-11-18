@@ -101,11 +101,12 @@ class BuildIdFileTask {
             }
         }
 
-        println 'Writing ID file'
-        this.writeIdFile(idFileFP)
+        String symLinkFP = outputDir + File.separator + 'clinicaltrial'
+        println "Writing ID file ${symLinkFP}"
+        this.writeIdFile(idFileFP, symLinkFP)
 
-        println 'Writing nonUid file'
-        String nonUidFileFP = idfileDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
+        String nonUidFileFP = outputDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
+        println "Writing nonUid file ${nonUidFileFP}"
         this.writeNonUidFile(nonUidFileFP)
     }
 
@@ -609,7 +610,7 @@ class BuildIdFileTask {
         return null
     }
 
-    void writeIdFile(String idFP) {
+    void writeIdFile(String idFP, String symLinkFP) {
         Set<IDsHandler> idsHSet = this.idsMap.getAllIDsHandlers()
         BufferedWriter fos = new BufferedWriter(new FileWriter(idFP, true))
         for (IDsHandler idsH: idsHSet) {
@@ -619,6 +620,14 @@ class BuildIdFileTask {
             }
         }
         fos.close()
+
+        // Updating symbolic link
+        println "Updating symlink ${symLinkFP}"
+        Path symLink = Paths.get(symLinkFP)
+        if (Files.exists(symLink)) {
+            Files.delete(symLink)
+        }
+        Files.createSymbolicLink(symLink, Paths.get(idFP))
     }
 
     void writeNonUidFile(String nonUidFP) {

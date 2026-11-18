@@ -39,7 +39,7 @@ import com.opencsv.exceptions.CsvMalformedLineException;
  */
 public class BiolinccConverter extends CacheConverter {
     //
-    private static final String DATASET_TITLE = "BioLINCC full";
+    private static final String DATASET_TITLE = "BioLINCC study search 20260826";
     private static final String DATA_SOURCE_NAME = "BioLINCC";
     private static final String DATA_SOURCE_DESC = "Biologic Specimen and Data Repository Information Coordinating Center (NIH)";
 
@@ -222,7 +222,8 @@ public class BiolinccConverter extends CacheConverter {
         String hivStudyClassification = this.getAndCleanValue(lineValues, "HIV study classification");
 
         // ? Unused
-        String ingestionStatus = this.getAndCleanValue(lineValues, "Ingestion Status");
+        // String ingestionStatus = this.getAndCleanValue(lineValues, "Ingestion
+        // Status");
 
         // TODO: create Organisation item?
         String nhlbiDivision = this.getAndCleanValue(lineValues, "NHLBI Division");
@@ -639,6 +640,9 @@ public class BiolinccConverter extends CacheConverter {
         // Note: Last updated date is on the BioLINCC website but not the data exported
         // TODO: lang code en by default?
         // TODO: managingOrg NHLBI?
+        // TODO: normalized values for yes / no / n/a?
+        // Note: no primaryId (=no detectable duplicates), so no attempt to reuse
+        // Biosample items
         Item biospecimenDO = this.createAndStoreClassItem(study, "Biosample",
                 new String[][] { { "publicationYear", publicationYear },
                         { "datePublished", publicationDate != null ? publicationDate.toString() : null },

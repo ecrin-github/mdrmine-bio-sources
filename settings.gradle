@@ -15,3 +15,5 @@ include ':models'
 project(':models').projectDir = new File(settingsDir, './models')
 include ':commons'
 project(':commons').projectDir = new File(settingsDir, './commons')
+include ':bio-source-bbmri'
+project(':bio-source-bbmri').projectDir = new File(settingsDir, './bbmri')

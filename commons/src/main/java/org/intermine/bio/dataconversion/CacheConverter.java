@@ -71,6 +71,7 @@ public abstract class CacheConverter extends BaseConverter {
     protected Map<String, Set<Item>> ethicsApprovalNotifications = new HashMap<String, Set<Item>>();
     protected Map<String, Set<Item>> individualParticipantData = new HashMap<String, Set<Item>>();
     protected Map<String, Set<Item>> biosamples = new HashMap<String, Set<Item>>();
+    protected Map<String, Item> allBiosamples = new HashMap<String, Item>();
     protected Map<String, Set<Item>> datasets = new HashMap<String, Set<Item>>();
 
     // Common to Study and SOs (key can be study id or SO id)
@@ -884,6 +885,35 @@ public abstract class CacheConverter extends BaseConverter {
                 study.setAttributeIfNotNull("endDate", endDate.toString());
             }
         }
+    }
+
+    /**
+     * TODO
+     */
+    public Item linkStudyToBiosample(Item study, String primaryIdentifier) throws Exception {
+        Item biosample = null;
+
+        if (!ConverterUtils.isBlankOrNull(primaryIdentifier)) {
+            if (this.allBiosamples.containsKey(primaryIdentifier)) {
+                biosample = this.allBiosamples.get(primaryIdentifier);
+            } else { // Create Biosample
+                biosample = this.createClassItem(study, "Biosample",
+                        new String[][] { { "primaryIdentifier", primaryIdentifier } });
+
+                // Add to all Biosamples map
+                this.allBiosamples.put(primaryIdentifier, biosample);
+            }
+
+            if (biosample != null && !this.studyHasItemStored(study, biosample)) {
+                // Add Biosample to collection in Study
+                this.handleReferencesAndCollections(study, biosample);
+                // Storing in cache, even if the Biosample already existed, because Studies
+                // and its linked items can be removed from item maps later
+                this.storeClassItem(study, biosample);
+            }
+        }
+
+        return biosample;
     }
 
     /**
