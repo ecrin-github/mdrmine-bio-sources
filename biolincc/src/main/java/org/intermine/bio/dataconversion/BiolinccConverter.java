@@ -661,7 +661,7 @@ public class BiolinccConverter extends CacheConverter {
      */
     public void parseNetwork(Item study, String networkStr) throws Exception {
         // TODO: contribType?
-        if (ConverterUtils.isValidValue(networkStr)) {
+        if (ConverterUtils.isValidName(networkStr)) {
             this.createAndStoreClassItem(study, "Organisation",
                     new String[][] { { "name", networkStr }, { "type", ConverterCVT.ORG_TYPE_NETWORK } });
         }
@@ -677,10 +677,10 @@ public class BiolinccConverter extends CacheConverter {
      */
     public void parseStudyContact(Item study, String parentStudyContactEmail, String parentStudyContactName)
             throws Exception {
-        if (!ConverterUtils.isBlankOrNull(parentStudyContactName)) {
+        if (ConverterUtils.isValidName(parentStudyContactName)) {
             this.createAndStoreClassItem(study, "Person",
                     new String[][] { { "fullName", parentStudyContactName },
-                            { "email", ConverterUtils.filterNonEmailString(parentStudyContactEmail) },
+                            { "email", ConverterUtils.getEmailFromString(parentStudyContactEmail) },
                             { "contribType", ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT } });
         }
     }

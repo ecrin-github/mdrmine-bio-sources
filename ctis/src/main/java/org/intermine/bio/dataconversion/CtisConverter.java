@@ -793,7 +793,7 @@ public class CtisConverter extends CacheConverter {
                 for (int i = 0; i < separatedSponsors.length; i++) {
                     sponsor = separatedSponsors[i];
                     type = separatedTypes[i];
-                    if (!seenSponsors.contains(sponsor)) {
+                    if (!seenSponsors.contains(sponsor) && ConverterUtils.isValidName(sponsor)) {
                         // TODO: organisationRor
                         this.createAndStoreClassItem(study, "Organisation",
                                 new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },

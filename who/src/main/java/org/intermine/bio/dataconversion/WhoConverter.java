@@ -663,15 +663,17 @@ public class WhoConverter extends CacheConverter {
             contribType = ConverterCVT.CONTRIB_TYPE_SCIENTIFIC_CONTACT;
         }
 
-        Item contactPerson = this.createAndStoreClassItem(study, "Person",
-                new String[][] { { "fullName", fullName },
-                        { "email", ConverterUtils.filterNonEmailString(email) },
-                        { "contribType", contribType } });
+        if (ConverterUtils.isValidName(fullName)) {
+            Item contactPerson = this.createAndStoreClassItem(study, "Person",
+                    new String[][] { { "fullName", fullName },
+                            { "email", ConverterUtils.getEmailFromString(email) },
+                            { "contribType", contribType } });
 
-        if (!ConverterUtils.isBlankOrNull(affiliation)) {
-            Item affiliationOrg = this.createAndStoreClassItem(study, "Organisation",
-                    new String[][] { { "name", affiliation } });
-            this.handleReferencesAndCollections(contactPerson, affiliationOrg);
+            if (ConverterUtils.isValidName(affiliation)) {
+                Item affiliationOrg = this.createAndStoreClassItem(study, "Organisation",
+                        new String[][] { { "name", affiliation } });
+                this.handleReferencesAndCollections(contactPerson, affiliationOrg);
+            }
         }
     }
 
@@ -1060,28 +1062,12 @@ public class WhoConverter extends CacheConverter {
         if (!ConverterUtils.isBlankOrNull(studyOrgStr)) {
             // TODO: setting studyOrganisation object for now, need logic to distinguish
             // people from orgs
-            // TODO: createAndStoreClassItem needs to deal with many2many as well
 
-            String orgName = "";
-
-            // TODO: ?
-            if (ConverterUtils.isNotApplicable(studyOrgStr)) { // N/A
-                orgName = ConverterCVT.NOT_APPLICABLE;
-            } else {
-                Matcher mNone = P_NONE.matcher(studyOrgStr);
-                if (mNone.matches()) { // No sponsor
-                    if (contribType.equals(ConverterCVT.CONTRIB_TYPE_SPONSOR)) {
-                        orgName = ConverterCVT.SPONSOR_NONE;
-                    }
-                } else { // Using raw value
-                    // TODO: garbage value check?
-                    orgName = studyOrgStr;
-                }
+            if (ConverterUtils.isValidName(studyOrgStr)) {
+                this.createAndStoreClassItem(study, "Organisation",
+                        new String[][] { { "contribType", contribType },
+                                { "name", studyOrgStr } });
             }
-
-            this.createAndStoreClassItem(study, "Organisation",
-                    new String[][] { { "contribType", contribType },
-                            { "name", orgName } });
         }
     }
 

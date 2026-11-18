@@ -437,7 +437,7 @@ public class EuctrConverter extends CacheConverter {
      * @throws Exception
      */
     public void parsePrimarySponsor(Item study, String primarySponsor) throws Exception {
-        if (!this.existingStudy() && ConverterUtils.isValidValue(primarySponsor)) {
+        if (!this.existingStudy() && ConverterUtils.isValidName(primarySponsor)) {
             this.createAndStoreClassItem(study, "Organisation",
                     new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                             { "name", primarySponsor } });
@@ -1008,13 +1008,13 @@ public class EuctrConverter extends CacheConverter {
 
                     // TODO: add reference to organisation affiliation
                     // TODO: differentiate people from organisations
-                    if (!ConverterUtils.isNotApplicable(firstName)) {
+                    if (ConverterUtils.isValidName(firstName)) {
                         Item contactPerson = this.createAndStoreClassItem(study, "Person",
                                 new String[][] { { "fullName", firstName },
-                                        { "email", ConverterUtils.filterNonEmailString(email) },
+                                        { "email", ConverterUtils.getEmailFromString(email) },
                                         { "contribType", type } });
 
-                        if (!ConverterUtils.isBlankOrNull(affiliation)) {
+                        if (ConverterUtils.isValidName(affiliation)) {
                             Item affiliationOrg = this.createAndStoreClassItem(study, "Organisation",
                                     new String[][] { { "name", affiliation } });
                             this.handleReferencesAndCollections(contactPerson, affiliationOrg);
@@ -1262,7 +1262,7 @@ public class EuctrConverter extends CacheConverter {
         if (!this.existingStudy()) {
             for (String secondarySponsor : secondarySponsors) {
                 // TODO: ROR
-                if (ConverterUtils.isValidValue(secondarySponsor)) {
+                if (ConverterUtils.isValidName(secondarySponsor)) {
                     this.createAndStoreClassItem(study, "Organisation",
                             new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
                                     { "name", secondarySponsor } });
@@ -1336,7 +1336,7 @@ public class EuctrConverter extends CacheConverter {
         if (!this.existingStudy()) {
             for (String org : sourceSupports) {
                 // TODO: ROR
-                if (ConverterUtils.isValidValue(org)) {
+                if (ConverterUtils.isValidName(org)) {
                     this.createAndStoreClassItem(study, "Organisation",
                             new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_STUDY_FUNDER },
                                     { "name", org } });

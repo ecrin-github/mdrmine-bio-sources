@@ -592,11 +592,18 @@ public class CtgConverter extends CacheConverter {
                 if (sponsorModule.responsibleParty.type != null) {
                     if (sponsorModule.responsibleParty.type.equalsIgnoreCase(PRINCIPAL_INVESTIGATOR)) {
                         // Responsible party is PI and sponsor is their organisation
-                        Item piPerson = this.createAndStoreClassItem(study, "Person",
-                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_PRINCIPAL_INVESTIGATOR }, {
-                                        "fullName", sponsorModule.responsibleParty.investigatorFullName } });
 
-                        if (sponsorModule.leadSponsor != null) {
+                        Item piPerson = null;
+                        if (ConverterUtils.isValidName(sponsorModule.responsibleParty.investigatorFullName)) {
+                            piPerson = this.createAndStoreClassItem(study, "Person",
+                                    new String[][] {
+                                            { "contribType", ConverterCVT.CONTRIB_TYPE_PRINCIPAL_INVESTIGATOR },
+                                            { "contribType", ConverterCVT.CONTRIB_TYPE_PRINCIPAL_INVESTIGATOR },
+                                            { "fullName", sponsorModule.responsibleParty.investigatorFullName } });
+                        }
+
+                        if (sponsorModule.leadSponsor != null
+                                && ConverterUtils.isValidName(sponsorModule.leadSponsor.name)) {
                             String sponsorType = CtgConverter.getEntityType(sponsorModule.leadSponsor.clazz);
                             Item sponsorOrg = this.createAndStoreClassItem(study, "Organisation",
                                     new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
@@ -604,10 +611,13 @@ public class CtgConverter extends CacheConverter {
                                             { "type", sponsorType } });
                             addedSponsor = true;
 
-                            // PI affiliation
-                            this.handleReferencesAndCollections(piPerson, sponsorOrg);
+                            if (piPerson != null) {
+                                // PI affiliation
+                                this.handleReferencesAndCollections(piPerson, sponsorOrg);
+                            }
                         }
-                    } else if (sponsorModule.responsibleParty.type.equalsIgnoreCase(SPONSOR_INVESTIGATOR)) {
+                    } else if (sponsorModule.responsibleParty.type.equalsIgnoreCase(SPONSOR_INVESTIGATOR)
+                            && ConverterUtils.isValidName(sponsorModule.responsibleParty.investigatorFullName)) {
                         // PI is also sponsor
                         Item piPerson = this.createAndStoreClassItem(study, "Person",
                                 new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR_INVESTIGATOR }, {
@@ -636,16 +646,19 @@ public class CtgConverter extends CacheConverter {
                     // organisation together: AMBIG, OTHER, UNKNOWN
                     // Since most sponsor of these classes are Organisation, assuming they are
                     // organisation for now (TODO: better separation)
-                    if (sponsorModule.leadSponsor.clazz != null
-                            && sponsorModule.leadSponsor.clazz.equalsIgnoreCase("INDIV")) {
-                        this.createAndStoreClassItem(study, "Person",
-                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
-                                        { "fullName", sponsorModule.leadSponsor.name } });
-                    } else {
-                        this.createAndStoreClassItem(study, "Organisation",
-                                new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
-                                        { "name", sponsorModule.leadSponsor.name },
-                                        { "type", sponsorType } });
+
+                    if (ConverterUtils.isValidName(sponsorModule.leadSponsor.name)) {
+                        if (sponsorModule.leadSponsor.clazz != null
+                                && sponsorModule.leadSponsor.clazz.equalsIgnoreCase("INDIV")) {
+                            this.createAndStoreClassItem(study, "Person",
+                                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
+                                            { "fullName", sponsorModule.leadSponsor.name } });
+                        } else {
+                            this.createAndStoreClassItem(study, "Organisation",
+                                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_SPONSOR },
+                                            { "name", sponsorModule.leadSponsor.name },
+                                            { "type", sponsorType } });
+                        }
                     }
                 } else {
                     this.writeLog(
@@ -676,15 +689,19 @@ public class CtgConverter extends CacheConverter {
                         // organisation together: AMBIG, OTHER, UNKNOWN
                         // Since most sponsor of these classes are Organisation, assuming they are
                         // organisation for now (TODO: better separation)
-                        if (c.clazz != null && c.clazz.equalsIgnoreCase("INDIV")) {
-                            this.createAndStoreClassItem(study, "Person",
-                                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_COLLABORATING_PERSON },
-                                            { "fullName", c.name } });
-                        } else {
-                            this.createAndStoreClassItem(study, "Organisation",
-                                    new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_COLLABORATING_ORG },
-                                            { "name", c.name },
-                                            { "type", collaboratorType } });
+
+                        if (ConverterUtils.isValidName(c.name)) {
+                            if (c.clazz != null && c.clazz.equalsIgnoreCase("INDIV")) {
+                                this.createAndStoreClassItem(study, "Person",
+                                        new String[][] {
+                                                { "contribType", ConverterCVT.CONTRIB_TYPE_COLLABORATING_PERSON },
+                                                { "fullName", c.name } });
+                            } else {
+                                this.createAndStoreClassItem(study, "Organisation",
+                                        new String[][] { { "contribType", ConverterCVT.CONTRIB_TYPE_COLLABORATING_ORG },
+                                                { "name", c.name },
+                                                { "type", collaboratorType } });
+                            }
                         }
                     } else {
                         this.writeLog(
@@ -1169,11 +1186,13 @@ public class CtgConverter extends CacheConverter {
 
                     if (loc.contacts != null && loc.contacts.size() > 0) {
                         for (LocationContact c : loc.contacts) {
-                            Item contact = this.createAndStoreClassItem(study, "Person",
-                                    new String[][] { { "fullName", c.name },
-                                            { "email", ConverterUtils.filterNonEmailString(c.email) },
-                                            { "contribType", ConverterCVT.CONTRIB_TYPE_SITE_CONTACT } });
-                            this.handleReferencesAndCollections(site, contact);
+                            if (ConverterUtils.isValidName(c.name)) {
+                                Item contact = this.createAndStoreClassItem(study, "Person",
+                                        new String[][] { { "fullName", c.name },
+                                                { "email", ConverterUtils.getEmailFromString(c.email) },
+                                                { "contribType", ConverterCVT.CONTRIB_TYPE_SITE_CONTACT } });
+                                this.handleReferencesAndCollections(site, contact);
+                            }
                         }
                     }
                 }

@@ -113,6 +113,9 @@ public class ConverterUtils {
     public static final Pattern P_GENERAL_INVALID = Pattern.compile(
             "^(?:-+|\\/|\\.|_|N[\\/\\.]?[AD]\\.?|none?|null?|it does not|does not exist|no[nt]?\\s+(?:aplica|applicable|available|applicabile - ND|fornito|disponibile|required|aplicable|exist|yet|availble|existed|acronyms?)\\.?)$",
             Pattern.CASE_INSENSITIVE);
+    public static final Pattern P_NAME_INVALID = Pattern.compile(
+            "^(?:-+|\\/|\\.|_|N[\\/\\.]?[AD]\\.?|none?|null?|it does not|does not exist|no[nt]?\\s+(?:aplica|applicable|available|applicabile - ND|fornito|disponibile|required|aplicable|exist|yet|availble|existed|acronyms?)\\.?|.*@.*)$",
+            Pattern.CASE_INSENSITIVE);
     public static final Pattern P_NOT_APPLICABLE = Pattern.compile(
             "^(?:N[\\/\\.]?A\\.?|no[nt]?\\s+(?:aplica|applicable|applicabile - ND|aplicable)\\.?)$",
             Pattern.CASE_INSENSITIVE); // N/A
@@ -816,11 +819,21 @@ public class ConverterUtils {
      * TODO
      * check P_EMAIL pattern, "weak" email string validation: [any]@[any].[any]
      */
-    public static String filterNonEmailString(final String email) {
+    public static String getEmailFromString(final String email) {
         if (!ConverterUtils.isBlankOrNull(email) && P_EMAIL.matcher(email).matches()) {
             return email;
         }
         return null;
+    }
+
+    /**
+     * Check if string contains an email
+     * 
+     * @param s the string to check
+     * @return true if the string contains an email, false otherwise
+     */
+    public static boolean containsEmail(final String s) {
+        return ConverterUtils.getEmailFromString(s) != null;
     }
 
     /**
@@ -864,6 +877,16 @@ public class ConverterUtils {
      */
     public static boolean isValidValue(final String v) {
         return !ConverterUtils.isBlankOrNull(v) && !P_GENERAL_INVALID.matcher(v.strip()).matches();
+    }
+
+    /**
+     * TODO
+     * 
+     * @param v
+     * @return
+     */
+    public static boolean isValidName(final String v) {
+        return !ConverterUtils.isBlankOrNull(v) && !P_NAME_INVALID.matcher(v.strip()).matches();
     }
 
     /**
