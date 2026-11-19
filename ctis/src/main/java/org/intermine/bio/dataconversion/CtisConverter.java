@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
  * @author
  */
 public class CtisConverter extends CacheConverter {
-    private static final String DATASET_TITLE = "CTIS all trials 20260826";
+    private static final String DATASET_TITLE = "CTIS all trials 20261118";
     private static final String DATA_SOURCE_NAME = "CTIS";
     private static final String DATA_SOURCE_DESC = "Clinical Trials Information System (EMA)";
 

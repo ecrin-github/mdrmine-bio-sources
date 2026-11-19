@@ -51,14 +51,12 @@ class BuildIdFileTask {
         org.intermine.plugin.project.Project imProject = ProjectXmlBinding.unmarshall(new File(projectXml))
         println "Fetching source data using ${projectXml}"
 
+        // Creating ID file directory if not exists
         Files.createDirectories(Paths.get(idfileDir))
 
         // Loading existing "clinicaltrial" if it exist to have consistent primary IDs, otherwise start from scratch
         Path existingIdFileFP = Paths.get(idfileDir, idFileName)
         this.parseExistingIdFile(existingIdFileFP)
-
-        // Creating ID file directory if not exists
-        String idFileFP = idfileDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_id_file.tsv'
 
         imProject.sources.keySet().each { sourceNameV ->
             Source source = imProject.sources.get(sourceNameV)
@@ -101,9 +99,9 @@ class BuildIdFileTask {
             }
         }
 
-        String symLinkFP = outputDir + File.separator + 'clinicaltrial'
-        println "Writing ID file ${symLinkFP}"
-        this.writeIdFile(idFileFP, symLinkFP)
+        String idFileFP = idfileDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_id_file.tsv'
+        println "Writing ID file ${idFileFP}"
+        this.writeIdFile(idFileFP)
 
         String nonUidFileFP = outputDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
         println "Writing nonUid file ${nonUidFileFP}"
@@ -610,7 +608,7 @@ class BuildIdFileTask {
         return null
     }
 
-    void writeIdFile(String idFP, String symLinkFP) {
+    void writeIdFile(String idFP) {
         Set<IDsHandler> idsHSet = this.idsMap.getAllIDsHandlers()
         BufferedWriter fos = new BufferedWriter(new FileWriter(idFP, true))
         for (IDsHandler idsH: idsHSet) {
@@ -620,14 +618,6 @@ class BuildIdFileTask {
             }
         }
         fos.close()
-
-        // Updating symbolic link
-        println "Updating symlink ${symLinkFP}"
-        Path symLink = Paths.get(symLinkFP)
-        if (Files.exists(symLink)) {
-            Files.delete(symLink)
-        }
-        Files.createSymbolicLink(symLink, Paths.get(idFP))
     }
 
     void writeNonUidFile(String nonUidFP) {
