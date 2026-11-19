@@ -103,7 +103,7 @@ class BuildIdFileTask {
         println "Writing ID file ${idFileFP}"
         this.writeIdFile(idFileFP)
 
-        String nonUidFileFP = outputDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
+        String nonUidFileFP = idfileDir + File.separator + ConverterUtils.getCurrentTimestamp() + '_nonuid_file.tsv'
         println "Writing nonUid file ${nonUidFileFP}"
         this.writeNonUidFile(nonUidFileFP)
     }
