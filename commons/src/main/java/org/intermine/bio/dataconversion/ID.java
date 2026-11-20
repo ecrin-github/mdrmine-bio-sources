@@ -15,10 +15,14 @@ public class ID {
     }
 
     public ID(String id, String source, String type, Boolean unique) {
-        this.id = id;
         this.source = source;
         this.type = type;
         this.unique = unique;
+        if (unique && id != null) {
+            this.id = id.toUpperCase();
+        } else {
+            this.id = id;
+        }
     }
 
     public String getId() {
